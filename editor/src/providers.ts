@@ -440,9 +440,10 @@ export function registerEditingProviders(ctx: EditorContext, bridge: LspBridge, 
               if (!result) return { range: new monaco.Range(position.lineNumber, position.column, position.lineNumber, position.column), text: '', rejectReason: "This can't be renamed." }
               // The server either leaves the range to the client ...
               if (result.defaultBehavior) return null
-              // ... or sends a range, alone or with the text to show.
+              // ... or sends a range, alone or with a placeholder. Why not show the placeholder: for a class
+              // PHPantom 1.1.0 sends the fully qualified name while the range and the new name are the short one.
               const range = fromLspRange(result.range ?? result)
-              return { range, text: typeof result.placeholder === 'string' ? result.placeholder : m.getValueInRange(range) }
+              return { range, text: m.getValueInRange(range) }
             }
           : undefined,
         async provideRenameEdits(m, position, newName, token) {
