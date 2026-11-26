@@ -1,6 +1,6 @@
 import { assert, test } from 'orca/testing'
 import { mockEditorHost } from 'orca/testing'
-import { bindDocument, type TextView } from './sync.ts'
+import { bindDocument, flushWhenHidden, type TextView } from './sync.ts'
 
 function fakeView(initial = ''): TextView & { type(text: string): void } {
   let value = initial
@@ -59,4 +59,42 @@ test('reports read-only documents', async () => {
   const host = mockEditorHost({ text: 'x' }, { readOnly: true })
   assert.equal((await bindDocument(fakeView())).readOnly, true)
   host.dispose()
+})
+test('flush sends a pending edit before the debounce would', async () => {
+  const host = mockEditorHost({ text: '<?php\n' })
+  const view = fakeView()
+  const doc = await bindDocument(view)
+  view.type('<?php\necho 1;\n')
+  assert.equal(doc.flush(), undefined)
+  await new Promise((resolve) => setTimeout(resolve, 40))
+  assert.equal(host.text, '<?php\necho 1;\n')
+  doc.dispose(); host.dispose()
+})
+test('flushes when the page hides or goes away, and never throws', async () => {
+  const host = mockEditorHost({ text: 'a\n' })
+  const view = fakeView()
+  const doc = await bindDocument(view)
+  const win = new EventTarget()
+  const page = Object.assign(new EventTarget(), { visibilityState: 'visible' as DocumentVisibilityState })
+  const hooked = flushWhenHidden(doc.flush, win, page)
+  view.type('a\nb\n')
+  // Shown, not hidden: nothing is sent early.
+  page.dispatchEvent(new Event('visibilitychange'))
+  await new Promise((resolve) => setTimeout(resolve, 40))
+  assert.equal(host.text, 'a\n')
+  page.visibilityState = 'hidden'
+  page.dispatchEvent(new Event('visibilitychange'))
+  await new Promise((resolve) => setTimeout(resolve, 40))
+  assert.equal(host.text, 'a\nb\n')
+  view.type('a\nb\nc\n')
+  win.dispatchEvent(new Event('pagehide'))
+  await new Promise((resolve) => setTimeout(resolve, 40))
+  assert.equal(host.text, 'a\nb\nc\n')
+  hooked.dispose()
+  const throwing = flushWhenHidden(() => {
+    throw new Error('the frame is going away')
+  }, win, page)
+  win.dispatchEvent(new Event('pagehide'))
+  throwing.dispose()
+  doc.dispose(); host.dispose()
 })

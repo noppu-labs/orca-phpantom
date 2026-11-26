@@ -4,7 +4,7 @@ import type { Language } from '../../src/protocol.ts'
 import { monaco } from './monaco.ts'
 import { showNote } from './notes.ts'
 import { modelView } from './model-view.ts'
-import { bindDocument } from './sync.ts'
+import { bindDocument, flushWhenHidden } from './sync.ts'
 import { defineThemes, THEME_NAME, typographyOptions } from './theme.ts'
 
 export type EditorContext = {
@@ -69,6 +69,7 @@ export async function startEditor(): Promise<EditorContext> {
     onConflicts: () => showNote('warning', CONFLICT_NOTE, 'conflict')
   })
   view.load(doc.initial)
+  flushWhenHidden(doc.flush, window, document)
 
   defineThemes(monaco)
   const typography = await orca.host.call('editor.readTypography', {}).catch((error: unknown) => {
