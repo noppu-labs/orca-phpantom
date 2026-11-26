@@ -28,3 +28,5 @@ jobs:
       - run: orca-ide plugin validate .
       - run: orca-ide plugin check .
       - run: orca-ide plugin test .
+      - name: Download and run the real PHPantom release
+        run: PHPANTOM_INTEGRATION=1 orca-ide plugin test .
