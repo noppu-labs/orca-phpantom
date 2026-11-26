@@ -36,13 +36,15 @@ total 5,340 K in 91 files (before this document was added).
 
 ## Results
 
+Every observation in the table was seen at `b846f2f` unless its row names another commit.
+
 | # | Check | Result | Evidence |
 | --- | --- | --- | --- |
 | 1 | Installs from Git and runs from plain files | Pass | `resolvedCommit: b846f2fbe3bf6a1d5438551bf9fbca414276e3b4` (equal to `origin/feat/v1`). The installed folder has no `node_modules` and holds `editor/dist`. `orca plugin list`: `noppu-labs.phpantom 0.1.0 running trusted-worker`. Opening `app/Smoke/Co1.php` logged `Starting PHPantom 1.1.0 for $TMPDIR/phpantom-smoke-app` and started one `phpantom_lsp --stdio`. An editor shot of a fresh copy of `Demo.php` shows PHPantom's inlay hints. No other project was attached. |
 | 2 | Uninstall | Pass | `orca plugin uninstall noppu-labs.phpantom`: `removed: true`. Gone from `orca plugin list` and from Orca's plugins folder, and its `phpantom_lsp` exited. |
 | 3 | `.php` opens PHPantom's editor | Pass | `orca file open app/Smoke/Co1.php --focus` attached a document. `orca plugin shot --editor app/Smoke/Co3.php`: `editorId: php`. |
 | 4 | `.blade.php` opens PHPantom's Blade editor | Pass | `orca file open resources/views/co3.blade.php --focus` attached a document. `orca plugin shot --editor resources/views/smoke.blade.php`: `editorId: blade`, with Blade directives coloured. |
-| 5 | Closed and re-shown tabs are released | Pass | Six opens (five in A, one in B) took the attached count from 0 to 5 (the first one did not attach, see the next row), and each re-shown tab mounts a new frame. Switching worktrees did not remount anything. With no further switches the count fell to 2, the active tab of A and of B, between 52 and 67 s after the last switch. A tab opened and closed by `orca plugin shot` was released 61 to 76 s later. These times are from the one-minute lease of this run; the lease is three minutes since the final-review fixes, so expect releases about two minutes later (roughly 180 to 195 s). |
+| 5 | Closed and re-shown tabs are released | Pass | Six opens (five in A, one in B) took the attached count from 0 to 5 (the first one did not attach, see the next row), and each re-shown tab mounts a new frame. Switching worktrees did not remount anything. With no further switches the count fell to 2, the active tab of A and of B, between 52 and 67 s after the last switch. A tab opened and closed by `orca plugin shot` was released 61 to 76 s later. These times were seen at `b846f2f` with the one-minute lease. At `74686ef`, with the three-minute lease, releases came about two minutes later (roughly 180 to 195 s). |
 | 6 | A tab already open when the plugin loads | Unverified | `Demo.php` in A was opened in Source before the plugin was installed. The first `orca file open` of it after `orca plugin dev load` did not attach; a later open of the same file did. Not investigated. |
 | 7 | Same file in worktree B attaches to B | Pass | `Demo.php` is byte-identical in A and B. Opening it in B attached `~/orca/workspaces/phpantom-smoke-app/smoke-b/app/Smoke/Demo.php` and started a second PHPantom for B. Synthetic opens with A's workspace id attached A's copy. |
 | 8 | Diagnostics | Pass | PHPantom published 4 for `Demo2.php`: `unknown_function` (error), `unknown_class` (warning) and two `unused_variable` hints. A window shot shows the red and yellow squiggles and the ruler marks. They arrive a moment after the editor paints, so a shot taken at first paint shows none. |
@@ -67,6 +69,25 @@ total 5,340 K in 91 files (before this document was added).
 | 27 | Download when no binary is installed, tooltip says `downloaded` | Not run | Homebrew's `phpantom_lsp` is on this machine and is also one of the folders the plugin always checks, so the download cannot be reached without removing it. Covered by unit tests. |
 | 28 | Remote (SSH) workspace shows the remote note | Not run | This Orca has no SSH host (`orca host list` lists only `local`). Covered by the unit test `a remote focused workspace is never attached`. |
 | 29 | One PHPantom per project root, stopped when idle | Partly run | One process per root was seen (A and B each got their own). The 10-minute idle stop was not waited for. Covered by unit tests. |
+
+## Installed check on the final commit
+
+Seen at `d8aa2a0` (HEAD of `feat/v1`), on the same Orca 1.4.277 and PHPantom 1.1.0. A throwaway
+project (`composer.json` and `app/Foo.php`, one commit) was added with `orca repo add` and focused
+with `orca worktree activate` before the install. `orca plugin install noppu-labs/orca-phpantom@feat/v1`
+needed `--approve`, then reported `resolvedCommit: d8aa2a010ce250696dbac37df3a22bb2aa957cbd`.
+`orca file open app/Foo.php --worktree path:<project> --focus` attached the file: the log shows
+`Using PHPantom 1.1.0 (from PATH)`, `Starting PHPantom 1.1.0 for <project>` and `PHPantom 1.1.0 started`,
+and one `phpantom_lsp --stdio` was running. An editor shot shows `editorId: php` with the file
+highlighted, and a status bar shot shows `PHPantom` with the check icon. Result: pass for install,
+attach and start.
+
+Not confirmed on this run: a diagnostic or a hover answer. `orca plugin dev request` reaches only
+development plugins, so it cannot query an installed copy, and the shot showed no squiggle for
+`strlen(1)`. Those two are covered by rows 8 and 10 at `b846f2f`.
+
+Cleanup: `orca plugin uninstall` (gone from `orca plugin list`), the project removed with
+`orca project setup-delete --force`, its folder deleted, and no `phpantom_lsp` left running.
 
 ## Using it with Autocomplete
 
