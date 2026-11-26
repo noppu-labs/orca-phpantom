@@ -1,5 +1,6 @@
 // A tiny language server for tests, plain JavaScript with its own framing so `node` runs it directly.
 // FAKE_CONFIG_ITEMS=n: after `initialized`, asks for n configuration items and logs the answer as a warning.
+// Hover answers `len=<text length>`; completion answers 5000 items of about 400 bytes each.
 // FAKE_MODE=silent: never answers initialize. FAKE_MODE=stubborn: answers, then ignores shutdown, exit, stdin end.
 // Both ignore SIGTERM, so only SIGKILL removes them.
 const mode = process.env.FAKE_MODE ?? ''
@@ -77,7 +78,10 @@ function handle(message) {
     }
     publish()
   } else if (method === 'textDocument/hover') {
-    send({ jsonrpc: '2.0', id, result: { contents: { kind: 'plaintext', value: `len=${text.length}` } } })
+    send({ jsonrpc: '2.0', id, result: { contents: { kind: 'markdown', value: `len=${text.length}` } } })
+  } else if (method === 'textDocument/completion') {
+    const items = Array.from({ length: 5000 }, (_, i) => ({ label: `item${i}`, detail: 'x'.repeat(400) }))
+    send({ jsonrpc: '2.0', id, result: { isIncomplete: false, items } })
   } else if (method === 'shutdown') {
     send({ jsonrpc: '2.0', id, result: null })
   } else if (method === 'exit') {
