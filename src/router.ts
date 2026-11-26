@@ -16,6 +16,7 @@ import { sameUri, uriKey } from './lsp/uri.ts'
 import { Outbox } from './outbox.ts'
 import type { AttachStatus } from './protocol.ts'
 import { PendingReveals } from './reveals.ts'
+import { fitsIn, leadingThatFit, orcaSize } from './size.ts'
 import { aggregate, renderStatus, type ServerState, type StatusBarUpdate } from './status.ts'
 
 export type RouterHost = {
@@ -83,8 +84,21 @@ type Doc = {
   diagnostics: number
 }
 
-// Orca answers at most 1 MiB; the rest is room for the envelope.
-const MAX_ANSWER_BYTES = 900 * 1024
+// Orca takes an answer of at most 1 MiB and 10,000 objects by its own measure (see size.ts); this
+// leaves room for what the measure may miss.
+const ANSWER_LIMIT = { bytes: 900 * 1024, objects: 9000 }
+// Lists whose leading items are still a useful answer. Never edits: half a formatting is a broken file.
+const CUTTABLE_LISTS = new Set([
+  'textDocument/references',
+  'textDocument/definition',
+  'textDocument/declaration',
+  'textDocument/typeDefinition',
+  'textDocument/implementation',
+  'textDocument/documentHighlight',
+  'textDocument/documentSymbol',
+  'textDocument/inlayHint',
+  'textDocument/codeAction'
+])
 const PEEK_MAX_FILES = 25
 const PEEK_MAX_BYTES = 600 * 1024
 const IDLE_MS = 10 * 60_000
@@ -724,26 +738,25 @@ export class Router {
     }
   }
 
+  /** The answer as Orca will take it: a list cut to its leading items when it would be refused whole. */
   private fitAnswer(method: string, result: unknown): Output<'phpantom.request'> {
-    if (bytes(result) <= MAX_ANSWER_BYTES) {
+    if (fitsIn(orcaSize({ result }), ANSWER_LIMIT)) {
       return { result }
     }
-    const items = Array.isArray(result) ? result : (result as { items?: unknown } | null)?.items
-    if (method !== 'textDocument/completion' || !Array.isArray(items)) {
-      return { error: 'too_large' }
-    }
-    const shell = Array.isArray(result) ? {} : (result as Record<string, unknown>)
-    let room = MAX_ANSWER_BYTES - bytes({ result: { ...shell, isIncomplete: true, items: [] } })
-    const kept: unknown[] = []
-    for (const item of items) {
-      const size = bytes(item) + (kept.length > 0 ? 1 : 0)
-      if (size > room) {
-        break
+    if (method === 'textDocument/completion') {
+      const items = Array.isArray(result) ? result : (result as { items?: unknown } | null)?.items
+      if (Array.isArray(items)) {
+        const shell = Array.isArray(result) ? {} : (result as Record<string, unknown>)
+        const kept = leadingThatFit(items, orcaSize({ result: { ...shell, isIncomplete: true, items: [] } }), ANSWER_LIMIT)
+        return { result: { ...shell, isIncomplete: true, items: kept } }
       }
-      room -= size
-      kept.push(item)
     }
-    return { result: { ...shell, isIncomplete: true, items: kept } }
+    if (CUTTABLE_LISTS.has(method) && Array.isArray(result)) {
+      // Why measure with the full count: a number is 8 bytes to Orca whatever its value.
+      const kept = leadingThatFit(result, orcaSize({ result: [], truncated: result.length }), ANSWER_LIMIT)
+      return { result: kept, truncated: result.length - kept.length }
+    }
+    return { error: 'too_large' }
   }
 
   /** At most once a second; a change inside the second is sent when it ends, so the last state arrives. */

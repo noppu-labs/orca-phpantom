@@ -14,7 +14,7 @@ declare module 'orca' {
   interface PluginRequests {
     'phpantom.open': { input: { docId: string; language: Language; workspaceId: string | null; branch: string | null; displayName: string | null; index: number; chunk: string; last: boolean; resync?: true }; output: AttachStatus }
     'phpantom.change': { input: { docId: string; session: string; version: number; changes: LspContentChange[]; length: number }; output: { ok: true } | { detached: true } | { resync: true } }
-    'phpantom.request': { input: { docId: string; session: string; method: string; params: Record<string, unknown> }; output: { result: unknown } | { detached: true } | { error: string } }
+    'phpantom.request': { input: { docId: string; session: string; method: string; params: Record<string, unknown> }; output: { result: unknown; truncated?: number } | { detached: true } | { error: string } }
     'phpantom.close': { input: { docId: string }; output: { ok: true } }
     'phpantom.navigate': { input: { docId: string; session: string; uri: string; range: LspRange }; output: { opened: true } | { opened: false; reason: 'outside-workspace' | 'not-a-file' | 'failed' } }
     'phpantom.peek': { input: { docId: string; session: string; uris: string[] }; output: { files: { uri: string; text: string }[]; omitted: number } }

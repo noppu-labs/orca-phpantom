@@ -9,6 +9,7 @@ import type { LspRange } from './protocol.ts'
 import { PhpantomServer, type ServerEvents } from './lsp/server.ts'
 import type { WorkspaceRow } from './locate/workspaces.ts'
 import { Router, type RouterHost } from './router.ts'
+import { ORCA_MAX_OBJECTS, orcaSize } from './size.ts'
 import type { StatusBarUpdate } from './status.ts'
 
 const FAKE = fileURLToPath(new URL('./lsp/fixtures/fake-server.mjs', import.meta.url))
@@ -459,9 +460,29 @@ test('truncates an oversized completion list', async () => {
   const status = await openWhole(worker, { docId: 'd1', language: 'php', workspaceId: 'ws-a', text: '<?php // ok\n' })
   const answer = await worker.request('phpantom.request', { docId: 'd1', session: status.session, method: 'textDocument/completion', params: { position: at(0, 5) } })
   assert.ok(Buffer.byteLength(JSON.stringify(answer)) < 1024 * 1024)
+  assert.ok(orcaSize(answer).bytes <= 1024 * 1024)
   assert.equal(answer.result.isIncomplete, true)
   assert.ok(answer.result.items.length > 1000 && answer.result.items.length < 5000)
   assert.equal(answer.result.items[0].label, 'item0')
+})
+
+test('cuts an oversized list of locations to what Orca accepts, and says how many were cut', async () => {
+  const { worker } = await setup({ files: { 'a/A.php': '<?php // ok\n' } })
+  const status = await openWhole(worker, { docId: 'd1', language: 'php', workspaceId: 'ws-a', text: '<?php // ok\n' })
+  const answer = await worker.request('phpantom.request', { docId: 'd1', session: status.session, method: 'textDocument/references', params: { position: at(0, 5), context: { includeDeclaration: true } } })
+  // Only 570 KB as JSON, but 24,000 objects: Orca would refuse it whole.
+  const size = orcaSize(answer)
+  assert.ok(size.objects <= ORCA_MAX_OBJECTS && size.bytes <= 1024 * 1024, JSON.stringify(size))
+  assert.ok(answer.result.length > 1000 && answer.result.length < 6000)
+  assert.equal(answer.truncated, 6000 - answer.result.length)
+  assert.equal(answer.result[0].uri, 'file:///w/F0.php')
+})
+
+test('an oversized edit is refused, never cut', async () => {
+  const { worker } = await setup({ files: { 'a/A.php': '<?php // ok\n' } })
+  const status = await openWhole(worker, { docId: 'd1', language: 'php', workspaceId: 'ws-a', text: '<?php // ok\n' })
+  const answer = await worker.request('phpantom.request', { docId: 'd1', session: status.session, method: 'textDocument/formatting', params: { options: { tabSize: 4, insertSpaces: true } } })
+  assert.deepEqual(answer, { error: 'too_large' })
 })
 
 test('stops an idle server after the idle time', async () => {
