@@ -17,8 +17,11 @@ export type Located =
 // Folders full of generated or foreign files: never the file being edited, and slow to walk.
 const SKIPPED_DIRECTORIES = new Set([
   'node_modules', '.git', '.hg', '.svn', 'target', 'dist', 'build', 'out', '.next', '.nuxt',
-  'venv', '__pycache__', 'vendor', 'Pods', 'AppData', 'Library', 'storage'
+  'venv', '__pycache__', 'Pods', 'AppData'
 ])
+// Skipped only beside a composer.json: Composer's vendor folder and Laravel's storage. Published views
+// (resources/views/vendor) and lang/vendor hold files people edit.
+const COMPOSER_SIBLING_SKIPPED = new Set(['vendor', 'storage'])
 const MAX_FILES_VISITED = 80_000
 const BUDGET_MS = 3000
 const BOM_BYTES = 3
@@ -188,6 +191,10 @@ async function locateInRoots(
   // tree (a home folder used as a workspace) must not use up the time before the shallow files are seen.
   const queue = roots.map((root) => ({ root, directory: root }))
   for (let next = 0; next < queue.length; next += 1) {
+    // Why here: a deadline or cap checked only inside the entry loop would still read every queued directory.
+    if (Date.now() > deadline || visited >= (options.maxFiles ?? MAX_FILES_VISITED)) {
+      break
+    }
     const { root, directory } = queue[next]
     let entries
     try {
@@ -195,13 +202,20 @@ async function locateInRoots(
     } catch {
       continue
     }
+    // The cap counts directories read plus name-matching files seen, so it bounds directory I/O too.
+    visited += 1
+    const hasComposer = entries.some((entry) => entry.name === 'composer.json')
     for (const entry of entries) {
       if (Date.now() > deadline || visited > (options.maxFiles ?? MAX_FILES_VISITED)) {
         break
       }
       const path = join(directory, entry.name)
       if (entry.isDirectory()) {
-        if (!SKIPPED_DIRECTORIES.has(entry.name) && !entry.name.startsWith('.')) {
+        if (
+          !SKIPPED_DIRECTORIES.has(entry.name) &&
+          !entry.name.startsWith('.') &&
+          !(hasComposer && COMPOSER_SIBLING_SKIPPED.has(entry.name))
+        ) {
           queue.push({ root, directory: path })
         }
       } else if (entry.isFile() && nameMatches(entry.name, language)) {

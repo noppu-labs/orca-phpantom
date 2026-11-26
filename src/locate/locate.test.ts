@@ -66,7 +66,7 @@ test('nothing in the focused workspace falls through to the others', async () =>
 })
 
 test('a pending reveal path wins even inside vendor', async () => {
-  const a = await tree({ 'vendor/lib/Thing.php': SRC })
+  const a = await tree({ 'composer.json': '{}', 'vendor/lib/Thing.php': SRC })
   const path = join(a, 'vendor/lib/Thing.php')
   try {
     assert.deepEqual(await locateFile({ tiers: [[a]], candidates: [path], language: 'php', content: SRC }), {
@@ -116,8 +116,8 @@ test('blade and php documents never match each other', async () => {
   }
 })
 
-test('storage and vendor folders are skipped by the walk', async () => {
-  const a = await tree({ 'storage/framework/views/x.php': SRC, 'vendor/v/y.php': SRC })
+test('vendor and storage beside composer.json are skipped by the walk', async () => {
+  const a = await tree({ 'composer.json': '{}', 'storage/framework/views/x.php': SRC, 'vendor/v/y.php': SRC })
   try {
     assert.deepEqual(await locateFile({ tiers: [[a]], candidates: [], language: 'php', content: SRC }), { status: 'none' })
   } finally {
@@ -150,6 +150,63 @@ test('a byte order mark does not stop an exact match', async () => {
       path: join(a, 'bom.php'),
       root: a
     })
+  } finally {
+    await cleanup()
+  }
+})
+
+test('published views under resources/views/vendor are located, a root vendor beside composer.json is not', async () => {
+  const text = '<nav>{{ $links }}</nav>\n'
+  const a = await tree({
+    'composer.json': '{}',
+    'resources/views/vendor/pagination/x.blade.php': text,
+    'vendor/pkg/y.blade.php': '<p>{{ $y }}</p>\n'
+  })
+  try {
+    assert.deepEqual(await locateFile({ tiers: [[a]], candidates: [], language: 'blade', content: text }), {
+      status: 'found',
+      path: join(a, 'resources/views/vendor/pagination/x.blade.php'),
+      root: a
+    })
+    assert.deepEqual(
+      await locateFile({ tiers: [[a]], candidates: [], language: 'blade', content: '<p>{{ $y }}</p>\n' }),
+      { status: 'none' }
+    )
+  } finally {
+    await cleanup()
+  }
+})
+
+test('app/Library is walked', async () => {
+  const a = await tree({ 'app/Library/Tool.php': SRC })
+  try {
+    assert.equal((await locateFile({ tiers: [[a]], candidates: [], language: 'php', content: SRC })).status, 'found')
+  } finally {
+    await cleanup()
+  }
+})
+
+test('a zero time budget stops the walk before any directory is read', async () => {
+  const a = await tree({ 'a/Example.php': SRC })
+  try {
+    assert.deepEqual(await locateFile({ tiers: [[a]], candidates: [], language: 'php', content: SRC }, { budgetMs: -1 }), {
+      status: 'none'
+    })
+  } finally {
+    await cleanup()
+  }
+})
+
+test('the file cap bounds the walk, directories included', async () => {
+  const a = await tree({ 'a/b/c/Example.php': SRC })
+  try {
+    assert.deepEqual(await locateFile({ tiers: [[a]], candidates: [], language: 'php', content: SRC }, { maxFiles: 0 }), {
+      status: 'none'
+    })
+    assert.deepEqual(await locateFile({ tiers: [[a]], candidates: [], language: 'php', content: SRC }, { maxFiles: 2 }), {
+      status: 'none'
+    })
+    assert.equal((await locateFile({ tiers: [[a]], candidates: [], language: 'php', content: SRC })).status, 'found')
   } finally {
     await cleanup()
   }
