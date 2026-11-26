@@ -1,0 +1,32 @@
+{
+  "$schema": "https://raw.githubusercontent.com/stablyai/orca/main/docs/schemas/plugins/orca-plugin.v2.schema.json",
+  "manifestVersion": 2,
+  "execution": "trusted-worker",
+  "id": "phpantom",
+  "name": "PHP & Laravel (PHPantom)",
+  "version": "0.1.0",
+  "description": "PHP and Blade editing powered by PHPantom: errors, completion, hover, go to definition and Laravel awareness.",
+  "license": "MIT",
+  "repository": "https://github.com/noppu-labs/orca-phpantom",
+  "engines": { "orca": ">=1.4.257" },
+  "pluginApi": 1,
+  "main": "src/main.ts",
+  "capabilities": [{ "kind": "settings:own" }, { "kind": "workspace:read" }, { "kind": "workspace:write" }],
+  "contributes": {
+    "customEditors": [
+      { "id": "blade", "title": "PHPantom", "extensions": [".blade.php"], "entry": "editor/pages/blade.html", "priority": "default", "frame": "isolated" },
+      { "id": "php", "title": "PHPantom", "extensions": [".php"], "entry": "editor/pages/php.html", "priority": "default", "frame": "isolated" }
+    ],
+    "settings": [
+      { "key": "phpantomPath", "title": "PHPantom binary", "description": "Full path to phpantom_lsp. Leave empty to find it on PATH or download it.", "type": "string", "default": "", "placeholder": "/opt/homebrew/bin/phpantom_lsp" },
+      { "key": "allowDownload", "title": "Download PHPantom when missing", "description": "Fetch the pinned PHPantom release from GitHub and check its SHA-256 when none is installed.", "type": "boolean", "default": true }
+    ],
+    "commands": [
+      { "id": "phpantom.status", "title": "PHPantom: Show status" },
+      { "id": "phpantom.restart", "title": "PHPantom: Restart language servers" }
+    ],
+    "statusBarItems": [
+      { "id": "phpantom", "text": "PHPantom", "icon": "code", "tone": "neutral", "tooltip": "PHPantom", "command": "phpantom.status" }
+    ]
+  }
+}
