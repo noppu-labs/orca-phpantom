@@ -8,6 +8,7 @@ import {
   completionDetails,
   completionKindName,
   fromLspRange,
+  inlayHintsWanted,
   markdownValue,
   toCompletionLabel,
   toDocumentSymbols,
@@ -240,7 +241,7 @@ export function registerReadingProviders(ctx: EditorContext, bridge: LspBridge, 
   }
 
   // --- inlay hints ---
-  if (caps.inlayHintProvider) {
+  if (inlayHintsWanted(language, caps)) {
     const changed = new monaco.Emitter<void>()
     registered.push(
       changed,

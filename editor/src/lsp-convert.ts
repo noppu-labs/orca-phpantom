@@ -252,3 +252,10 @@ export function toSemanticTokens(result: { data: number[]; resultId?: string } |
   }
   return { data: Uint32Array.from(result.data), ...(result.resultId ? { resultId: result.resultId } : {}) }
 }
+
+/**
+ * Whether to ask for inlay hints: when the server offers them, and not in Blade, where PHPantom 1.1.0
+ * hints its compiled view (`value:` after each `{{`, `args:` inside directives) rather than the code.
+ */
+export const inlayHintsWanted = (language: string, capabilities: Record<string, unknown>): boolean =>
+  Boolean(capabilities.inlayHintProvider) && language !== 'blade'

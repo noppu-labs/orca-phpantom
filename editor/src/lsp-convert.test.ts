@@ -5,6 +5,7 @@ import {
   completionDetails,
   completionKindName,
   fromLspRange,
+  inlayHintsWanted,
   markdownValue,
   markerSeverity,
   normalizeLocations,
@@ -141,4 +142,11 @@ test('inlay hints move to one-based positions and keep their kind', () => {
 test('semantic tokens become a Uint32Array', () => {
   assert.deepEqual([...toSemanticTokens({ data: [3, 21, 2, 6, 32] })!.data], [3, 21, 2, 6, 32])
   assert.equal(toSemanticTokens(null), null)
+})
+
+// Why: PHPantom 1.1.0 hints Blade's compiled view (`value:` after `{{`, `args:` in directives), not the code.
+test('inlay hints are asked for in PHP only, and only when the server offers them', () => {
+  assert.equal(inlayHintsWanted('php', { inlayHintProvider: true }), true)
+  assert.equal(inlayHintsWanted('blade', { inlayHintProvider: true }), false)
+  assert.equal(inlayHintsWanted('php', {}), false)
 })
