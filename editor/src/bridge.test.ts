@@ -1,0 +1,579 @@
+import { assert, test } from 'orca/testing'
+import { DocumentMirror } from '../../src/lsp/mirror.ts'
+import type { AttachStatus, Language, LspPosition } from '../../src/protocol.ts'
+import { LspBridge, type BridgeHost, type DocumentSource, type SourceChange, type WorkspaceContext } from './bridge.ts'
+import { encodedSize } from './split.ts'
+
+// Short timings so the tests run in milliseconds; the defaults are the brief's (seconds).
+const FAST = { syncDelayMs: 5, retryGapMs: 30, quietMs: 10, reattachGapMs: 0, mountWindowMs: 80, settleMs: 60 }
+
+const wait = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms))
+async function until(condition: () => boolean, what: string, ms = 3000): Promise<void> {
+  const end = Date.now() + ms
+  while (!condition()) {
+    if (Date.now() > end) throw new Error(`timed out waiting for ${what}`)
+    await wait(2)
+  }
+}
+
+const ctx = (workspaceId: string): WorkspaceContext => ({ workspaceId, branch: workspaceId, displayName: workspaceId })
+
+type Call = { name: string; input: any; options?: { timeoutMs?: number; signal?: AbortSignal } }
+type OpenHandler = (input: any, host: FakeHost) => AttachStatus | Promise<AttachStatus>
+type Answer = unknown | Promise<unknown>
+
+/** Pending until the last chunk, then ready under the host's current session. */
+function readyOn(_when: 'last'): OpenHandler {
+  return (input, host) => (input.last ? host.ready() : { state: 'pending' })
+}
+
+type FakeHost = BridgeHost & {
+  calls(name: string): Call[]
+  /** What the router would do with each request; replace to script answers. */
+  handlers: {
+    open: OpenHandler
+    change: (input: any, host: FakeHost) => Answer
+    request: (input: any, host: FakeHost) => Answer
+  }
+  session: string
+  context: WorkspaceContext | null
+  /** The worker's copy of the document: set by a ready answer, moved by accepted changes. */
+  mirror: DocumentMirror | null
+  version: number
+  /** Broken router rules: chunks out of order, a version gap, a wrong length. Tests expect none. */
+  violations: string[]
+  maxInFlight: Record<string, number>
+  ready(): AttachStatus
+  restart(session: string): void
+  post(event: string, payload: unknown): void
+  workspaceChanged(context: WorkspaceContext | null): void
+  firstInput(): void
+  visible(): void
+}
+
+function fakeHost(handlers: Partial<FakeHost['handlers']> = {}, context: WorkspaceContext | null = ctx('ws-a')): FakeHost {
+  const calls: Call[] = []
+  const listeners = new Map<string, Set<(payload: any) => void>>()
+  const subscribe = (event: string, listener: (payload: any) => void) => {
+    const set = listeners.get(event) ?? new Set()
+    listeners.set(event, set)
+    set.add(listener)
+    return { dispose: () => void set.delete(listener) }
+  }
+  const emit = (event: string, payload?: unknown) => {
+    for (const listener of [...(listeners.get(event) ?? [])]) listener(payload)
+  }
+  const inFlight: Record<string, number> = {}
+  let chunks: string[] | null = null
+  let assembled = ''
+  const host: FakeHost = {
+    handlers: {
+      open: readyOn('last'),
+      change: (input, self) => {
+        if (!self.mirror || input.session !== self.session) return { detached: true }
+        if (input.version !== self.version + 1) {
+          self.violations.push(`version ${input.version} after ${self.version}`)
+          return { resync: true }
+        }
+        self.mirror.apply(input.changes)
+        if (self.mirror.length !== input.length) {
+          self.violations.push(`length ${input.length}, mirror ${self.mirror.length}`)
+          return { resync: true }
+        }
+        self.version = input.version
+        return { ok: true }
+      },
+      request: (input, self) => (self.mirror && input.session === self.session ? { result: `answer to ${input.method}` } : { detached: true }),
+      ...handlers
+    },
+    session: 's1',
+    context,
+    mirror: null,
+    version: 0,
+    violations: [],
+    maxInFlight: inFlight,
+    calls: (name) => calls.filter((call) => call.name === name),
+    ready() {
+      host.mirror = new DocumentMirror(assembled)
+      host.version = 1
+      return { state: 'ready', session: host.session, uri: 'file:///w/app/A.php', capabilities: {} }
+    },
+    restart(session) {
+      host.session = session
+      host.mirror = null
+    },
+    async request(name: string, input: any, options?: { timeoutMs?: number; signal?: AbortSignal }): Promise<any> {
+      calls.push({ name, input, ...(options ? { options } : {}) })
+      const key = `${name}:now`
+      inFlight[key] = (inFlight[key] ?? 0) + 1
+      inFlight[name] = Math.max(inFlight[name] ?? 0, inFlight[key])
+      try {
+        await wait(1)
+        if (name === 'phpantom.open') {
+          if (input.index === 0) chunks = []
+          if (!chunks || chunks.length !== input.index) {
+            host.violations.push(`chunk ${input.index} out of order`)
+            chunks = null
+            return { state: 'error', message: 'out of order' }
+          }
+          chunks.push(input.chunk)
+          if (input.last) {
+            assembled = chunks.join('')
+            chunks = null
+          }
+          return await host.handlers.open(input, host)
+        }
+        if (name === 'phpantom.change') return await host.handlers.change(input, host)
+        if (name === 'phpantom.request') return await host.handlers.request(input, host)
+        return { ok: true }
+      } finally {
+        inFlight[key] -= 1
+      }
+    },
+    on: subscribe,
+    readContext: async () => host.context,
+    onWorkspaceChanged: (listener) => subscribe('workspace.changed', listener),
+    onFirstInput: (listener) => subscribe('first-input', listener),
+    onVisible: (listener) => subscribe('visible', listener),
+    post: (event, payload) => emit(event, payload),
+    workspaceChanged: (next) => emit('workspace.changed', next),
+    firstInput: () => emit('first-input'),
+    visible: () => emit('visible')
+  }
+  return host
+}
+
+type FakeSource = DocumentSource & {
+  readonly text: string
+  /** One edit, in offsets of the current text. */
+  edit(start: number, end: number, insert: string): void
+  /** One event with several edits (multi-cursor), each in offsets of the text before the event. */
+  editMany(edits: [number, number, string][]): void
+  replaceAll(text: string): void
+}
+
+function source(initial: string, language: Language = 'php'): FakeSource {
+  let value = initial
+  let version = 1
+  const listeners = new Set<(changes: SourceChange[], isFlush: boolean) => void>()
+  const positionAt = (text: string, offset: number): LspPosition => {
+    const before = text.slice(0, offset)
+    const line = before.split('\n').length - 1
+    return { line, character: offset - (before.lastIndexOf('\n') + 1) }
+  }
+  const emit = (changes: SourceChange[], isFlush: boolean) => {
+    version += 1
+    for (const listener of [...listeners]) listener(changes, isFlush)
+  }
+  return {
+    language,
+    get text() {
+      return value
+    },
+    getText: () => value,
+    getLength: () => value.length,
+    getVersion: () => version,
+    onChanges(listener) {
+      listeners.add(listener)
+      return { dispose: () => void listeners.delete(listener) }
+    },
+    edit(start, end, insert) {
+      const range = { start: positionAt(value, start), end: positionAt(value, end) }
+      value = value.slice(0, start) + insert + value.slice(end)
+      emit([{ range, rangeLength: end - start, text: insert }], false)
+    },
+    editMany(edits) {
+      const before = value
+      // As Monaco reports them: from the end of the document to the start, each against the old text.
+      const sorted = [...edits].sort((a, b) => b[0] - a[0])
+      const changes = sorted.map(([start, end, text]) => ({ range: { start: positionAt(before, start), end: positionAt(before, end) }, rangeLength: end - start, text }))
+      for (const [start, end, text] of sorted) value = value.slice(0, start) + text + value.slice(end)
+      emit(changes, false)
+    },
+    replaceAll(text) {
+      const range = { start: { line: 0, character: 0 }, end: positionAt(value, value.length) }
+      const rangeLength = value.length
+      value = text
+      emit([{ range, rangeLength, text }], true)
+    }
+  }
+}
+
+const versions = (host: FakeHost): number[] => host.calls('phpantom.change').map((call) => call.input.version)
+const fullOpens = (host: FakeHost) => host.calls('phpantom.open').filter((call) => call.input.index === 0 && !call.input.resync)
+
+test('sends a large document in chunks and attaches', async () => {
+  const host = fakeHost({ open: readyOn('last') })
+  const bridge = new LspBridge(host, source('x'.repeat(200_000)))
+  assert.equal((await bridge.attach()).state, 'ready')
+  assert.ok(host.calls('phpantom.open').length > 1)
+  assert.ok(host.calls('phpantom.open').every((c) => encodedSize(c.input) <= 64 * 1024))
+  const opens = host.calls('phpantom.open')
+  // Why 120 s on the last piece only: that one waits for the index or a download.
+  assert.deepEqual(opens.map((c) => c.options?.timeoutMs), [...opens.slice(1).map(() => undefined), 120_000])
+  assert.deepEqual(opens.map((c) => c.input.workspaceId), opens.map(() => 'ws-a'))
+  assert.equal(host.mirror?.text, 'x'.repeat(200_000))
+  assert.equal(host.maxInFlight['phpantom.open'], 1)
+  bridge.dispose()
+})
+
+test('keeps edits typed while attach is in flight', async () => {
+  let release!: () => void
+  const gate = new Promise<void>((resolve) => (release = resolve))
+  const host = fakeHost({
+    open: async (input, self) => {
+      if (!input.last) return { state: 'pending' }
+      await gate
+      return self.ready()
+    }
+  })
+  const doc = source('<?php\necho 1;\n')
+  const bridge = new LspBridge(host, doc, FAST)
+  const attached = bridge.attach()
+  await until(() => host.calls('phpantom.open').length === 1, 'the open')
+  doc.edit(11, 12, '2')
+  doc.edit(11, 12, '3')
+  await wait(20)
+  assert.equal(host.calls('phpantom.change').length, 0)
+  release()
+  assert.equal((await attached).state, 'ready')
+  await until(() => host.mirror?.text === doc.text, 'the worker to catch up')
+  assert.deepEqual(versions(host), [2, 3])
+  assert.equal(host.mirror?.text, '<?php\necho 3;\n')
+  assert.deepEqual(host.violations, [])
+  bridge.dispose()
+})
+
+test('sends changes in order with consecutive versions', async () => {
+  const host = fakeHost()
+  const base = host.handlers.change
+  host.handlers.change = async (input, self) => {
+    await wait(8)
+    return base(input, self)
+  }
+  const doc = source('<?php\n$a = 1;\n')
+  const bridge = new LspBridge(host, doc, FAST)
+  await bridge.attach()
+  doc.edit(11, 12, '2')
+  doc.edit(11, 12, '3')
+  await wait(1)
+  doc.edit(12, 12, '4')
+  await until(() => host.calls('phpantom.change').length === 3, 'three changes')
+  await until(() => host.mirror?.text === doc.text, 'the worker to catch up')
+  assert.deepEqual(versions(host), [2, 3, 4])
+  assert.equal(host.maxInFlight['phpantom.change'], 1)
+  assert.deepEqual(host.violations, [])
+  bridge.dispose()
+})
+
+test('a paste larger than one request reaches the worker split and intact', async () => {
+  const host = fakeHost()
+  const doc = source('<?php\n// one\n// two\n')
+  const bridge = new LspBridge(host, doc, FAST)
+  await bridge.attach()
+  // Two cursors, each pasting 70 KB: one event whose changes must be split across requests.
+  doc.editMany([
+    [9, 9, 'é😀"\\\n'.repeat(10_000)],
+    [16, 16, 'abc\n'.repeat(18_000)]
+  ])
+  await until(() => host.mirror?.text === doc.text, 'the worker to hold the pasted text')
+  assert.ok(host.calls('phpantom.change').length > 2)
+  assert.ok(host.calls('phpantom.change').every((c) => encodedSize(c.input) <= 64 * 1024))
+  assert.equal(host.calls('phpantom.open').filter((c) => c.input.resync).length, 0)
+  assert.deepEqual(host.violations, [])
+  bridge.dispose()
+})
+
+test('a resync answer sends the whole text again', async () => {
+  const host = fakeHost()
+  const doc = source('<?php\n$a = 1;\n')
+  const bridge = new LspBridge(host, doc, FAST)
+  await bridge.attach()
+  host.handlers.change = () => ({ resync: true })
+  doc.edit(11, 12, '2')
+  await until(() => host.mirror?.text === doc.text, 'the worker to hold the whole text again')
+  const resync = host.calls('phpantom.open').find((c) => c.input.resync === true)
+  assert.equal(resync?.input.chunk, '<?php\n$a = 2;\n')
+  assert.equal(resync?.input.index, 0)
+  assert.equal(host.mirror?.text, doc.text)
+  bridge.dispose()
+})
+
+test('replacing the whole text resyncs instead of sending a change', async () => {
+  const host = fakeHost()
+  const doc = source('<?php\n')
+  const bridge = new LspBridge(host, doc, FAST)
+  await bridge.attach()
+  doc.replaceAll('<?php\necho "new";\n')
+  await until(() => host.mirror?.text === doc.text, 'the worker to hold the new text')
+  assert.equal(host.calls('phpantom.open').filter((c) => c.input.resync === true).length, 1)
+  assert.equal(host.calls('phpantom.change').length, 0)
+  assert.equal(host.mirror?.text, doc.text)
+  doc.edit(6, 6, '// ')
+  await until(() => host.mirror?.text === doc.text, 'the next edit')
+  assert.deepEqual(versions(host), [2])
+  bridge.dispose()
+})
+
+test('re-opens after the worker reports a new session', async () => {
+  const host = fakeHost()
+  const bridge = new LspBridge(host, source('<?php\n'), FAST)
+  await bridge.attach()
+  const ready: string[] = []
+  bridge.onReady((status) => ready.push(status.session))
+  host.restart('s2')
+  const answer = await bridge.ask('textDocument/hover', { position: { line: 0, character: 1 } })
+  assert.equal(answer, 'answer to textDocument/hover')
+  assert.equal(fullOpens(host).length, 2)
+  const requests = host.calls('phpantom.request')
+  assert.deepEqual(requests.map((c) => c.input.session), ['s1', 's2'])
+  assert.deepEqual(ready, ['s2'])
+  bridge.dispose()
+})
+
+test('an unavailable worker is re-attached', async () => {
+  const host = fakeHost()
+  const doc = source('<?php\n')
+  const bridge = new LspBridge(host, doc, FAST)
+  await bridge.attach()
+  host.restart('s2')
+  host.handlers.change = () => {
+    host.handlers.change = fakeHost().handlers.change
+    throw Object.assign(new Error('no worker'), { code: 'unavailable' })
+  }
+  doc.edit(6, 6, 'echo 1;')
+  await until(() => fullOpens(host).length === 2 && host.mirror?.text === doc.text, 'a fresh open with the new text')
+  assert.equal(bridge.status?.state, 'ready')
+  bridge.dispose()
+})
+
+test('re-attaches when the worker says its server restarted', async () => {
+  const host = fakeHost()
+  const bridge = new LspBridge(host, source('<?php\n'), FAST)
+  await bridge.attach()
+  const diagnostics: unknown[][] = []
+  bridge.onDiagnostics((list) => diagnostics.push(list))
+  host.restart('s1')
+  host.post('phpantom.status', { docId: 'someone-else', state: 'restarting' })
+  await wait(20)
+  assert.equal(fullOpens(host).length, 1)
+  host.post('phpantom.status', { docId: bridge.docId, state: 'restarting' })
+  await until(() => fullOpens(host).length === 2, 'a fresh open')
+  assert.deepEqual(diagnostics[0], [])
+  bridge.dispose()
+})
+
+test('re-attaches when the tab shows under another workspace', async () => {
+  // R2: readContext is stale for up to 1.3 s after a tab mounts; workspace.changed brings the truth.
+  const host = fakeHost()
+  const bridge = new LspBridge(host, source('<?php\n'), FAST)
+  assert.equal((await bridge.attach()).state, 'ready')
+  host.context = ctx('ws-b')
+  host.workspaceChanged(ctx('ws-b'))
+  await until(() => fullOpens(host).length === 2, 'a second full open')
+  assert.equal(fullOpens(host)[1].input.workspaceId, 'ws-b')
+  assert.equal(fullOpens(host)[1].input.branch, 'ws-b')
+  await until(() => bridge.status?.state === 'ready', 'ready again')
+  // Only once: another change in the window does not move it again.
+  host.workspaceChanged(ctx('ws-c'))
+  await wait(30)
+  assert.equal(fullOpens(host).length, 2)
+  bridge.dispose()
+})
+
+test('confirms the workspace on first input', async () => {
+  const host = fakeHost()
+  const bridge = new LspBridge(host, source('<?php\n'), FAST)
+  await bridge.attach()
+  await wait(FAST.mountWindowMs + 10)
+  // A later workspace.changed (the person switched to this tab) is not a reason by itself.
+  host.context = ctx('ws-b')
+  host.workspaceChanged(ctx('ws-b'))
+  await wait(10)
+  assert.equal(fullOpens(host).length, 1)
+  // Input in this frame proves it is on screen; the context is read once it has settled.
+  const inputAt = Date.now()
+  host.firstInput()
+  await until(() => fullOpens(host).length === 2, 'a re-attach after first input')
+  assert.ok(Date.now() - inputAt >= FAST.settleMs - 20, 'waited for the context to settle')
+  assert.equal(fullOpens(host)[1].input.workspaceId, 'ws-b')
+  bridge.dispose()
+})
+
+test('first input in the same workspace keeps the attach', async () => {
+  const host = fakeHost()
+  const bridge = new LspBridge(host, source('<?php\n'), FAST)
+  await bridge.attach()
+  host.firstInput()
+  await wait(FAST.mountWindowMs + FAST.settleMs + 20)
+  assert.equal(fullOpens(host).length, 1)
+  bridge.dispose()
+})
+
+test('ignores focus changes after it settled', async () => {
+  const host = fakeHost()
+  const bridge = new LspBridge(host, source('<?php\n'), FAST)
+  await bridge.attach()
+  host.firstInput()
+  await wait(FAST.mountWindowMs + FAST.settleMs + 20)
+  assert.equal(fullOpens(host).length, 1)
+  // A background frame keeps hearing every switch; none of these may move it.
+  host.context = ctx('ws-b')
+  host.workspaceChanged(ctx('ws-b'))
+  host.visible()
+  host.firstInput()
+  await wait(FAST.settleMs + 40)
+  assert.equal(fullOpens(host).length, 1)
+  bridge.dispose()
+})
+
+test('never interleaves two chunk sequences for one document', async () => {
+  const host = fakeHost({
+    open: async (input, self) => {
+      await wait(5)
+      return input.last ? self.ready() : { state: 'pending' }
+    }
+  })
+  const text = 'y'.repeat(300_000)
+  const bridge = new LspBridge(host, source(text), FAST)
+  let readies = 0
+  bridge.onReady(() => (readies += 1))
+  const attached = bridge.attach()
+  await until(() => host.calls('phpantom.open').length === 2, 'the second chunk')
+  host.workspaceChanged(ctx('ws-b'))
+  assert.equal((await attached).state, 'ready')
+  await until(() => bridge.status?.state === 'ready' && fullOpens(host).length === 2 && host.calls('phpantom.open').at(-1)?.input.last === true, 'the re-attach')
+  assert.deepEqual(host.violations, [])
+  assert.equal(host.maxInFlight['phpantom.open'], 1)
+  assert.equal(host.calls('phpantom.open').at(-1)?.input.workspaceId, 'ws-b')
+  assert.equal(host.mirror?.text, text)
+  // The first sequence stopped at the next chunk, and nothing it answered counted.
+  const opens = host.calls('phpantom.open')
+  const second = opens.findIndex((c, i) => i > 0 && c.input.index === 0)
+  assert.ok(second < opens.length - second, `the first sequence sent ${second} of ${opens.length - second} chunks`)
+  assert.equal(readies, 1)
+  bridge.dispose()
+})
+
+test('drops a formatting result when the text changed meanwhile', async () => {
+  const host = fakeHost()
+  const doc = source('<?php\n$a=1;\n')
+  const bridge = new LspBridge(host, doc, FAST)
+  await bridge.attach()
+  host.handlers.request = async (input) => {
+    doc.edit(6, 6, ' ')
+    await wait(2)
+    return { result: [{ range: { start: { line: 0, character: 0 }, end: { line: 2, character: 0 } }, newText: 'formatted' }], method: input.method }
+  }
+  assert.equal(await bridge.ask('textDocument/formatting', { options: { tabSize: 4, insertSpaces: true } }), null)
+  // A hover is still worth showing after an edit.
+  assert.notEqual(await bridge.ask('textDocument/hover', { position: { line: 1, character: 1 } }), null)
+  bridge.dispose()
+})
+
+test('a request flushes the edits typed before it', async () => {
+  const host = fakeHost()
+  const doc = source('<?php\n')
+  const bridge = new LspBridge(host, doc, { ...FAST, syncDelayMs: 10_000 })
+  await bridge.attach()
+  doc.edit(6, 6, '$x->')
+  let seen = ''
+  host.handlers.request = (_input, self) => {
+    seen = self.mirror?.text ?? ''
+    return { result: null }
+  }
+  await bridge.ask('textDocument/completion', { position: { line: 1, character: 4 } })
+  assert.equal(seen, '<?php\n$x->')
+  bridge.dispose()
+})
+
+test('an aborted request answers null', async () => {
+  const host = fakeHost()
+  const bridge = new LspBridge(host, source('<?php\n'), FAST)
+  await bridge.attach()
+  const controller = new AbortController()
+  host.handlers.request = async () => {
+    controller.abort()
+    return { result: 'late' }
+  }
+  assert.equal(await bridge.ask('textDocument/hover', {}, controller.signal), null)
+  assert.equal(host.calls('phpantom.request')[0].options?.signal, controller.signal)
+  bridge.dispose()
+})
+
+test('retries a single-file attach after typing stops', async () => {
+  let answers = 0
+  const host = fakeHost({
+    open: (input, self) => {
+      if (!input.last) return { state: 'pending' }
+      answers += 1
+      return answers === 1 ? { state: 'single-file', reason: 'no-file' } : self.ready()
+    }
+  })
+  const doc = source('<?php\n')
+  const bridge = new LspBridge(host, doc, FAST)
+  assert.equal((await bridge.attach()).state, 'single-file')
+  await wait(FAST.retryGapMs + 20)
+  // Nothing happened yet: a retry waits for typing to stop or the tab to show.
+  assert.equal(fullOpens(host).length, 1)
+  doc.edit(6, 6, 'echo 1;')
+  await until(() => bridge.status?.state === 'ready', 'the retry to attach')
+  assert.equal(fullOpens(host).length, 2)
+  assert.equal(host.mirror?.text, doc.text)
+  bridge.dispose()
+})
+
+test('gives up retrying after maxRetries', async () => {
+  const host = fakeHost({ open: (input) => (input.last ? { state: 'single-file', reason: 'ambiguous' } : { state: 'pending' }) })
+  const bridge = new LspBridge(host, source('<?php\n'), { ...FAST, retryGapMs: 1, quietMs: 1, maxRetries: 2 })
+  await bridge.attach()
+  for (let i = 0; i < 4; i++) {
+    host.visible()
+    await wait(15)
+  }
+  assert.equal(fullOpens(host).length, 3)
+  bridge.dispose()
+})
+
+test('ignores events meant for another document', async () => {
+  // R3: every frame of one editor shares a panel id, so posts can reach frames they are not for.
+  const host = fakeHost()
+  const bridge = new LspBridge(host, source('<?php\n'), FAST)
+  await bridge.attach()
+  const diagnostics: unknown[][] = []
+  const reveals: unknown[] = []
+  const refreshes: string[][] = []
+  bridge.onDiagnostics((list) => diagnostics.push(list))
+  bridge.onReveal((range) => reveals.push(range))
+  bridge.onRefresh((kinds) => refreshes.push(kinds))
+  const range = { start: { line: 0, character: 0 }, end: { line: 0, character: 1 } }
+  host.post('phpantom.diagnostics', { docId: 'other', diagnostics: [{ message: 'not mine' }], truncated: 0 })
+  host.post('phpantom.reveal', { docId: 'other', range })
+  host.post('phpantom.diagnostics', { docId: bridge.docId, diagnostics: [{ message: 'mine' }], truncated: 0 })
+  host.post('phpantom.reveal', { docId: bridge.docId, range })
+  host.post('phpantom.refresh', { kinds: ['inlayHints'] })
+  assert.deepEqual(diagnostics, [[{ message: 'mine' }]])
+  assert.deepEqual(reveals, [range])
+  assert.deepEqual(refreshes, [['inlayHints']])
+  bridge.dispose()
+})
+
+test('reveals the range a ready answer carries', async () => {
+  const range = { start: { line: 3, character: 0 }, end: { line: 3, character: 4 } }
+  const host = fakeHost({ open: (input, self) => (input.last ? { ...self.ready(), reveal: range } : { state: 'pending' }) })
+  const bridge = new LspBridge(host, source('<?php\n'), FAST)
+  const reveals: unknown[] = []
+  bridge.onReveal((r) => reveals.push(r))
+  await bridge.attach()
+  assert.deepEqual(reveals, [range])
+  bridge.dispose()
+})
+
+test('closing the page closes the document', async () => {
+  const host = fakeHost()
+  const bridge = new LspBridge(host, source('<?php\n'), FAST)
+  await bridge.attach()
+  bridge.dispose()
+  await until(() => host.calls('phpantom.close').length === 1, 'a close')
+  assert.deepEqual(host.calls('phpantom.close')[0].input, { docId: bridge.docId })
+})

@@ -1,0 +1,575 @@
+// Keeps one editor's document attached to PHPantom through the worker: opens it in chunks, streams
+// incremental changes, forwards LSP requests, and opens it again when the worker or its server restarts
+// or the frame turns out to belong to another workspace. No Monaco here, so Node can test it with fakes.
+import type { PluginRequestInput, PluginRequestOutput, PluginRequests } from 'orca'
+import type { AttachStatus, Language, LspContentChange, LspRange } from '../../src/protocol.ts'
+import { chunkText, splitChanges } from './split.ts'
+
+type Disposable = { dispose(): void }
+type Ready = AttachStatus & { state: 'ready' }
+
+export type WorkspaceContext = { workspaceId: string | null; branch: string; displayName: string }
+
+export type BridgeHost = {
+  request<K extends keyof PluginRequests>(
+    name: K,
+    input: PluginRequestInput<K>,
+    options?: { timeoutMs?: number; signal?: AbortSignal }
+  ): Promise<PluginRequestOutput<K>>
+  /** What the worker posts to this editor's panel; every frame of the editor hears every post. */
+  on(event: string, handler: (payload: any) => void): Disposable
+  /** The focused workspace, which is not always this frame's: see the R2 notes on LspBridge. */
+  readContext(): Promise<WorkspaceContext | null>
+  /** Orca's `workspace.changed`, the current context first. Background frames hear it too. */
+  onWorkspaceChanged(listener: (context: WorkspaceContext | null) => void): Disposable
+  /** The first pointer or key press inside this frame; only the frame on screen can get one. */
+  onFirstInput(listener: () => void): Disposable
+  /** The tab was shown. Only a moment to retry a single-file attach, never a reason to re-attach. */
+  onVisible(listener: () => void): Disposable
+}
+
+/** A content change with the length of the text it replaced, as Monaco reports it. */
+export type SourceChange = { range: LspRange; rangeLength: number; text: string }
+
+export type DocumentSource = {
+  language: Language
+  getText(): string
+  getLength(): number
+  /** Rises with every change. */
+  getVersion(): number
+  /** `isFlush`: the whole text was replaced (or its line endings changed), so send it whole. */
+  onChanges(listener: (changes: SourceChange[], isFlush: boolean) => void): Disposable
+}
+
+export type BridgeOptions = {
+  docId?: string
+  /** Quiet time before queued changes are sent. */
+  syncDelayMs?: number
+  /** Least time between two attempts to attach a file the worker could not place. */
+  retryGapMs?: number
+  maxRetries?: number
+  /** Time without typing before such a retry. */
+  quietMs?: number
+  /** Least time between two re-attaches after the worker lost the document. */
+  reattachGapMs?: number
+  /** After mounting, a `workspace.changed` this soon names the frame's real workspace (R2). */
+  mountWindowMs?: number
+  /** How long after a workspace switch `readContext` may still answer the previous workspace (R2). */
+  settleMs?: number
+}
+
+// Requests whose answer edits the text: applied to a text that moved since, they would corrupt it.
+const VERSION_GUARDED = new Set(['textDocument/formatting', 'textDocument/rangeFormatting', 'textDocument/rename', 'codeAction/resolve'])
+// The last chunk waits for PHPantom to start, which can mean a cold index or a download.
+const LAST_CHUNK_TIMEOUT_MS = 120_000
+
+type Events = { ready: Ready; status: AttachStatus; diagnostics: unknown[]; refresh: string[]; reveal: LspRange }
+type QueuedEvent = { changes: SourceChange[]; lengthAfter: number }
+type Group = { changes: LspContentChange[]; length: number }
+
+const codeOf = (error: unknown): unknown => (typeof error === 'object' && error !== null ? (error as { code?: unknown }).code : undefined)
+const messageOf = (error: unknown): string => (error instanceof Error ? error.message : String(error))
+const isEmpty = (range: LspRange): boolean => range.start.line === range.end.line && range.start.character === range.end.character
+
+/**
+ * An event's changes as request-sized groups, each with the document length after it, and the length
+ * before the event. Pieces of a split change stay in order in consecutive groups; the first piece keeps
+ * the change's own range object and the rest are inserts, which is how each group's length is worked
+ * back from the event's final length. Null when a length cannot be worked out: the caller resyncs.
+ */
+function groupsOf(event: QueuedEvent): { groups: Group[]; lengthBefore: number } | null {
+  const replaced = new Map<LspRange, number>()
+  for (const change of event.changes) {
+    replaced.set(change.range, change.rangeLength)
+  }
+  const groups = splitChanges(event.changes.map((change): LspContentChange => ({ range: change.range, text: change.text })))
+  const out: Group[] = []
+  let length = event.lengthAfter
+  for (let i = groups.length - 1; i >= 0; i--) {
+    out[i] = { changes: groups[i], length }
+    for (const change of groups[i]) {
+      if (!('range' in change)) {
+        return null
+      }
+      const removed = replaced.get(change.range) ?? (isEmpty(change.range) ? 0 : NaN)
+      length -= change.text.length - removed
+    }
+  }
+  return Number.isNaN(length) ? null : { groups: out, lengthBefore: length }
+}
+
+/**
+ * Workspace (ruling R2): `readContext` names the focused workspace, which at mount or just after a switch
+ * can still be the previous one, and frames of every worktree hear `visibilitychange` and
+ * `workspace.changed`. So the first attach is provisional; it moves once if `workspace.changed` names
+ * another workspace within `mountWindowMs` of mounting, and once if the context read after the first
+ * input in this frame (and `settleMs` after the last switch) differs. Nothing else re-targets it.
+ */
+export class LspBridge {
+  readonly docId: string
+  private readonly host: BridgeHost
+  private readonly source: DocumentSource
+  private readonly syncDelayMs: number
+  private readonly retryGapMs: number
+  private readonly maxRetries: number
+  private readonly quietMs: number
+  private readonly reattachGapMs: number
+  private readonly mountWindowMs: number
+  private readonly settleMs: number
+  private readonly subscriptions: Disposable[] = []
+  private readonly listeners: { [K in keyof Events]: Set<(value: Events[K]) => void> } = {
+    ready: new Set(),
+    status: new Set(),
+    diagnostics: new Set(),
+    refresh: new Set(),
+    reveal: new Set()
+  }
+
+  private current: AttachStatus | null = null
+  private attachedTo: Ready | null = null
+  private version = 1
+  /** The length the worker holds after the last change sent. */
+  private sentLength = 0
+  /** Changes since the last snapshot are queued only while an attach is in flight or done. */
+  private accepting = false
+  private queue: QueuedEvent[] = []
+  private needsResync = false
+  private syncTimer: ReturnType<typeof setTimeout> | undefined
+  /** Opens and changes run one at a time, so two chunk sequences for this document never interleave. */
+  private lane: Promise<unknown> = Promise.resolve()
+  /** Rises with each open; an open or change from an older one stops and its answer is dropped. */
+  private generation = 0
+  private latest: Promise<AttachStatus | null> | null = null
+  private disposed = false
+
+  private context: WorkspaceContext | null = null
+  private contextFromEvent = false
+  /** The workspace the latest open was started with; undefined before the first. */
+  private targetWorkspace: string | null | undefined = undefined
+  private readonly mountedAt = Date.now()
+  private lastSwitchAt = 0
+  private mountMoved = false
+  private confirmed = false
+
+  private retries = 0
+  private retryWaiting: Disposable | null = null
+  private reattaching: Promise<boolean> | null = null
+  private reattachTimer: ReturnType<typeof setTimeout> | undefined
+  private lastReattachAt = Number.NEGATIVE_INFINITY
+
+  constructor(host: BridgeHost, source: DocumentSource, options: BridgeOptions = {}) {
+    this.host = host
+    this.source = source
+    this.docId = options.docId ?? crypto.randomUUID()
+    this.syncDelayMs = options.syncDelayMs ?? 50
+    this.retryGapMs = options.retryGapMs ?? 8000
+    this.maxRetries = options.maxRetries ?? 20
+    this.quietMs = options.quietMs ?? 2000
+    this.reattachGapMs = options.reattachGapMs ?? 5000
+    this.mountWindowMs = options.mountWindowMs ?? 1500
+    this.settleMs = options.settleMs ?? 1500
+
+    // Listen before the first open: PHPantom publishes diagnostics while the open is still answering.
+    const mine = (payload: { docId?: unknown } | null | undefined): boolean => payload?.docId === this.docId
+    this.subscriptions.push(
+      host.on('phpantom.diagnostics', (payload) => {
+        if (mine(payload) && Array.isArray(payload.diagnostics)) this.emit('diagnostics', payload.diagnostics)
+      }),
+      host.on('phpantom.reveal', (payload) => {
+        if (mine(payload)) this.emit('reveal', payload.range)
+      }),
+      host.on('phpantom.refresh', (payload) => {
+        if (Array.isArray(payload?.kinds)) this.emit('refresh', payload.kinds)
+      }),
+      host.on('phpantom.status', (payload) => {
+        // The worker dropped this document (restart, or its server crashed): open it again.
+        if (mine(payload) && this.attachedTo && (payload.state === 'restarting' || payload.state === 'error')) this.lost()
+      }),
+      host.onWorkspaceChanged((context) => this.workspaceChanged(context)),
+      host.onVisible(() => {
+        this.lastSwitchAt = Date.now()
+      }),
+      source.onChanges((changes, isFlush) => this.changed(changes, isFlush))
+    )
+    const firstInput = host.onFirstInput(() => {
+      firstInput.dispose()
+      void this.confirmWorkspace()
+    })
+    this.subscriptions.push(firstInput)
+  }
+
+  get status(): AttachStatus | null {
+    return this.current
+  }
+
+  /** Attaches the document; resolves with the answer of the latest attempt (a re-target may replace this one). */
+  async attach(): Promise<AttachStatus> {
+    if (this.targetWorkspace === undefined && !this.contextFromEvent) {
+      const read = await this.host.readContext().catch(() => null)
+      // Why the check: a workspace.changed that arrived meanwhile is at least as new.
+      if (!this.contextFromEvent) this.context = read
+    }
+    return this.settled(this.start(false))
+  }
+
+  /** Sends `method` once queued changes are in; null when aborted, failed, or (for edits) outdated. */
+  async ask(method: string, params: Record<string, unknown>, signal?: AbortSignal): Promise<unknown | null> {
+    for (let attempt = 0; attempt < 2; attempt++) {
+      if (signal?.aborted || !this.attachedTo) return null
+      await this.flush()
+      const session = this.attachedTo?.session
+      if (!session || signal?.aborted) return null
+      const version = this.source.getVersion()
+      let answer: PluginRequestOutput<'phpantom.request'>
+      try {
+        answer = await this.host.request('phpantom.request', { docId: this.docId, session, method, params }, signal ? { signal } : undefined)
+      } catch (error) {
+        if (signal?.aborted || codeOf(error) !== 'unavailable') return null
+        answer = { detached: true }
+      }
+      if (signal?.aborted) return null
+      if ('detached' in answer) {
+        if (attempt > 0) return null
+        if (this.attachedTo?.session === session) {
+          this.lost()
+        }
+        if (!(await this.reattachNow())) return null
+        continue
+      }
+      if ('error' in answer) return null
+      if (VERSION_GUARDED.has(method) && this.source.getVersion() !== version) return null
+      return answer.result
+    }
+    return null
+  }
+
+  onReady(listener: (status: Ready) => void): Disposable {
+    return this.listen('ready', listener)
+  }
+
+  /** Every final attach answer, failed ones included (as `error`). */
+  onStatus(listener: (status: AttachStatus) => void): Disposable {
+    return this.listen('status', listener)
+  }
+
+  onDiagnostics(listener: (diagnostics: unknown[]) => void): Disposable {
+    return this.listen('diagnostics', listener)
+  }
+
+  onRefresh(listener: (kinds: string[]) => void): Disposable {
+    return this.listen('refresh', listener)
+  }
+
+  onReveal(listener: (range: LspRange) => void): Disposable {
+    return this.listen('reveal', listener)
+  }
+
+  dispose(): void {
+    if (this.disposed) return
+    this.disposed = true
+    this.generation += 1
+    clearTimeout(this.syncTimer)
+    clearTimeout(this.reattachTimer)
+    this.retryWaiting?.dispose()
+    for (const subscription of this.subscriptions) subscription.dispose()
+    this.host.request('phpantom.close', { docId: this.docId }).catch(() => undefined)
+  }
+
+  // --- attaching ---
+
+  /** Queues a fresh open (or a resync) behind whatever runs; an open still sending chunks stops at the next one. */
+  private start(resync: boolean): Promise<AttachStatus | null> {
+    const generation = ++this.generation
+    if (!resync) this.targetWorkspace = this.context?.workspaceId ?? null
+    const run = this.inLane(() => this.open(generation, resync))
+    if (!resync) this.latest = run
+    return run
+  }
+
+  /** The answer of `run`, or of whatever attempt superseded it. */
+  private async settled(run: Promise<AttachStatus | null>): Promise<AttachStatus> {
+    let status = await run
+    while (status === null && !this.disposed && this.latest && this.latest !== run) {
+      run = this.latest
+      status = await run
+    }
+    return status ?? this.current ?? { state: 'error', message: 'PHPantom: the editor closed' }
+  }
+
+  private async open(generation: number, resync: boolean): Promise<AttachStatus | null> {
+    if (generation !== this.generation || this.disposed) return null
+    const context = this.context
+    // Snapshot and queue reset together: every change after this line is queued on top of `text`.
+    const text = this.source.getText()
+    this.queue = []
+    this.needsResync = false
+    this.accepting = true
+    if (!resync) this.attachedTo = null
+    const chunks = chunkText(text)
+    let answer: AttachStatus = { state: 'pending' }
+    try {
+      for (let index = 0; index < chunks.length; index++) {
+        const last = index === chunks.length - 1
+        const input: PluginRequestInput<'phpantom.open'> = {
+          docId: this.docId,
+          language: this.source.language,
+          workspaceId: context?.workspaceId ?? null,
+          branch: context?.branch ?? null,
+          displayName: context?.displayName ?? null,
+          index,
+          chunk: chunks[index],
+          last,
+          ...(resync ? { resync: true as const } : {})
+        }
+        answer = await this.host.request('phpantom.open', input, last ? { timeoutMs: LAST_CHUNK_TIMEOUT_MS } : undefined)
+        if (generation !== this.generation) return null
+        if (!last && answer.state !== 'pending') break
+      }
+    } catch (error) {
+      if (generation !== this.generation) return null
+      this.detach()
+      const failed: AttachStatus = { state: 'error', message: `PHPantom did not answer: ${messageOf(error)}` }
+      this.settle(failed)
+      this.retryLater()
+      return failed
+    }
+    if (answer.state === 'ready') {
+      const fresh = !this.attachedTo || this.attachedTo.session !== answer.session || this.attachedTo.uri !== answer.uri
+      this.attachedTo = answer
+      this.version = 1
+      this.sentLength = text.length
+      this.retries = 0
+      this.retryWaiting?.dispose()
+      this.retryWaiting = null
+      if (fresh) {
+        this.settle(answer)
+        this.emit('ready', answer)
+      }
+      if (answer.reveal) this.emit('reveal', answer.reveal)
+      if (this.queue.length > 0 || this.needsResync) this.scheduleSync(0)
+      return answer
+    }
+    this.detach()
+    const final: AttachStatus = answer.state === 'pending' ? { state: 'error', message: 'PHPantom: the open never finished' } : answer
+    this.settle(final)
+    if (final.state === 'single-file') this.retryLater()
+    return final
+  }
+
+  /** The worker no longer holds this document: forget the session and open it again after the gap. */
+  private lost(): void {
+    if (this.disposed) return
+    this.generation += 1
+    this.detach()
+    void this.reattachNow()
+  }
+
+  private detach(): void {
+    const had = this.attachedTo !== null
+    this.attachedTo = null
+    this.accepting = false
+    this.queue = []
+    this.needsResync = false
+    clearTimeout(this.syncTimer)
+    // Markers from a server that no longer has this document would never be cleared otherwise.
+    if (had) this.emit('diagnostics', [])
+  }
+
+  /** One re-attach at a time, at most one per gap; resolves whether it attached. */
+  private reattachNow(): Promise<boolean> {
+    if (this.reattaching) return this.reattaching
+    const delay = Math.max(0, this.lastReattachAt + this.reattachGapMs - Date.now())
+    this.reattaching = new Promise<boolean>((resolve) => {
+      this.reattachTimer = setTimeout(() => {
+        this.lastReattachAt = Date.now()
+        this.settled(this.start(false)).then(
+          (status) => resolve(status.state === 'ready'),
+          () => resolve(false)
+        )
+      }, delay)
+    }).finally(() => {
+      this.reattaching = null
+    })
+    return this.reattaching
+  }
+
+  /** Not sooner than the gap, and only once typing stopped or the tab showed (as Autocomplete does). */
+  private retryLater(): void {
+    if (this.disposed || this.retryWaiting || this.retries >= this.maxRetries) return
+    this.retries += 1
+    const earliest = Date.now() + this.retryGapMs
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const arm = (): void => {
+      clearTimeout(timer)
+      timer = setTimeout(fire, Math.max(this.quietMs, earliest - Date.now()))
+    }
+    const fire = (): void => {
+      waiting.dispose()
+      if (this.disposed || this.attachedTo) return
+      void this.start(false)
+    }
+    const typed = this.source.onChanges(arm)
+    const shown = this.host.onVisible(arm)
+    const waiting: Disposable = {
+      dispose: () => {
+        clearTimeout(timer)
+        typed.dispose()
+        shown.dispose()
+        if (this.retryWaiting === waiting) this.retryWaiting = null
+      }
+    }
+    this.retryWaiting = waiting
+  }
+
+  // --- the workspace (R2) ---
+
+  private workspaceChanged(context: WorkspaceContext | null): void {
+    this.lastSwitchAt = Date.now()
+    if (this.mountMoved || this.confirmed || Date.now() - this.mountedAt > this.mountWindowMs) return
+    const id = context?.workspaceId ?? null
+    if (id === null) return
+    if (this.targetWorkspace === undefined) {
+      // No open yet: the first one uses this.
+      this.context = context
+      this.contextFromEvent = true
+      return
+    }
+    if (id === this.targetWorkspace) return
+    this.mountMoved = true
+    this.retarget(context)
+  }
+
+  private async confirmWorkspace(): Promise<void> {
+    // Why wait: just after a switch readContext still answers the previous workspace for up to 1.3 s.
+    for (;;) {
+      const due = Math.max(this.mountedAt, this.lastSwitchAt) + this.settleMs - Date.now()
+      if (due <= 0) break
+      await new Promise((resolve) => setTimeout(resolve, due))
+      if (this.disposed) return
+    }
+    const context = await this.host.readContext().catch(() => null)
+    if (this.disposed || this.confirmed) return
+    this.confirmed = true
+    const id = context?.workspaceId ?? null
+    if (id !== null && this.targetWorkspace !== undefined && id !== this.targetWorkspace) {
+      this.retarget(context)
+    }
+  }
+
+  /** Opens again under `context` now: not a recovery, so neither the gap nor the retry count apply. */
+  private retarget(context: WorkspaceContext | null): void {
+    this.context = context
+    this.retryWaiting?.dispose()
+    this.detach()
+    void this.start(false)
+  }
+
+  // --- changes ---
+
+  private changed(changes: SourceChange[], isFlush: boolean): void {
+    if (!this.accepting) return
+    if (isFlush) {
+      this.needsResync = true
+      this.queue = []
+    } else if (!this.needsResync) {
+      this.queue.push({ changes, lengthAfter: this.source.getLength() })
+    }
+    this.scheduleSync(this.syncDelayMs)
+  }
+
+  private scheduleSync(delay: number): void {
+    clearTimeout(this.syncTimer)
+    this.syncTimer = setTimeout(() => void this.flush(), delay)
+  }
+
+  /** Sends whatever is queued, behind any open in flight. */
+  private flush(): Promise<unknown> {
+    clearTimeout(this.syncTimer)
+    return this.inLane(() => this.sync())
+  }
+
+  private async sync(): Promise<void> {
+    while (this.attachedTo && !this.disposed) {
+      const generation = this.generation
+      if (this.needsResync) {
+        await this.open(++this.generation, true)
+        continue
+      }
+      const event = this.queue.shift()
+      if (!event) return
+      const split = groupsOf(event)
+      // Why check the start: a length that does not chain on from the last one means the queue missed something.
+      if (!split || split.lengthBefore !== this.sentLength) {
+        this.resyncNext()
+        continue
+      }
+      for (const group of split.groups) {
+        const session = this.attachedTo.session
+        let answer: PluginRequestOutput<'phpantom.change'>
+        try {
+          answer = await this.host.request('phpantom.change', {
+            docId: this.docId,
+            session,
+            version: this.version + 1,
+            changes: group.changes,
+            length: group.length
+          })
+        } catch (error) {
+          if (generation !== this.generation) return
+          if (codeOf(error) === 'unavailable') {
+            this.lost()
+            return
+          }
+          // Whether it landed is unknown, so send the whole text.
+          this.resyncNext()
+          break
+        }
+        if (generation !== this.generation || !this.attachedTo) return
+        if ('detached' in answer) {
+          this.lost()
+          return
+        }
+        if ('resync' in answer) {
+          this.resyncNext()
+          break
+        }
+        this.version += 1
+        this.sentLength = group.length
+      }
+    }
+  }
+
+  private resyncNext(): void {
+    this.needsResync = true
+    this.queue = []
+  }
+
+  // --- plumbing ---
+
+  private inLane<T>(job: () => Promise<T>): Promise<T> {
+    const run = this.lane.then(job, job)
+    this.lane = run.catch(() => undefined)
+    return run
+  }
+
+  private settle(status: AttachStatus): void {
+    this.current = status
+    this.emit('status', status)
+  }
+
+  private listen<K extends keyof Events>(kind: K, listener: (value: Events[K]) => void): Disposable {
+    const set = this.listeners[kind]
+    set.add(listener)
+    return { dispose: () => void set.delete(listener) }
+  }
+
+  private emit<K extends keyof Events>(kind: K, value: Events[K]): void {
+    for (const listener of [...this.listeners[kind]]) {
+      try {
+        listener(value)
+      } catch (error) {
+        console.error(`PHPantom ${kind} listener failed`, error)
+      }
+    }
+  }
+}
