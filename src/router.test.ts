@@ -701,3 +701,32 @@ test('a vendor file opened by navigation is found again after its document was r
   assert.equal(again.state, 'ready')
   assert.equal(again.uri, target)
 })
+
+test('a failed binary lookup is kept for two minutes, and forgotten when the settings change', async () => {
+  let clock = 1_000_000
+  let lookups = 0
+  const { worker, router } = await setup({
+    files: { 'a/A.php': '<?php // ok\n' },
+    now: () => clock,
+    resolve: async () => {
+      lookups += 1
+      return { ok: false, message: 'the download failed' }
+    }
+  })
+  const open = () => openWhole(worker, { docId: 'd1', language: 'php', workspaceId: 'ws-a', text: '<?php // ok\n' })
+  assert.deepEqual(await open(), { state: 'error', message: 'the download failed' })
+  // Tabs retry on showing and on typing: none of that downloads again.
+  assert.deepEqual(await open(), { state: 'error', message: 'the download failed' })
+  clock += 119_000
+  assert.equal((await open()).state, 'error')
+  assert.equal(lookups, 1)
+  clock += 2_000
+  assert.equal((await open()).state, 'error')
+  assert.equal(lookups, 2)
+  router.forgetBinary()
+  assert.equal((await open()).state, 'error')
+  assert.equal(lookups, 3)
+  await router.restartAll()
+  assert.equal((await open()).state, 'error')
+  assert.equal(lookups, 4)
+})

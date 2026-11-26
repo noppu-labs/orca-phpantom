@@ -117,6 +117,8 @@ const IDLE_MS = 10 * 60_000
 // The editor pings every 20 s, so a minute is three missed pings.
 const LEASE_MS = 60_000
 const SWEEP_MS = 15_000
+// A failed lookup or download is kept this long, so tabs retrying (on show, after typing) do not download in a loop.
+const FAILED_BINARY_MS = 2 * 60_000
 const STATUS_INTERVAL_MS = 1000
 const RESTART_WINDOW_MS = 5 * 60_000
 const MAX_RESTARTS = 3
@@ -149,6 +151,8 @@ export class Router {
   private readonly chunks = new Map<string, string[]>()
   private readonly lanes = new Map<string, Promise<void>>()
   private resolution: Promise<Resolution> | null = null
+  /** When `resolution` failed; it is looked up again FAILED_BINARY_MS later. */
+  private failedAt: number | null = null
   private resolved: Resolution | null = null
   private downloading = false
   private resolveError: string | null = null
@@ -354,6 +358,7 @@ export class Router {
   /** Settings changed: find the binary again before the next server starts. */
   forgetBinary(): void {
     this.resolution = null
+    this.failedAt = null
     this.resolved = null
     // Why clear the error: it described the old settings; the next open finds out about the new ones.
     if (this.resolveError) {
@@ -791,6 +796,11 @@ export class Router {
   }
 
   private binary(): Promise<Resolution> {
+    if (this.resolution && this.failedAt !== null && this.now() - this.failedAt >= FAILED_BINARY_MS) {
+      // Why look again at all: a download may work now, or the binary may have been installed meanwhile.
+      this.resolution = null
+      this.failedAt = null
+    }
     if (!this.resolution) {
       const pending = this.findBinary()
       this.resolution = pending
@@ -802,8 +812,7 @@ export class Router {
           this.resolved = resolution
           this.host.log(`Using PHPantom ${resolution.version} (${SOURCE_WORDS[resolution.source]}): ${resolution.path}`)
         } else {
-          // Why not cached: the next open tries again (a download may work then).
-          this.resolution = null
+          this.failedAt = this.now()
           this.host.log(`PHPantom is not available: ${resolution.message}`)
         }
       })
