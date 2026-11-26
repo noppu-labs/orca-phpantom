@@ -66,6 +66,7 @@ function fakeHost(handlers: Partial<FakeHost['handlers']> = {}, context: Workspa
   const inFlight: Record<string, number> = {}
   let chunks: string[] | null = null
   let assembled = ''
+  let openedIn: string | null = null
   const host: FakeHost = {
     handlers: {
       open: readyOn('last'),
@@ -96,7 +97,8 @@ function fakeHost(handlers: Partial<FakeHost['handlers']> = {}, context: Workspa
     ready() {
       host.mirror = new DocumentMirror(assembled)
       host.version = 1
-      return { state: 'ready', session: host.session, uri: 'file:///w/app/A.php', capabilities: {} }
+      // Each workspace has its own copy of the file, as sibling worktrees do.
+      return { state: 'ready', session: host.session, uri: `file:///${openedIn ?? 'none'}/app/A.php`, capabilities: {} }
     },
     restart(session) {
       host.session = session
@@ -117,6 +119,7 @@ function fakeHost(handlers: Partial<FakeHost['handlers']> = {}, context: Workspa
             return { state: 'error', message: 'out of order' }
           }
           chunks.push(input.chunk)
+          openedIn = input.workspaceId
           if (input.last) {
             assembled = chunks.join('')
             chunks = null
@@ -388,14 +391,14 @@ test('confirms the workspace on first input', async () => {
   await wait(FAST.mountWindowMs + 10)
   // A later workspace.changed (the person switched to this tab) is not a reason by itself.
   host.context = ctx('ws-b')
+  const changedAt = Date.now()
   host.workspaceChanged(ctx('ws-b'))
   await wait(10)
   assert.equal(fullOpens(host).length, 1)
-  // Input in this frame proves it is on screen; the context is read once it has settled.
-  const inputAt = Date.now()
+  // Input in this frame proves it is on screen; the context is read settleMs after the last switch.
   host.firstInput()
   await until(() => fullOpens(host).length === 2, 'a re-attach after first input')
-  assert.ok(Date.now() - inputAt >= FAST.settleMs - 20, 'waited for the context to settle')
+  assert.ok(Date.now() - changedAt >= FAST.settleMs, 'waited for the context to settle')
   assert.equal(fullOpens(host)[1].input.workspaceId, 'ws-b')
   bridge.dispose()
 })
@@ -468,6 +471,20 @@ test('drops a formatting result when the text changed meanwhile', async () => {
   assert.equal(await bridge.ask('textDocument/formatting', { options: { tabSize: 4, insertSpaces: true } }), null)
   // A hover is still worth showing after an edit.
   assert.notEqual(await bridge.ask('textDocument/hover', { position: { line: 1, character: 1 } }), null)
+  bridge.dispose()
+})
+
+test('drops an answer from the attachment a re-target replaced', async () => {
+  const host = fakeHost()
+  const bridge = new LspBridge(host, source('<?php\n'), FAST)
+  await bridge.attach()
+  host.handlers.request = async () => {
+    // The tab turns out to be the sibling worktree's while the answer is on its way.
+    host.workspaceChanged(ctx('ws-b'))
+    await until(() => bridge.status?.state === 'ready' && fullOpens(host).length === 2, 'the re-attach')
+    return { result: 'from ws-a' }
+  }
+  assert.equal(await bridge.ask('textDocument/hover', {}), null)
   bridge.dispose()
 })
 

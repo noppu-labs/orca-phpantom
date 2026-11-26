@@ -217,8 +217,9 @@ export class LspBridge {
     for (let attempt = 0; attempt < 2; attempt++) {
       if (signal?.aborted || !this.attachedTo) return null
       await this.flush()
-      const session = this.attachedTo?.session
-      if (!session || signal?.aborted) return null
+      const attachment = this.attachedTo
+      const session = attachment?.session
+      if (!attachment || !session || signal?.aborted) return null
       const version = this.source.getVersion()
       let answer: PluginRequestOutput<'phpantom.request'>
       try {
@@ -237,6 +238,8 @@ export class LspBridge {
         continue
       }
       if ('error' in answer) return null
+      // Why: the session outlives a re-target to another worktree; that answer is about the other copy.
+      if (this.attachedTo?.session !== session || this.attachedTo.uri !== attachment.uri) return null
       if (VERSION_GUARDED.has(method) && this.source.getVersion() !== version) return null
       return answer.result
     }
@@ -367,6 +370,7 @@ export class LspBridge {
   private detach(): void {
     const had = this.attachedTo !== null
     this.attachedTo = null
+    if (this.current?.state === 'ready') this.current = null
     this.accepting = false
     this.queue = []
     this.needsResync = false
