@@ -62,6 +62,8 @@ type SharedFile = {
   text: string
   /** What PHPantom is told; it only rises, so a resync never sends PHPantom an older version. */
   version: number
+  /** What PHPantom last published for it: a document joining with the same text gets nothing newer. */
+  diagnostics: unknown[] | null
 }
 
 type Doc = {
@@ -402,7 +404,7 @@ export class Router {
       // Another document already holds this file: PHPantom gets this one's text, not a second didOpen.
       this.sendFull(server, file, text)
     } else {
-      file = { uri, holders: new Set(), text, version: 1 }
+      file = { uri, holders: new Set(), text, version: 1, diagnostics: null }
       entry.files.set(key, file)
       server.notify('textDocument/didOpen', { textDocument: { uri, languageId: input.language, version: 1, text } })
     }
@@ -420,10 +422,13 @@ export class Router {
       version: 1,
       mirror: new DocumentMirror(text),
       needsResync: false,
-      diagnostics: 0
+      diagnostics: file.diagnostics?.length ?? 0
     })
     entry.docs.add(input.docId)
     this.cancelIdle(entry)
+    if (file.diagnostics) {
+      this.outbox.send(panel, `diag:${input.docId}`, 'phpantom.diagnostics', { docId: input.docId, diagnostics: file.diagnostics, truncated: 0 })
+    }
     const reveal = this.reveals.take(path)
     return {
       state: 'ready',
@@ -585,6 +590,10 @@ export class Router {
       }
     return {
       diagnostics: guard('diagnostics', (uri: string, diagnostics: unknown[]) => {
+        const file = entry.files.get(uriKey(uri))
+        if (file) {
+          file.diagnostics = diagnostics
+        }
         for (const docId of entry.docs) {
           const doc = this.docs.get(docId)
           if (doc && doc.server === entry.server && sameUri(doc.uri, uri)) {

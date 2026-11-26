@@ -343,6 +343,18 @@ test('posts diagnostics only for attached documents', async () => {
   assert.equal(posts.filter((p) => p.event === 'phpantom.diagnostics').length, 1)
 })
 
+test('a document joining an open file gets the diagnostics PHPantom already published', async () => {
+  // Why: the same text sends PHPantom nothing, so it publishes nothing new for the second tab.
+  const { worker, posts } = await setup({ files: { 'a/A.php': '<?php BAD\n' } })
+  await openWhole(worker, { docId: 'd1', language: 'php', workspaceId: 'ws-a', text: '<?php BAD\n' })
+  await until(() => diagnosticsFor(posts, 'd1').length === 1)
+  await openWhole(worker, { docId: 'd2', language: 'php', workspaceId: 'ws-a', text: '<?php BAD\n', panel: 'panel-2' })
+  await until(() => diagnosticsFor(posts, 'd2').length === 1)
+  const post = diagnosticsFor(posts, 'd2')[0]
+  assert.equal(post.panel, 'panel-2')
+  assert.deepEqual(post.payload.diagnostics, diagnosticsFor(posts, 'd1')[0].payload.diagnostics)
+})
+
 test('answers detached after a server crash', async () => {
   const { worker, posts } = await setup({ files: { 'a/A.php': '<?php // ok\n' } })
   const status = await openWhole(worker, { docId: 'd1', language: 'php', workspaceId: 'ws-a', text: '<?php // ok\n' })
