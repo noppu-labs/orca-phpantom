@@ -173,7 +173,8 @@ export class LspBridge {
   private reattachTimer: ReturnType<typeof setTimeout> | undefined
   private lastReattachAt = Number.NEGATIVE_INFINITY
   private pingTimer: ReturnType<typeof setInterval> | undefined
-  private pinging = false
+  /** The ping in flight, if any: one at a time, and one from before a re-attach does not hold up the next. */
+  private pinging: object | null = null
 
   constructor(host: BridgeHost, source: DocumentSource, options: BridgeOptions = {}) {
     this.host = host
@@ -503,23 +504,26 @@ export class LspBridge {
   private stopPinging(): void {
     clearInterval(this.pingTimer)
     this.pingTimer = undefined
+    this.pinging = null
   }
 
   /** Not in the lane: it must not wait behind a long open. A released document goes the way of a lost one. */
   private async ping(): Promise<void> {
     const attachment = this.attachedTo
     if (!attachment || this.pinging || this.disposed) return
-    this.pinging = true
+    const token = {}
+    this.pinging = token
     const generation = this.generation
     let released: boolean
     try {
-      const answer = await this.host.request('phpantom.ping', { docId: this.docId, session: attachment.session })
+      // Why the timeout: a ping that hangs would otherwise swallow every tick after it.
+      const answer = await this.host.request('phpantom.ping', { docId: this.docId, session: attachment.session }, { timeoutMs: this.pingMs })
       released = 'detached' in answer
     } catch (error) {
       // Only a missing worker means the document is gone; a timeout says nothing about it.
       released = codeOf(error) === 'unavailable'
     } finally {
-      this.pinging = false
+      if (this.pinging === token) this.pinging = null
     }
     if (released && generation === this.generation && this.attachedTo === attachment && !this.disposed) this.lost()
   }
