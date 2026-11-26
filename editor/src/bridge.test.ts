@@ -5,7 +5,7 @@ import { LspBridge, type BridgeHost, type DocumentSource, type SourceChange, typ
 import { encodedSize } from './split.ts'
 
 // Short timings so the tests run in milliseconds; the defaults are the brief's (seconds).
-const FAST = { syncDelayMs: 5, retryGapMs: 30, quietMs: 10, reattachGapMs: 0, mountWindowMs: 80, settleMs: 60 }
+const FAST = { syncDelayMs: 5, retryGapMs: 30, quietMs: 10, saveDelayMs: 25, reattachGapMs: 0, mountWindowMs: 80, settleMs: 60 }
 
 const wait = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms))
 async function until(condition: () => boolean, what: string, ms = 3000): Promise<void> {
@@ -49,6 +49,8 @@ type FakeHost = BridgeHost & {
   workspaceChanged(context: WorkspaceContext | null): void
   firstInput(): void
   visible(): void
+  saved(): void
+  settingsChanged(): void
 }
 
 function fakeHost(handlers: Partial<FakeHost['handlers']> = {}, context: WorkspaceContext | null = ctx('ws-a')): FakeHost {
@@ -138,10 +140,14 @@ function fakeHost(handlers: Partial<FakeHost['handlers']> = {}, context: Workspa
     onWorkspaceChanged: (listener) => subscribe('workspace.changed', listener),
     onFirstInput: (listener) => subscribe('first-input', listener),
     onVisible: (listener) => subscribe('visible', listener),
+    onSaved: (listener) => subscribe('saved', listener),
+    onSettingsChanged: (listener) => subscribe('settings', listener),
     post: (event, payload) => emit(event, payload),
     workspaceChanged: (next) => emit('workspace.changed', next),
     firstInput: () => emit('first-input'),
-    visible: () => emit('visible')
+    visible: () => emit('visible'),
+    saved: () => emit('saved'),
+    settingsChanged: () => emit('settings')
   }
   return host
 }
@@ -549,6 +555,105 @@ test('gives up retrying after maxRetries', async () => {
     await wait(15)
   }
   assert.equal(fullOpens(host).length, 3)
+  bridge.dispose()
+})
+
+test('a save retries a single-file attach, even with the typing budget spent', async () => {
+  let saved = false
+  const host = fakeHost({ open: (input, self) => (!input.last ? { state: 'pending' } : saved ? self.ready() : { state: 'single-file', reason: 'no-file' }) })
+  const doc = source('<?php\n')
+  const bridge = new LspBridge(host, doc, { ...FAST, retryGapMs: 1, maxRetries: 1 })
+  await bridge.attach()
+  doc.edit(6, 6, 'a')
+  await until(() => fullOpens(host).length === 2, 'the one typing retry')
+  await wait(20)
+  doc.edit(7, 7, 'b')
+  await wait(FAST.quietMs + 30)
+  assert.equal(fullOpens(host).length, 2, 'typing has no attempts left')
+  // A save with no typing after it: the file is on disk now, so try once the save has landed.
+  saved = true
+  const savedAt = Date.now()
+  host.saved()
+  await until(() => bridge.status?.state === 'ready', 'the attach after the save')
+  assert.ok(Date.now() - savedAt >= FAST.saveDelayMs, 'waited for the save to land')
+  assert.equal(fullOpens(host).length, 3)
+  bridge.dispose()
+})
+
+test('an error answer retries when the settings change', async () => {
+  let fixed = false
+  const host = fakeHost({ open: (input, self) => (!input.last ? { state: 'pending' } : fixed ? self.ready() : { state: 'error', message: 'PHPantom is not installed' }) })
+  const bridge = new LspBridge(host, source('<?php\n'), FAST)
+  const statuses: string[] = []
+  bridge.onStatus((status) => statuses.push(status.state))
+  assert.equal((await bridge.attach()).state, 'error')
+  await wait(FAST.retryGapMs + 20)
+  assert.equal(fullOpens(host).length, 1, 'an error waits for a reason to try again')
+  fixed = true
+  host.settingsChanged()
+  await until(() => bridge.status?.state === 'ready', 'the attach after the settings change')
+  // The error stayed the last word until the retry worked.
+  assert.deepEqual(statuses, ['error', 'ready'])
+  bridge.dispose()
+})
+
+test('an error answer retries when the tab shows', async () => {
+  let answers = 0
+  const host = fakeHost({ open: (input, self) => (!input.last ? { state: 'pending' } : ++answers === 1 ? { state: 'error', message: 'boom' } : self.ready()) })
+  const bridge = new LspBridge(host, source('<?php\n'), FAST)
+  await bridge.attach()
+  host.visible()
+  await until(() => bridge.status?.state === 'ready', 'the attach after the tab showed')
+  bridge.dispose()
+})
+
+test('a remote file is not retried', async () => {
+  const host = fakeHost({ open: (input) => (input.last ? { state: 'remote', host: 'box' } : { state: 'pending' }) })
+  const bridge = new LspBridge(host, source('<?php\n'), FAST)
+  await bridge.attach()
+  host.saved()
+  host.visible()
+  await wait(FAST.retryGapMs + FAST.saveDelayMs + 30)
+  assert.equal(fullOpens(host).length, 1)
+  bridge.dispose()
+})
+
+test('a chunk sequence cut by a worker restart starts over', async () => {
+  let cut = false
+  const host = fakeHost({
+    open: (input, self) => {
+      if (input.index === 1 && !cut) {
+        // The worker restarted: it no longer has chunk 0.
+        cut = true
+        return { state: 'error', message: `chunk 1 of ${input.docId} arrived out of order` }
+      }
+      return input.last ? self.ready() : { state: 'pending' }
+    }
+  })
+  const text = 'z'.repeat(200_000)
+  const bridge = new LspBridge(host, source(text), FAST)
+  await bridge.attach()
+  await until(() => bridge.status?.state === 'ready', 'a fresh sequence to attach')
+  assert.equal(fullOpens(host).length, 2)
+  assert.equal(host.mirror?.text, text)
+  bridge.dispose()
+})
+
+test('a chunk the worker could not take starts the sequence over', async () => {
+  let refused = false
+  const host = fakeHost()
+  const base = host.handlers.open
+  host.handlers.open = (input, self) => {
+    if (input.index === 1 && !refused) {
+      refused = true
+      throw Object.assign(new Error('no worker'), { code: 'unavailable' })
+    }
+    return base(input, self)
+  }
+  const bridge = new LspBridge(host, source('w'.repeat(200_000)), FAST)
+  await bridge.attach()
+  await until(() => bridge.status?.state === 'ready', 'a fresh sequence to attach')
+  assert.equal(fullOpens(host).length, 2)
   bridge.dispose()
 })
 

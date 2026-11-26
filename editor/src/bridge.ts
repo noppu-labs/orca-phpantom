@@ -24,8 +24,12 @@ export type BridgeHost = {
   onWorkspaceChanged(listener: (context: WorkspaceContext | null) => void): Disposable
   /** The first pointer or key press inside this frame; only the frame on screen can get one. */
   onFirstInput(listener: () => void): Disposable
-  /** The tab was shown. Only a moment to retry a single-file attach, never a reason to re-attach. */
+  /** The tab was shown. Only a moment to retry a failed attach, never a reason to re-attach. */
   onVisible(listener: () => void): Disposable
+  /** Orca is about to save the file. The listener must not delay the save. */
+  onSaved(listener: () => void): Disposable
+  /** The plugin's settings changed (say, the PHPantom path), which can fix a failed attach. */
+  onSettingsChanged(listener: () => void): Disposable
 }
 
 /** A content change with the length of the text it replaced, as Monaco reports it. */
@@ -50,6 +54,8 @@ export type BridgeOptions = {
   maxRetries?: number
   /** Time without typing before such a retry. */
   quietMs?: number
+  /** Wait after a save or a settings change before a retry, so the save lands first. */
+  saveDelayMs?: number
   /** Least time between two re-attaches after the worker lost the document. */
   reattachGapMs?: number
   /** After mounting, a `workspace.changed` this soon names the frame's real workspace (R2). */
@@ -113,6 +119,7 @@ export class LspBridge {
   private readonly retryGapMs: number
   private readonly maxRetries: number
   private readonly quietMs: number
+  private readonly saveDelayMs: number
   private readonly reattachGapMs: number
   private readonly mountWindowMs: number
   private readonly settleMs: number
@@ -151,8 +158,14 @@ export class LspBridge {
   private mountMoved = false
   private confirmed = false
 
+  /** Attempts spent since the last success, save or settings change. */
   private retries = 0
-  private retryWaiting: Disposable | null = null
+  /** The last attempt failed in a way a later one can fix: single-file, error, or no answer. */
+  private retryable = false
+  private retryEarliest = 0
+  private retryTimer: ReturnType<typeof setTimeout> | undefined
+  /** Chunk sequences cut short (the worker restarted between chunks) since the last success. */
+  private broken = 0
   private reattaching: Promise<boolean> | null = null
   private reattachTimer: ReturnType<typeof setTimeout> | undefined
   private lastReattachAt = Number.NEGATIVE_INFINITY
@@ -165,6 +178,7 @@ export class LspBridge {
     this.retryGapMs = options.retryGapMs ?? 8000
     this.maxRetries = options.maxRetries ?? 20
     this.quietMs = options.quietMs ?? 2000
+    this.saveDelayMs = options.saveDelayMs ?? 1000
     this.reattachGapMs = options.reattachGapMs ?? 5000
     this.mountWindowMs = options.mountWindowMs ?? 1500
     this.settleMs = options.settleMs ?? 1500
@@ -188,7 +202,11 @@ export class LspBridge {
       host.onWorkspaceChanged((context) => this.workspaceChanged(context)),
       host.onVisible(() => {
         this.lastSwitchAt = Date.now()
+        this.retrySoon(this.quietMs, false)
       }),
+      // A save is what makes a new file findable; a settings change can fix a missing binary.
+      host.onSaved(() => this.retrySoon(this.saveDelayMs, true)),
+      host.onSettingsChanged(() => this.retrySoon(this.saveDelayMs, true)),
       source.onChanges((changes, isFlush) => this.changed(changes, isFlush))
     )
     const firstInput = host.onFirstInput(() => {
@@ -273,7 +291,7 @@ export class LspBridge {
     this.generation += 1
     clearTimeout(this.syncTimer)
     clearTimeout(this.reattachTimer)
-    this.retryWaiting?.dispose()
+    clearTimeout(this.retryTimer)
     for (const subscription of this.subscriptions) subscription.dispose()
     this.host.request('phpantom.close', { docId: this.docId }).catch(() => undefined)
   }
@@ -283,7 +301,11 @@ export class LspBridge {
   /** Queues a fresh open (or a resync) behind whatever runs; an open still sending chunks stops at the next one. */
   private start(resync: boolean): Promise<AttachStatus | null> {
     const generation = ++this.generation
-    if (!resync) this.targetWorkspace = this.context?.workspaceId ?? null
+    if (!resync) {
+      this.targetWorkspace = this.context?.workspaceId ?? null
+      this.retryable = false
+      clearTimeout(this.retryTimer)
+    }
     const run = this.inLane(() => this.open(generation, resync))
     if (!resync) this.latest = run
     return run
@@ -310,6 +332,7 @@ export class LspBridge {
     if (!resync) this.attachedTo = null
     const chunks = chunkText(text)
     let answer: AttachStatus = { state: 'pending' }
+    let cut = false
     try {
       for (let index = 0; index < chunks.length; index++) {
         const last = index === chunks.length - 1
@@ -326,15 +349,24 @@ export class LspBridge {
         }
         answer = await this.host.request('phpantom.open', input, last ? { timeoutMs: LAST_CHUNK_TIMEOUT_MS } : undefined)
         if (generation !== this.generation) return null
-        if (!last && answer.state !== 'pending') break
+        if (!last && answer.state !== 'pending') {
+          // The worker lost the earlier chunks (it restarted between them): this text never arrived whole.
+          cut = true
+          break
+        }
       }
     } catch (error) {
       if (generation !== this.generation) return null
+      answer = { state: 'error', message: `PHPantom did not answer: ${messageOf(error)}` }
+      cut = codeOf(error) === 'unavailable'
+    }
+    if (cut && this.broken === 0) {
+      // Once, at once: a worker that restarted mid-sequence takes a fresh sequence.
+      this.broken += 1
+      this.generation += 1
       this.detach()
-      const failed: AttachStatus = { state: 'error', message: `PHPantom did not answer: ${messageOf(error)}` }
-      this.settle(failed)
-      this.retryLater()
-      return failed
+      void this.reattachNow()
+      return null
     }
     if (answer.state === 'ready') {
       const fresh = !this.attachedTo || this.attachedTo.session !== answer.session || this.attachedTo.uri !== answer.uri
@@ -342,8 +374,9 @@ export class LspBridge {
       this.version = 1
       this.sentLength = text.length
       this.retries = 0
-      this.retryWaiting?.dispose()
-      this.retryWaiting = null
+      this.broken = 0
+      this.retryable = false
+      clearTimeout(this.retryTimer)
       if (fresh) {
         this.settle(answer)
         this.emit('ready', answer)
@@ -355,7 +388,11 @@ export class LspBridge {
     this.detach()
     const final: AttachStatus = answer.state === 'pending' ? { state: 'error', message: 'PHPantom: the open never finished' } : answer
     this.settle(final)
-    if (final.state === 'single-file') this.retryLater()
+    // Only a remote file stays as it is; the rest may attach once saved, after a fix, or once the worker is back.
+    if (final.state !== 'remote') {
+      this.retryable = true
+      this.retryEarliest = Date.now() + this.retryGapMs
+    }
     return final
   }
 
@@ -397,32 +434,21 @@ export class LspBridge {
     return this.reattaching
   }
 
-  /** Not sooner than the gap, and only once typing stopped or the tab showed (as Autocomplete does). */
-  private retryLater(): void {
-    if (this.disposed || this.retryWaiting || this.retries >= this.maxRetries) return
-    this.retries += 1
-    const earliest = Date.now() + this.retryGapMs
-    let timer: ReturnType<typeof setTimeout> | undefined
-    const arm = (): void => {
-      clearTimeout(timer)
-      timer = setTimeout(fire, Math.max(this.quietMs, earliest - Date.now()))
-    }
-    const fire = (): void => {
-      waiting.dispose()
-      if (this.disposed || this.attachedTo) return
+  /**
+   * After a failed attempt: try again `delay` after a reason to (typing stopped, the tab showed, a save,
+   * a settings change), not sooner than the gap. Typing and showing spend the budget; a save or a settings
+   * change (`fresh`) refills it, since either can be what makes the next attempt work.
+   */
+  private retrySoon(delay: number, fresh: boolean): void {
+    if (this.disposed || !this.retryable) return
+    if (fresh) this.retries = 0
+    if (this.retries >= this.maxRetries) return
+    clearTimeout(this.retryTimer)
+    this.retryTimer = setTimeout(() => {
+      if (this.disposed || !this.retryable || this.attachedTo) return
+      this.retries += 1
       void this.start(false)
-    }
-    const typed = this.source.onChanges(arm)
-    const shown = this.host.onVisible(arm)
-    const waiting: Disposable = {
-      dispose: () => {
-        clearTimeout(timer)
-        typed.dispose()
-        shown.dispose()
-        if (this.retryWaiting === waiting) this.retryWaiting = null
-      }
-    }
-    this.retryWaiting = waiting
+    }, Math.max(delay, this.retryEarliest - Date.now()))
   }
 
   // --- the workspace (R2) ---
@@ -463,7 +489,6 @@ export class LspBridge {
   /** Opens again under `context` now: not a recovery, so neither the gap nor the retry count apply. */
   private retarget(context: WorkspaceContext | null): void {
     this.context = context
-    this.retryWaiting?.dispose()
     this.detach()
     void this.start(false)
   }
@@ -471,7 +496,10 @@ export class LspBridge {
   // --- changes ---
 
   private changed(changes: SourceChange[], isFlush: boolean): void {
-    if (!this.accepting) return
+    if (!this.accepting) {
+      this.retrySoon(this.quietMs, false)
+      return
+    }
     if (isFlush) {
       this.needsResync = true
       this.queue = []
