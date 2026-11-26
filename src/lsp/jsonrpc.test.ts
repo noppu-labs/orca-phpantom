@@ -100,3 +100,21 @@ test('an answered request ignores a later abort', async () => {
   controller.abort()
   assert.equal(sent.length, 1)
 })
+
+test('a notification handler that throws is reported, and the next message in the chunk still arrives', () => {
+  const errors: string[] = []
+  const seen: string[] = []
+  const connection = new RpcConnection(() => undefined, {
+    onRequest: () => null,
+    onNotification: (method, params) => {
+      if (params === null) throw new TypeError(`cannot read ${method}`)
+      seen.push(method)
+    },
+    onError: (message) => void errors.push(message)
+  })
+  const chunk = Buffer.concat([frame({ jsonrpc: '2.0', method: 'bad', params: null }), frame({ jsonrpc: '2.0', method: 'good', params: {} })])
+  connection.feed(chunk)
+  assert.deepEqual(seen, ['good'])
+  assert.equal(errors.length, 1)
+  assert.match(errors[0], /bad.*cannot read bad/)
+})

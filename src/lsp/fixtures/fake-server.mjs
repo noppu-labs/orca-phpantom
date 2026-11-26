@@ -2,6 +2,7 @@
 // FAKE_CONFIG_ITEMS=n: after `initialized`, asks for n configuration items and logs the answer as a warning.
 // Hover answers `len=<text length>`; `fake/text` answers the whole text it holds; completion answers 5000 items of about 400 bytes each;
 // references answer 6000 small locations (over Orca's object limit); formatting answers one 1.2 MB edit; semanticTokens/full answers 40,000 tokens (200,000 numbers).
+// FAKE_NULL_PARAMS=1: after `initialized`, sends publishDiagnostics, $/progress and window/logMessage with `params: null`.
 // FAKE_MODE=silent: never answers initialize. FAKE_MODE=stubborn: answers, then ignores shutdown, exit, stdin end.
 // Both ignore SIGTERM, so only SIGKILL removes them.
 const mode = process.env.FAKE_MODE ?? ''
@@ -63,6 +64,11 @@ function handle(message) {
     send({ jsonrpc: '2.0', method: '$/progress', params: { token: 'index', value: { kind: 'report', percentage: 50 } } })
     send({ jsonrpc: '2.0', method: '$/progress', params: { token: 'index', value: { kind: 'end' } } })
     send({ jsonrpc: '2.0', id: 9002, method: 'workspace/inlayHint/refresh', params: null })
+    if (process.env.FAKE_NULL_PARAMS) {
+      for (const method of ['textDocument/publishDiagnostics', '$/progress', 'window/logMessage']) {
+        send({ jsonrpc: '2.0', method, params: null })
+      }
+    }
     const items = Number(process.env.FAKE_CONFIG_ITEMS ?? 0)
     if (items > 0) {
       send({ jsonrpc: '2.0', id: 9003, method: 'workspace/configuration', params: { items: Array.from({ length: items }, () => ({ section: 'x' })) } })

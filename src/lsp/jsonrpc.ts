@@ -6,6 +6,8 @@ export type RpcHandlers = {
   /** A request the server makes of us (configuration, registering capabilities ...); its result is the answer. */
   onRequest(method: string, params: unknown): Promise<unknown> | unknown
   onNotification(method: string, params: unknown): void
+  /** A handler threw on a message; the connection carries on with the next one. */
+  onError?(message: string): void
 }
 
 type Pending = { resolve(value: unknown): void; reject(error: Error): void }
@@ -125,7 +127,12 @@ export class RpcConnection {
     if (message.method !== undefined && message.id !== undefined) {
       void this.answer(message.id, message.method, message.params)
     } else if (message.method !== undefined) {
-      this.handlers.onNotification(message.method, message.params)
+      // Why: this runs in the server's stdout handler, where a throw (a malformed notification) would end the worker.
+      try {
+        this.handlers.onNotification(message.method, message.params)
+      } catch (error) {
+        this.handlers.onError?.(`${message.method} notification failed: ${error instanceof Error ? error.message : String(error)}`)
+      }
     } else if (typeof message.id === 'number') {
       const waiting = this.pending.get(message.id)
       this.pending.delete(message.id)

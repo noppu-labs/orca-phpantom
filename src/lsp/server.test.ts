@@ -97,6 +97,17 @@ test('answers configuration with one null per item', async () => {
   await server.stop()
 })
 
+test('a notification with null params is logged, and the connection keeps working', async () => {
+  const { server, events } = fakeServer({ FAKE_NULL_PARAMS: '1' })
+  await server.start()
+  server.notify('textDocument/didOpen', open('<?php abc'))
+  const hover = (await server.request('textDocument/hover', {})) as { contents: { value: string } }
+  assert.equal(hover.contents.value, 'len=9')
+  assert.ok(events.logs.some((line) => line.includes('textDocument/publishDiagnostics')), events.logs.join('\n'))
+  assert.equal(server.alive, true)
+  await server.stop()
+})
+
 test('reports an exit with the stderr tail', async () => {
   const { server, events } = fakeServer()
   await server.start()

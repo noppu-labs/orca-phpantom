@@ -80,7 +80,8 @@ export class PhpantomServer {
     }
     const rpc = new RpcConnection((frame) => void stdin.write(frame), {
       onRequest: (method, params) => this.onRequest(method, params),
-      onNotification: (method, params) => this.onNotification(method, params)
+      onNotification: (method, params) => this.onNotification(method, params),
+      onError: (message) => events.log(`PHPantom sent something unexpected: ${message}`)
     })
     this.rpc = rpc
     stdout.on('data', (chunk: Buffer) => rpc.feed(chunk))
