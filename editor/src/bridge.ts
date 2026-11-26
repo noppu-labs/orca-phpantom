@@ -231,7 +231,8 @@ export class LspBridge {
   }
 
   /** Sends `method` once queued changes are in; null when aborted, failed, or (for edits) outdated. */
-  async ask(method: string, params: Record<string, unknown>, signal?: AbortSignal): Promise<unknown | null> {
+  async ask(method: string, params: Record<string, unknown>, signal?: AbortSignal, options: { timeoutMs?: number } = {}): Promise<unknown | null> {
+    const requestOptions = signal || options.timeoutMs ? { ...(signal ? { signal } : {}), ...(options.timeoutMs ? { timeoutMs: options.timeoutMs } : {}) } : undefined
     for (let attempt = 0; attempt < 2; attempt++) {
       if (signal?.aborted || !this.attachedTo) return null
       await this.flush()
@@ -241,7 +242,7 @@ export class LspBridge {
       const version = this.source.getVersion()
       let answer: PluginRequestOutput<'phpantom.request'>
       try {
-        answer = await this.host.request('phpantom.request', { docId: this.docId, session, method, params }, signal ? { signal } : undefined)
+        answer = await this.host.request('phpantom.request', { docId: this.docId, session, method, params }, requestOptions)
       } catch (error) {
         if (signal?.aborted || codeOf(error) !== 'unavailable') return null
         answer = { detached: true }
@@ -262,6 +263,20 @@ export class LspBridge {
       return answer.result
     }
     return null
+  }
+
+  /** Opens `uri` in an Orca tab, revealing `range` there; null when not attached or the worker failed. */
+  async navigate(uri: string, range: LspRange): Promise<PluginRequestOutput<'phpantom.navigate'> | null> {
+    const session = this.attachedTo?.session
+    if (!session) return null
+    return this.host.request('phpantom.navigate', { docId: this.docId, session, uri, range }).catch(() => null)
+  }
+
+  /** The text of files on disk, for Monaco's previews; null when not attached, aborted or failed. */
+  async peek(uris: string[], signal?: AbortSignal): Promise<PluginRequestOutput<'phpantom.peek'> | null> {
+    const session = this.attachedTo?.session
+    if (!session || signal?.aborted) return null
+    return this.host.request('phpantom.peek', { docId: this.docId, session, uris }, signal ? { signal } : undefined).catch(() => null)
   }
 
   onReady(listener: (status: Ready) => void): Disposable {

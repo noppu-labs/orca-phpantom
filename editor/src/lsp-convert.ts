@@ -121,24 +121,75 @@ export function normalizeLocations(result: unknown): { uri: string; range: Monac
   )
 }
 
+type LspFileOperation = { kind: 'create' | 'rename' | 'delete'; uri?: string; oldUri?: string; newUri?: string }
+
 export type LspWorkspaceEdit = {
   changes?: Record<string, LspTextEdit[]>
-  documentChanges?: { textDocument: { uri: string }; edits: LspTextEdit[] }[]
+  documentChanges?: ({ textDocument: { uri: string }; edits: LspTextEdit[] } | LspFileOperation)[]
 }
 
 /** Splits a workspace edit into edits for the open document and the number of other files it touches. */
 export function splitWorkspaceEdit(edit: LspWorkspaceEdit | null | undefined, documentUri: string) {
   const byUri = new Map<string, LspTextEdit[]>()
+  let fileOperations = 0
   for (const [uri, edits] of Object.entries(edit?.changes ?? {})) {
     byUri.set(uri, [...(byUri.get(uri) ?? []), ...edits])
   }
   for (const change of edit?.documentChanges ?? []) {
+    // A file created, renamed or deleted is another file, whatever its name.
+    if (!('textDocument' in change)) {
+      fileOperations += 1
+      continue
+    }
     byUri.set(change.textDocument.uri, [...(byUri.get(change.textDocument.uri) ?? []), ...change.edits])
   }
   const ownKey = [...byUri.keys()].find((uri) => sameUri(uri, documentUri))
   const own = (ownKey && byUri.get(ownKey)) || []
-  const otherFiles = [...byUri.keys()].filter((uri) => !sameUri(uri, documentUri)).length
+  const otherFiles = [...byUri.keys()].filter((uri) => !sameUri(uri, documentUri)).length + fileOperations
   return { own: own.map(toMonacoEdit), otherFiles }
+}
+
+export type MonacoWorkspaceEdit = { edits: { resource: string; textEdit: { range: MonacoRange; text: string }; versionId: undefined }[] }
+
+export type LspCodeAction = {
+  title: string
+  kind?: string
+  isPreferred?: boolean
+  edit?: LspWorkspaceEdit
+  data?: unknown
+  command?: unknown
+  disabled?: { reason: string }
+}
+
+/**
+ * A code action as Monaco takes it, with its edits to the open document pointed at the editor's model.
+ * PHPantom sends its actions with `data` and no `edit`; the edit comes from `codeAction/resolve`. A bare
+ * command (no edit, no data) is null: the server's commands mean nothing to Monaco.
+ */
+export function toCodeAction(action: LspCodeAction, documentUri: string, modelUri: string) {
+  if (!action.edit && action.data === undefined) {
+    return null
+  }
+  const split = action.edit ? splitWorkspaceEdit(action.edit, documentUri) : null
+  const edit: MonacoWorkspaceEdit | undefined = split
+    ? { edits: split.own.map((textEdit) => ({ resource: modelUri, textEdit, versionId: undefined })) }
+    : undefined
+  return {
+    title: action.title,
+    ...(action.kind ? { kind: action.kind } : {}),
+    ...(action.isPreferred ? { isPreferred: true } : {}),
+    ...(action.disabled?.reason ? { disabled: action.disabled.reason } : {}),
+    ...(edit ? { edit } : {}),
+    needsResolve: !action.edit,
+    otherFiles: split?.otherFiles ?? 0
+  }
+}
+
+const before = (a: LspPosition, b: LspPosition): boolean => a.line < b.line || (a.line === b.line && a.character < b.character)
+
+/** The diagnostics that overlap or touch `range`, untouched: a code action request sends them back as sent. */
+export function diagnosticsTouching<T extends { range: LspRange }>(diagnostics: T[], range: LspRange): T[] {
+  return diagnostics.filter((diagnostic) => !before(diagnostic.range.end, range.start) && !before(range.end, diagnostic.range.start))
 }
 
 export type LspSymbol = {

@@ -1,15 +1,20 @@
 // Adapted from actus7/orca-autocomplete editor/src/lsp.ts @ da5a680 (MIT). See THIRD_PARTY_NOTICES.md.
 // Monaco's language features answered by PHPantom through the bridge: diagnostics, completion, hover,
-// signature help, semantic colouring, inlay hints and the outline. Only what the server says it supports
-// is registered, for the model's own language, and only this editor's model is answered.
+// signature help, semantic colouring, inlay hints and the outline; then going to definitions and
+// references, formatting, rename and code actions. Only what the server says it supports is registered,
+// for the model's own language, and only this editor's model is answered.
 import type { LspBridge } from './bridge.ts'
 import type { EditorContext } from './editor.ts'
 import {
   completionDetails,
   completionKindName,
+  diagnosticsTouching,
   fromLspRange,
   inlayHintsWanted,
   markdownValue,
+  normalizeLocations,
+  splitWorkspaceEdit,
+  toCodeAction,
   toCompletionLabel,
   toDocumentSymbols,
   toInlayHint,
@@ -19,11 +24,16 @@ import {
   toMarker,
   toMonacoEdit,
   toSemanticTokens,
+  type LspCodeAction,
   type LspDiagnostic,
   type LspInlayHint,
-  type LspTextEdit
+  type LspTextEdit,
+  type LspWorkspaceEdit,
+  type MonacoRange
 } from './lsp-convert.ts'
 import type { monaco } from './monaco.ts'
+import { mapLocations, NAVIGATION_NOTE, PeekModels } from './navigation.ts'
+import { showNote } from './notes.ts'
 
 type Disposable = { dispose(): void }
 type Capabilities = Record<string, any> // the server's own JSON
@@ -272,6 +282,255 @@ export function registerReadingProviders(ctx: EditorContext, bridge: LspBridge, 
           return Array.isArray(result) ? (toDocumentSymbols(result) as monaco.languages.DocumentSymbol[]) : null
         }
       })
+    )
+  }
+
+  return disposeAll(registered)
+}
+
+// Why 30 s: PHPantom may run Pint to format, which can take a while on a cold start.
+const FORMAT_TIMEOUT_MS = 30_000
+const EDIT_NOTE = 'phpantom-edit'
+const OTHER_FILES_FIX = "This fix also changes other files, which isn't supported yet."
+const renameReachesOtherFiles = (count: number): string =>
+  `Renaming here would also change ${count} other files. Cross-file rename isn't supported yet.`
+
+/** Blade or PHP by the file name, as PHPantom tells them apart. */
+const languageOfUri = (uri: string): string => (/\.blade\.php$/i.test(uri) ? 'blade' : 'php')
+
+export function registerEditingProviders(ctx: EditorContext, bridge: LspBridge, capabilities: Record<string, unknown>): Disposable {
+  const { monaco, model } = ctx
+  const caps = capabilities as Capabilities
+  const language = model.getLanguageId()
+  const registered: Disposable[] = []
+  const ours = (candidate: Model): boolean => candidate === model
+  const modelUri = model.uri.toString()
+  // Read on each answer: a re-target to another worktree changes it, and providers are registered again then.
+  const documentUri = (): string => (bridge.status?.state === 'ready' ? bridge.status.uri : '')
+  const ask = (method: string, params: Record<string, unknown>, token: monaco.CancellationToken, options?: { timeoutMs?: number }): Promise<any> =>
+    withSignal(token, (signal) => bridge.ask(method, params, signal, options))
+  const atCursor = (position: monaco.Position) => ({ position: toLspPosition(position) })
+  const edits = (list: LspTextEdit[] | null | undefined): monaco.languages.TextEdit[] | null => (Array.isArray(list) ? list.map(toMonacoEdit) : null)
+
+  // --- definitions and references ---
+  const peekModels = new PeekModels((uri, text) => {
+    const resource = monaco.Uri.parse(uri)
+    // Why check: Monaco throws on a second model for one URI; one made elsewhere is not ours to dispose.
+    if (monaco.editor.getModel(resource)) return { dispose() {} }
+    return monaco.editor.createModel(text, languageOfUri(uri), resource)
+  })
+  registered.push(
+    peekModels,
+    // Peek models stand for files on disk that nothing here saves: an editor showing one (the peek's
+    // preview) is read-only, so nobody types into a copy that goes nowhere.
+    monaco.editor.onDidCreateEditor((created) => {
+      if (created === ctx.editor) return
+      const sync = (): void => {
+        const shown = created.getModel()
+        created.updateOptions({ readOnly: Boolean(shown && peekModels.has(shown.uri.toString())) })
+      }
+      created.onDidChangeModel(sync)
+      sync()
+    })
+  )
+
+  /** Gives the files `locations` point at a model; those it could not read are left out, with a note. */
+  const withPreviews = async (locations: { uri: string; range: MonacoRange }[], token: monaco.CancellationToken) => {
+    const files = [...new Set(locations.map((location) => location.uri))].filter((uri) => /^file:/i.test(uri))
+    peekModels.touch(files)
+    const wanted = files.filter((uri) => !monaco.editor.getModel(monaco.Uri.parse(uri)))
+    if (wanted.length === 0) return locations
+    const answer = await withSignal(token, (signal) => bridge.peek(wanted, signal))
+    // No answer at all: keep every result, so going to one still works without its preview.
+    if (!answer) return locations
+    peekModels.ensure(answer.files)
+    const read = new Set(answer.files.map((file) => file.uri))
+    const missing = new Set(wanted.filter((uri) => !read.has(uri)))
+    const kept = locations.filter((location) => !missing.has(location.uri))
+    const left = locations.length - kept.length
+    if (left > 0) showNote('info', `${left} more results are in files not shown here.`, NAVIGATION_NOTE)
+    return kept
+  }
+
+  const locate = async (method: string, m: Model, position: monaco.Position, token: monaco.CancellationToken, extra: Record<string, unknown> = {}) => {
+    if (!ours(m)) return null
+    const result = await ask(method, { ...atCursor(position), ...extra }, token)
+    const locations = await withPreviews(mapLocations(normalizeLocations(result), documentUri(), modelUri), token)
+    return locations.map((location): monaco.languages.Location => ({
+      uri: location.uri === modelUri ? model.uri : monaco.Uri.parse(location.uri),
+      range: location.range
+    }))
+  }
+
+  if (caps.definitionProvider) {
+    registered.push(
+      monaco.languages.registerDefinitionProvider(language, {
+        provideDefinition: (m, position, token) => locate('textDocument/definition', m, position, token)
+      })
+    )
+  }
+  if (caps.declarationProvider) {
+    registered.push(
+      monaco.languages.registerDeclarationProvider(language, {
+        provideDeclaration: (m, position, token) => locate('textDocument/declaration', m, position, token)
+      })
+    )
+  }
+  if (caps.typeDefinitionProvider) {
+    registered.push(
+      monaco.languages.registerTypeDefinitionProvider(language, {
+        provideTypeDefinition: (m, position, token) => locate('textDocument/typeDefinition', m, position, token)
+      })
+    )
+  }
+  if (caps.implementationProvider) {
+    registered.push(
+      monaco.languages.registerImplementationProvider(language, {
+        provideImplementation: (m, position, token) => locate('textDocument/implementation', m, position, token)
+      })
+    )
+  }
+  if (caps.referencesProvider) {
+    registered.push(
+      monaco.languages.registerReferenceProvider(language, {
+        provideReferences: (m, position, context, token) =>
+          locate('textDocument/references', m, position, token, { context: { includeDeclaration: context.includeDeclaration } })
+      })
+    )
+  }
+
+  // --- formatting ---
+  const formatting = (options: monaco.languages.FormattingOptions) => ({ options: { tabSize: options.tabSize, insertSpaces: options.insertSpaces } })
+  if (caps.documentFormattingProvider) {
+    registered.push(
+      monaco.languages.registerDocumentFormattingEditProvider(language, {
+        displayName: SERVER_NAME,
+        async provideDocumentFormattingEdits(m, options, token) {
+          if (!ours(m)) return null
+          return edits(await ask('textDocument/formatting', formatting(options), token, { timeoutMs: FORMAT_TIMEOUT_MS }))
+        }
+      })
+    )
+  }
+  if (caps.documentRangeFormattingProvider) {
+    registered.push(
+      monaco.languages.registerDocumentRangeFormattingEditProvider(language, {
+        displayName: SERVER_NAME,
+        async provideDocumentRangeFormattingEdits(m, range, options, token) {
+          if (!ours(m)) return null
+          return edits(
+            await ask('textDocument/rangeFormatting', { range: toLspRange(range), ...formatting(options) }, token, { timeoutMs: FORMAT_TIMEOUT_MS })
+          )
+        }
+      })
+    )
+  }
+
+  // --- rename, within this file only ---
+  if (caps.renameProvider) {
+    const prepares = typeof caps.renameProvider === 'object' && Boolean(caps.renameProvider.prepareProvider)
+    registered.push(
+      monaco.languages.registerRenameProvider(language, {
+        resolveRenameLocation: prepares
+          ? async (m, position, token) => {
+              if (!ours(m)) return null
+              const result = await ask('textDocument/prepareRename', atCursor(position), token)
+              if (token.isCancellationRequested) throw canceled()
+              // Why reject: with nothing returned Monaco would offer to rename the word under the cursor.
+              if (!result) return { range: new monaco.Range(position.lineNumber, position.column, position.lineNumber, position.column), text: '', rejectReason: "This can't be renamed." }
+              // The server either leaves the range to the client ...
+              if (result.defaultBehavior) return null
+              // ... or sends a range, alone or with the text to show.
+              const range = fromLspRange(result.range ?? result)
+              return { range, text: typeof result.placeholder === 'string' ? result.placeholder : m.getValueInRange(range) }
+            }
+          : undefined,
+        async provideRenameEdits(m, position, newName, token) {
+          if (!ours(m)) return null
+          const result = (await ask('textDocument/rename', { ...atCursor(position), newName }, token)) as LspWorkspaceEdit | null
+          if (!result) return null
+          const split = splitWorkspaceEdit(result, documentUri())
+          if (split.otherFiles > 0) {
+            const reason = renameReachesOtherFiles(split.otherFiles)
+            // Why a note too: standalone Monaco only logs a rename's reject reason to the console.
+            showNote('info', reason, EDIT_NOTE)
+            return { edits: [], rejectReason: reason }
+          }
+          return { edits: split.own.map((textEdit) => ({ resource: model.uri, textEdit, versionId: undefined })) }
+        }
+      })
+    )
+  }
+
+  // --- code actions ---
+  if (caps.codeActionProvider) {
+    // The server's own action for each one shown: resolving it needs exactly what the server sent.
+    const serverActions = new WeakMap<object, LspCodeAction>()
+    const kinds = typeof caps.codeActionProvider === 'object' ? caps.codeActionProvider.codeActionKinds : undefined
+    const resolves = typeof caps.codeActionProvider === 'object' && Boolean(caps.codeActionProvider.resolveProvider)
+    const toMonacoWorkspaceEdit = (edit: { edits: { resource: string; textEdit: monaco.languages.TextEdit }[] }): monaco.languages.WorkspaceEdit => ({
+      edits: edit.edits.map((item) => ({ resource: item.resource === modelUri ? model.uri : monaco.Uri.parse(item.resource), textEdit: item.textEdit, versionId: undefined }))
+    })
+    registered.push(
+      monaco.languages.registerCodeActionProvider(
+        language,
+        {
+          async provideCodeActions(m, range, context, token) {
+            if (!ours(m)) return { actions: [], dispose() {} }
+            const lspRange = toLspRange(range)
+            const result = await ask(
+              'textDocument/codeAction',
+              {
+                range: lspRange,
+                context: {
+                  // As PHPantom sent them: a fix finds its diagnostic by what Monaco's markers drop.
+                  diagnostics: diagnosticsTouching(diagnosticsOf(model), lspRange),
+                  ...(context.only ? { only: [context.only] } : {}),
+                  // Both number these the same way: 1 invoked, 2 automatic.
+                  triggerKind: context.trigger
+                }
+              },
+              token
+            )
+            const actions: monaco.languages.CodeAction[] = []
+            for (const raw of Array.isArray(result) ? (result as LspCodeAction[]) : []) {
+              const converted = toCodeAction(raw, documentUri(), modelUri)
+              if (!converted) continue
+              if (converted.needsResolve && !resolves) continue
+              const action: monaco.languages.CodeAction = {
+                title: converted.title,
+                ...(converted.kind ? { kind: converted.kind } : {}),
+                ...(converted.isPreferred ? { isPreferred: true } : {}),
+                ...(converted.disabled ? { disabled: converted.disabled } : {}),
+                // Why not when it reaches other files: Monaco resolves an action that has no edit, and
+                // resolving is where that case says why nothing happens.
+                ...(converted.edit && converted.otherFiles === 0 ? { edit: toMonacoWorkspaceEdit(converted.edit) } : {})
+              }
+              serverActions.set(action, raw)
+              actions.push(action)
+            }
+            return { actions, dispose() {} }
+          },
+          // Monaco calls this unbound, and only for an action that has no edit yet.
+          async resolveCodeAction(action, token) {
+            const raw = serverActions.get(action)
+            if (!raw) return action
+            const resolved = raw.edit ? raw : ((await ask('codeAction/resolve', raw as Record<string, unknown>, token)) as LspCodeAction | null)
+            if (!resolved) {
+              if (token.isCancellationRequested) throw canceled()
+              return action
+            }
+            const converted = toCodeAction(resolved, documentUri(), modelUri)
+            if (!converted?.edit) return action
+            if (converted.otherFiles > 0) {
+              showNote('info', OTHER_FILES_FIX, EDIT_NOTE)
+              return action
+            }
+            return { ...action, edit: toMonacoWorkspaceEdit(converted.edit) }
+          }
+        },
+        kinds ? { providedCodeActionKinds: kinds } : undefined
+      )
     )
   }
 

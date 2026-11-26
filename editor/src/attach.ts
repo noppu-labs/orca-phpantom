@@ -5,8 +5,9 @@ import { LspBridge, type DocumentSource } from './bridge.ts'
 import type { EditorContext } from './editor.ts'
 import { frameHost } from './frame-host.ts'
 import { fromLspRange, toLspContentChange } from './lsp-convert.ts'
+import { installOpener } from './navigation.ts'
 import { clearNote, showNote } from './notes.ts'
-import { registerReadingProviders, showDiagnostics } from './providers.ts'
+import { registerEditingProviders, registerReadingProviders, showDiagnostics } from './providers.ts'
 
 const NOTE = 'phpantom-attach'
 
@@ -53,18 +54,23 @@ export function attachLanguageServer(ctx: EditorContext): LspBridge {
   const bridge = new LspBridge(frameHost(), modelSource(ctx), { docId })
   showDiagnostics(ctx, bridge)
   // Registered anew on each attach: a new server can say it supports something else.
-  let providers: { dispose(): void } | null = null
+  const providers: { dispose(): void }[] = []
   const unregister = (): void => {
-    providers?.dispose()
-    providers = null
+    for (const registered of providers.splice(0)) registered.dispose()
   }
   bridge.onReady((status) => {
     unregister()
-    try {
-      providers = registerReadingProviders(ctx, bridge, status.capabilities)
-    } catch (error) {
-      console.error('PHPantom language features failed to register', error)
+    // Each on its own: a failure in one set leaves the others working.
+    const register = (what: string, run: () => { dispose(): void }): void => {
+      try {
+        providers.push(run())
+      } catch (error) {
+        console.error(`PHPantom ${what} failed to register`, error)
+      }
     }
+    register('language features', () => registerReadingProviders(ctx, bridge, status.capabilities))
+    register('navigation and edits', () => registerEditingProviders(ctx, bridge, status.capabilities))
+    register('editor opener', () => installOpener(ctx, bridge))
   })
   bridge.onReveal((range) => {
     const target = fromLspRange(range)

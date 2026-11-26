@@ -524,6 +524,36 @@ test('an aborted request answers null', async () => {
   bridge.dispose()
 })
 
+test('a request can carry a longer timeout, and carries no options when it has none', async () => {
+  const host = fakeHost()
+  const bridge = new LspBridge(host, source('<?php\n'), FAST)
+  await bridge.attach()
+  const controller = new AbortController()
+  await bridge.ask('textDocument/formatting', {}, controller.signal, { timeoutMs: 30_000 })
+  await bridge.ask('textDocument/rangeFormatting', {}, undefined, { timeoutMs: 30_000 })
+  await bridge.ask('textDocument/hover', {})
+  const [withBoth, timeoutOnly, bare] = host.calls('phpantom.request')
+  assert.deepEqual(withBoth.options, { signal: controller.signal, timeoutMs: 30_000 })
+  assert.deepEqual(timeoutOnly.options, { timeoutMs: 30_000 })
+  assert.equal(bare.options, undefined)
+  bridge.dispose()
+})
+
+test('navigate and peek go out under the current session, and answer null before an attach', async () => {
+  const host = fakeHost()
+  const bridge = new LspBridge(host, source('<?php\n'), FAST)
+  const range = { start: { line: 3, character: 6 }, end: { line: 3, character: 6 } }
+  assert.equal(await bridge.navigate('file:///ws-a/app/B.php', range), null)
+  assert.equal(await bridge.peek(['file:///ws-a/app/B.php']), null)
+  assert.equal(host.calls('phpantom.navigate').length + host.calls('phpantom.peek').length, 0)
+  await bridge.attach()
+  await bridge.navigate('file:///ws-a/app/B.php', range)
+  await bridge.peek(['file:///ws-a/app/B.php'])
+  assert.deepEqual(host.calls('phpantom.navigate')[0].input, { docId: bridge.docId, session: 's1', uri: 'file:///ws-a/app/B.php', range })
+  assert.deepEqual(host.calls('phpantom.peek')[0].input, { docId: bridge.docId, session: 's1', uris: ['file:///ws-a/app/B.php'] })
+  bridge.dispose()
+})
+
 test('retries a single-file attach after typing stops', async () => {
   let answers = 0
   const host = fakeHost({

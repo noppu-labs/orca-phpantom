@@ -4,6 +4,7 @@ import { test } from 'node:test'
 import {
   completionDetails,
   completionKindName,
+  diagnosticsTouching,
   fromLspRange,
   inlayHintsWanted,
   markdownValue,
@@ -14,6 +15,7 @@ import {
   toLspPosition,
   toLspContentChange,
   toLspRange,
+  toCodeAction,
   toCompletionLabel,
   toInlayHint,
   toMarkdown,
@@ -149,4 +151,45 @@ test('inlay hints are asked for in PHP only, and only when the server offers the
   assert.equal(inlayHintsWanted('php', { inlayHintProvider: true }), true)
   assert.equal(inlayHintsWanted('blade', { inlayHintProvider: true }), false)
   assert.equal(inlayHintsWanted('php', {}), false)
+})
+
+const U = 'file:///w/app/A.php'
+const M = 'inmemory://phpantom/d1.php'
+const at = (line: number, from: number, to: number) => ({ start: { line, character: from }, end: { line, character: to } })
+
+test('a data-only action needs resolve; a bare command is dropped', () => {
+  assert.equal(toCodeAction({ title: 'Extract function', kind: 'refactor.extract', data: { action_kind: 'refactor.extractFunction' } }, U, M)?.needsResolve, true)
+  assert.equal(toCodeAction({ title: 'Run', command: { title: 'x', command: 'phpantom.navigateToPrototype' } }, U, M), null)
+})
+
+test('an action with edits to other files reports them', () => {
+  const action = toCodeAction(
+    {
+      title: 'Implement interface',
+      kind: 'quickfix',
+      isPreferred: true,
+      edit: { changes: { [U]: [{ range: at(2, 0, 0), newText: 'use B;\n' }], 'file:///w/app/B.php': [{ range: at(0, 0, 0), newText: 'x' }] } }
+    },
+    U,
+    M
+  )
+  assert.equal(action?.otherFiles, 1)
+  assert.equal(action?.needsResolve, false)
+  assert.equal(action?.isPreferred, true)
+  assert.deepEqual(action?.edit, {
+    edits: [{ resource: M, textEdit: { range: { startLineNumber: 3, startColumn: 1, endLineNumber: 3, endColumn: 1 }, text: 'use B;\n' }, versionId: undefined }]
+  })
+})
+
+test('a file create, rename or delete in an edit counts as another file', () => {
+  const action = toCodeAction({ title: 'Move class', edit: { documentChanges: [{ kind: 'create', uri: 'file:///w/app/C.php' } as never] } }, U, M)
+  assert.equal(action?.otherFiles, 1)
+  assert.deepEqual(action?.edit, { edits: [] })
+})
+
+test('code actions get back the diagnostics that touch the range, as the server sent them', () => {
+  const near = { range: at(4, 2, 9), message: 'unused import', data: { id: 7 } }
+  const far = { range: at(10, 0, 3), message: 'elsewhere' }
+  const touching = { range: at(5, 0, 1), message: 'starts where the range ends' }
+  assert.deepEqual(diagnosticsTouching([near, far, touching], { start: { line: 4, character: 9 }, end: { line: 5, character: 0 } }), [near, touching])
 })
