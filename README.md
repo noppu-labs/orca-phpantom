@@ -36,6 +36,9 @@ The plugin looks for `phpantom_lsp` in this order and uses the first one it find
 
 To be filled in as v1 is finished.
 
+- In Blade files, PHPantom 1.1.0 shows parameter-name hints that come from its compiled view rather than your code: a `value:` hint after each `{{` and an `args:` hint inside directives such as `@vite(...)` and `@include(...)`.
+- Semantic colouring follows PHPantom's default `contextual` mode, which marks only parameters, template parameters, deprecated symbols and static member references. Set `mode = "full"` under `[semantic-tokens]` in `.phpantom.toml` to colour everything.
+
 ## License
 
 MIT. See `LICENSE` and `THIRD_PARTY_NOTICES.md`.

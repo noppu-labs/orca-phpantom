@@ -1,6 +1,8 @@
 // Monaco with only what this plugin uses: the editor, its features, PHP, HTML and Blade.
 import * as monaco from 'monaco-editor/editor'
 import 'monaco-editor/features/register.all'
+// Why: register.all brings only the viewport (range) semantic tokens feature in 0.57; PHPantom offers full only.
+import 'monaco-editor/editor/contrib/semanticTokens/browser/documentSemanticTokens'
 import 'monaco-editor/languages/definitions/php/register'
 import 'monaco-editor/languages/definitions/html/register'
 import { conf, language } from 'monaco-editor/languages/definitions/html/html'
