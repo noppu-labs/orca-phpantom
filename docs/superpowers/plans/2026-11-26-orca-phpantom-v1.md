@@ -55,7 +55,7 @@
 ## Review Focus
 
 1. **An agent writes the open file while the person has unsaved edits in the same lines.** Expected: both versions survive in the buffer, wrapped in conflict markers, with a note; nothing is dropped or silently overwritten. Test: Task 3, `keeps both sides when an agent rewrites the lines being edited`.
-2. **A paste over 64 KiB, or opening a 1 MB file.** Expected: the change reaches PHPantom split across requests with no character lost, and a version gap or length mismatch triggers a full resync instead of drift. Tests: Task 7, `split changes rebuild the same text` and `a gap in versions asks for a resync`.
+2. **A paste over 64 KiB, or opening a 1 MB file.** Expected: the change reaches PHPantom split across requests with no character lost, and a version gap or length mismatch triggers a full resync instead of drift. Tests: Task 7, `split changes rebuild the same text`; Task 9, `a gap in versions asks for a resync`.
 3. **The same file is byte-identical in two worktrees, or a tab is restored in the background.** Expected: it attaches to the focused worktree's copy and re-attaches when its tab becomes visible under a different focused workspace; it never attaches to a remote workspace's look-alike. Tests: Task 8, `prefers the focused worktree when both copies match`; Task 10, `re-attaches when the tab shows under another workspace`.
 4. **The worker or a PHPantom child restarts mid-session.** Expected: editors notice (new session id, `unavailable` or `detached`), re-open their document within a few seconds, pending reveals are dropped, and nothing keeps answering from a dead server. Tests: Task 9, `answers detached after a server crash`; Task 10, `re-opens after the worker reports a new session`.
 5. **A branch switch makes PHPantom publish diagnostics for hundreds of files.** Expected: only attached documents are posted, the latest set wins, posts stay under 200 per 10 s and 256 KiB each, and the final state always arrives. Test: Task 9, `keeps posts under the rate limit and delivers the last set`.
@@ -97,7 +97,9 @@ editor/
   build.mjs                      esbuild -> editor/dist
   pages/php.html, pages/blade.html
   dist/                          committed bundle
-  src/main.ts                    bootstrap
+  src/main.ts                    bundle entry: startEditor, then attachLanguageServer
+  src/editor.ts                  Monaco editor and document binding (startEditor)
+  src/attach.ts                  language server wiring (attachLanguageServer)
   src/monaco.ts                  Monaco imports and language registration
   src/blade.ts                   Blade Monarch grammar layered on HTML
   src/theme.ts                   themes, semantic rules, typography options
@@ -150,17 +152,17 @@ Use any local git repo with a PHP file (a Laravel app is best). Create a second 
 - [ ] **Step 2: Scaffold the spike plugin**
 
 Run: `orca plugin create "$TMPDIR/phpantom-spike" --template editor --id phpantom-spike`
-Then edit it into a `trusted-worker` plugin: `main: "worker.ts"`, capabilities `workspace:read` and `workspace:write`, two custom editors (`php` with `[".php"]`, `blade` with `[".blade.php"]`, each `"frame": "isolated"`, entries `php.ts` and `blade.ts` that differ only in a `LANGUAGE` constant), one status bar item `{ "id": "spike", "text": "spike" }`, and a command `spike.open`.
+Then edit it into a `trusted-worker` plugin: `main: "worker.ts"`, capabilities `workspace:read` and `workspace:write`, and two custom editors (`php` with `[".php"]`, `blade` with `[".blade.php"]`, each `"frame": "isolated"`, entries `php.ts` and `blade.ts` that differ only in a `LANGUAGE` constant).
 - Editor (each entry): `const ctx = await orca.host.call('workspace.readContext', {})`; `const doc = await orca.document.session()`; `await orca.plugin.request('spike.locate', { language: LANGUAGE, ctx, text: doc.value })`; show the answer in the textarea's title.
 - Worker: `spike.locate` calls `workspace.list`, logs `ctx` and every row's `{ id, name, branch, path, hostId }`, picks the row whose `id === ctx.workspaceId` (else the row with the same `branch` and `name === ctx.displayName`), walks that row's `path` for files of the language's suffix whose content equals `text` exactly, and logs and returns `{ matchedBy: 'id' | 'branch+name' | 'none', path, matches }`. It also logs `process.env.PATH` once on activate.
-- Worker command `spike.open` with args `{ workspaceId, path }` calls `editor.open` and returns the result or the error code.
+- Worker handler `orca.panels.handle('spike.open', ({ workspaceId, path }) => …)` calls `editor.open` and returns the result or the error code.
 
 - [ ] **Step 3: Load it and run the trials**
 
 Run: `orca plugin dev load "$TMPDIR/phpantom-spike"` (re-run with the printed `--approve <fingerprint>`), then `orca plugin logs local.phpantom-spike` after each trial. For each trial, focus the workspace in Orca first, then run `orca plugin open local.phpantom-spike --editor <absolute file path>` (or click the file in Orca's tree).
 - Trial A1/A2: open `app/Example.php` from worktree A twice (close the tab in between). Trial B1/B2: the same from worktree B.
 - Trial C: open the `.blade.php` file; record which editor (`php` or `blade`) loaded.
-- Trial D: `orca plugin dev request "$TMPDIR/phpantom-spike" spike.locate` is not enough for `editor.open`; run the command instead: from the command palette or `orca plugin dev emit` is not applicable, so add a temporary `orca.panels.handle('spike.open', …)` and call it with `orca plugin dev request "$TMPDIR/phpantom-spike" spike.open --data '{"workspaceId":"<A id>","path":"app/Models/User.php"}'`, then again with the absolute path, then with a path outside the workspace. Record each result.
+- Trial D: `orca plugin dev request "$TMPDIR/phpantom-spike" spike.open --data '{"workspaceId":"<A id>","path":"app/Models/User.php"}'`, then the same with the absolute path, then with a path outside every workspace. Record each result.
 - Trial E: quit Orca, start it from the Dock (not a terminal), and record the `PATH` line the worker logs.
 - Trial F (only if Autocomplete is installed): with both plugins enabled, open a `.php` file and record which editor opens by default.
 
@@ -185,7 +187,7 @@ Report the verdict and the report path to whoever dispatched you before starting
 ### Task 2: Scaffold, manifest, protocol and CI
 
 **Files:**
-- Create: `orca-plugin.json`, `package.json`, `package-lock.json`, `tsconfig.json`, `.gitignore`, `.gitattributes`, `THIRD_PARTY_NOTICES.md`, `README.md`, `src/main.ts`, `src/protocol.ts`, `src/status.ts`, `src/status.test.ts`, `.github/workflows/ci.yml`
+- Create: `orca-plugin.json`, `package.json`, `package-lock.json`, `tsconfig.json`, `.gitignore`, `.gitattributes`, `THIRD_PARTY_NOTICES.md`, `README.md`, `src/main.ts`, `src/protocol.ts`, `src/status.ts`, `src/status.test.ts`, `editor/pages/php.html`, `editor/pages/blade.html` (stubs), `.github/workflows/ci.yml`
 
 **Interfaces:**
 - Consumes: Task 1 report (GO).
@@ -293,12 +295,12 @@ Expected: FAIL, `Cannot find module './status.ts'`.
 
 - [ ] **Step 3: Implement `src/status.ts`, `src/protocol.ts`, the manifest, and `src/main.ts`**
 
-`main.ts` for now: default-export `activate(orca)` that calls `statusBar.update` with `renderStatus(aggregate([]))` and registers `phpantom.status` (returns the tooltip) and `phpantom.restart` (returns `'Nothing to restart'`). `package.json`: `"private": true, "type": "module"`, scripts `build` (`node editor/build.mjs`), `test` (`orca plugin test .`), `typecheck` (`tsc -p .`); devDependencies pinned exactly: `esbuild 0.28.2`, `monaco-editor 0.57.0`, `node-diff3 3.2.1`, `typescript 5.9.3`, `@types/node 22.x` (latest 22 patch). `tsconfig.json` includes `src` and `editor/src`. `THIRD_PARTY_NOTICES.md`: the Autocomplete MIT text with its copyright line and the commit SHA. `README.md`: what it is, install with `orca plugin install noppu-labs/orca-phpantom`, the binary resolution order, desktop-only, local workspaces only.
+`main.ts` for now: default-export `activate(orca)` that calls `statusBar.update` with `renderStatus(aggregate([]))` and registers `phpantom.status` (returns the tooltip) and `phpantom.restart` (returns `'Nothing to restart'`). `package.json`: `"private": true, "type": "module"`, scripts `build` (`node editor/build.mjs`), `test` (`orca plugin test .`), `typecheck` (`tsc -p .`); devDependencies pinned exactly: `esbuild 0.28.2`, `monaco-editor 0.57.0`, `node-diff3 3.2.1`, `typescript 5.9.3`, `@types/node` (the newest 22.x at install time, written exactly). `tsconfig.json` includes `src` and `editor/src`. `THIRD_PARTY_NOTICES.md`: the Autocomplete MIT text with its copyright line and the commit SHA. `README.md`: what it is, install with `orca plugin install noppu-labs/orca-phpantom`, the binary resolution order, desktop-only, local workspaces only.
 
 - [ ] **Step 4: Run tests, typecheck, validate**
 
 Run: `orca plugin test . && npx tsc -p . && orca plugin validate .`
-Expected: 4 tests pass; `tsc` prints nothing; validate exits 0. (It fails on the missing editor pages until Task 4; for this task create both pages as a minimal valid HTML document with `<div id="root"></div>` so validate passes.)
+Expected: 4 tests pass; `tsc` prints nothing; validate exits 0. The two pages are stubs for now (a minimal HTML document with `<div id="root"></div>`) so validate finds the editor entries; Task 4 replaces them.
 
 - [ ] **Step 5: Add CI** (`.github/workflows/ci.yml`)
 
@@ -437,7 +439,7 @@ git commit -m "feat(editor): sync the document with Orca and merge outside write
 ### Task 4: Editor shell: Monaco bundle, pages, Blade grammar, theme, notes
 
 **Files:**
-- Create: `editor/build.mjs`, `editor/pages/php.html`, `editor/pages/blade.html` (replace the Task 2 stubs), `editor/src/main.ts`, `editor/src/monaco.ts`, `editor/src/blade.ts`, `editor/src/blade.test.ts`, `editor/src/theme.ts`, `editor/src/theme.test.ts`, `editor/src/notes.ts`, `editor/src/env.d.ts`, `editor/src/monaco-modules.d.ts`, `editor/dist/**`
+- Create: `editor/build.mjs`, `editor/pages/php.html`, `editor/pages/blade.html` (replace the Task 2 stubs), `editor/src/main.ts`, `editor/src/editor.ts`, `editor/src/editor.worker.ts`, `editor/src/monaco.ts`, `editor/src/blade.ts`, `editor/src/blade.test.ts`, `editor/src/theme.ts`, `editor/src/theme.test.ts`, `editor/src/notes.ts`, `editor/src/env.d.ts`, `editor/src/monaco-modules.d.ts`, `editor/dist/**`
 - Modify: `.github/workflows/ci.yml` (add the build reproducibility line)
 
 **Interfaces:**
@@ -447,7 +449,8 @@ git commit -m "feat(editor): sync the document with Orca and merge outside write
   - `bladeGrammar(html: { conf: object; language: MonarchLanguage }): { conf: object; language: MonarchLanguage }` (pure, does not import Monaco)
   - `SEMANTIC_TYPES: readonly string[]` (the 15 legend types), `themeRules(dark: boolean): { token: string; foreground?: string; fontStyle?: string }[]`, `THEME_NAME = { dark: 'phpantom-dark', light: 'phpantom-light' }`, `defineThemes(monaco): void`, `typographyOptions(t: EditorTypography): Partial<EditorOptions>` where `EditorTypography` is the `editor.readTypography` result type.
   - `showNote(kind: 'info' | 'warning', text: string, key: string): void`, `clearNote(key: string): void` in `editor/src/notes.ts`.
-  - `editor/src/main.ts` exports nothing; it creates the model with language `php` or `blade` and URI `inmemory://phpantom/<docId>.<language>`, creates the editor, and exposes `{ monaco, editor, model, docId, language }` to Task 10 through `startEditor(): Promise<EditorContext>` in `editor/src/main.ts` (Task 10 calls `attachLanguageServer(ctx)` from it).
+  - `startEditor(): Promise<EditorContext>` in `editor/src/editor.ts`, with `type EditorContext = { monaco: typeof Monaco; editor: Monaco.editor.IStandaloneCodeEditor; model: Monaco.editor.ITextModel; docId: string; language: Language }`. It creates the model with language `php` or `blade` and URI `inmemory://phpantom/<docId>.<language>` (`docId` is `crypto.randomUUID()`), creates the editor and binds the document.
+  - `editor/src/main.ts` is the bundle entry and only calls `startEditor()` (Task 10 adds `attachLanguageServer(ctx)`); on a startup error it shows the message in the page, as Autocomplete's `main.ts` does.
 
 Build (`editor/build.mjs`): esbuild, `bundle: true`, `format: 'esm'`, `target: 'es2022'`, `loader: { '.ttf': 'dataurl' }`, `minify: true`, `logLevel: 'warning'`; entry `main` from `editor/src/main.ts` with `splitting: true`, `chunkNames: 'chunks/[name]-[hash]'`; a second build for `editor.worker` from a one-line `editor/src/editor.worker.ts` that imports `monaco-editor/editor/editor.worker`. `rmSync(editor/dist)` first; print total size and file count; fail if any file exceeds 10 MiB or the count exceeds 200. `MonacoEnvironment.getWorker` returns `new Worker(new URL('./editor.worker.js', import.meta.url), { type: 'module' })`.
 
@@ -493,7 +496,7 @@ test('maps Orca typography to Monaco options', () => {
 - [ ] **Step 2: Run, see them fail** — Expected: FAIL, missing modules.
 - [ ] **Step 3: Implement `blade.ts` and `theme.ts`.**
 - [ ] **Step 4: Run, see them pass** — `orca plugin test .`.
-- [ ] **Step 5: Implement `monaco.ts`, `notes.ts`, `main.ts`, the pages and `build.mjs`**; `main.ts` binds the model through Task 3's `bindDocument` (its `TextView` wraps the model: `applyOutside` uses `model.pushEditOperations` so undo survives, `onUserChange` is `model.onDidChangeContent` filtered by an `applying` flag), shows `showNote('warning', '…', 'conflict')` with the text `An outside change overlapped your unsaved edits. Both versions are in the file between <<<<<<< and >>>>>>> markers.` when `onConflicts` fires, and sets `readOnly`.
+- [ ] **Step 5: Implement `monaco.ts`, `notes.ts`, `editor.ts`, `main.ts`, the pages and `build.mjs`**; `startEditor` binds the model through Task 3's `bindDocument` (its `TextView` wraps the model: `applyOutside` uses `model.pushEditOperations` so undo survives, `onUserChange` is `model.onDidChangeContent` filtered by an `applying` flag), shows `showNote('warning', '…', 'conflict')` with the text `An outside change overlapped your unsaved edits. Both versions are in the file between <<<<<<< and >>>>>>> markers.` when `onConflicts` fires, and sets `readOnly`.
 - [ ] **Step 6: Build and check**
 
 Run: `npm ci && node editor/build.mjs && orca plugin check .`
@@ -608,7 +611,7 @@ git commit -m "feat(worker): find, download and verify the pinned PHPantom binar
   - `type ServerEvents = { diagnostics(uri: string, diagnostics: unknown[]): void; progress(state: ServerState): void; refresh(kind: 'semanticTokens' | 'inlayHints' | 'codeLens' | 'diagnostics'): void; log(message: string): void; exit(reason: string): void }` (`ServerState` from Task 2's `src/status.ts`)
   - `class PhpantomServer { constructor(options: { executable: string; root: string; events: ServerEvents; spawnImpl?: typeof spawn; initializeTimeoutMs?: number }); start(): Promise<void>; readonly capabilities: Record<string, unknown>; readonly alive: boolean; notify(method: string, params: unknown): void; request(method: string, params: unknown, signal?: AbortSignal): Promise<unknown>; stop(): Promise<void> }`
 
-Behaviour: spawn `<executable> --stdio` with `cwd: root`, `windowsHide: true`, `stdio: ['pipe','pipe','pipe']`; `initialize` with `processId: process.pid`, `clientInfo { name: 'orca-phpantom', version: '0.1.0' }`, `rootUri` and one `workspaceFolders` entry for `root`, `CLIENT_CAPABILITIES`; 60 s initialize timeout (cold index of a large project); then `initialized`. Server requests: `workspace/configuration` → `items.map(() => null)`; `window/workDoneProgress/create`, `client/registerCapability`, `client/unregisterCapability` → `null`; `workspace/{semanticTokens,inlayHint,codeLens,diagnostic}/refresh` → `null` and `events.refresh(kind)`; `workspace/applyEdit` → `{ applied: false }`; anything else → `null`. Notifications: `textDocument/publishDiagnostics` → `events.diagnostics`; `$/progress` begin/report/end → `events.progress({ phase: 'indexing', percent })` and `{ phase: 'ready' }` when the last open token ends; `window/logMessage` with type 1 or 2 → `events.log`. Keep the last 8 stderr lines for the exit message (as Autocomplete does). `stop()` sends `shutdown` (2 s cap), `exit`, closes stdin, and kills after 2 s more.
+Behaviour: spawn `<executable> --stdio` with `cwd: root`, `windowsHide: true`, `stdio: ['pipe','pipe','pipe']`; `initialize` with `processId: process.pid`, `clientInfo { name: 'orca-phpantom', version: '0.1.0' }`, `rootUri` and one `workspaceFolders` entry for `root`, `CLIENT_CAPABILITIES`; 60 s initialize timeout (cold index of a large project); then `initialized`. Server requests: `workspace/configuration` → `items.map(() => null)`; `window/workDoneProgress/create`, `client/registerCapability`, `client/unregisterCapability` → `null`; `workspace/{semanticTokens,inlayHint,codeLens,diagnostic}/refresh` → `null` and `events.refresh(kind)`; `workspace/applyEdit` → `{ applied: false }`; anything else → `null`. Notifications: `textDocument/publishDiagnostics` → `events.diagnostics`; `$/progress` begin/report/end → `events.progress({ phase: 'indexing', percent })` and `{ phase: 'ready' }` when the last open token ends (right after `initialized` the state is `ready` unless a token is open); `window/logMessage` with type 1 or 2 → `events.log`. Keep the last 8 stderr lines for the exit message (as Autocomplete does). `stop()` sends `shutdown` (2 s cap), `exit`, closes stdin, and kills after 2 s more.
 
 `fake-server.mjs` is plain JavaScript with its own framing (so `process.execPath` runs it without TypeScript): it answers `initialize` with `{ capabilities: { textDocumentSync: 2, hoverProvider: true, definitionProvider: true, semanticTokensProvider: { legend: { tokenTypes: ['parameter'], tokenModifiers: [] }, full: true } } }`, applies incremental `didChange` to its own copy, publishes one diagnostic per occurrence of `BAD`, answers hover with `len=<document length>`, sends `$/progress` begin/end around a fake index, sends `workspace/inlayHint/refresh` after `initialized`, and exits on `exit`, on stdin end, or when the document contains `CRASH`.
 
@@ -828,16 +831,17 @@ git commit -m "feat(worker): route editor requests to one PHPantom per composer 
 ### Task 10: Editor bridge: attach, sync, reattach
 
 **Files:**
-- Create: `editor/src/bridge.ts`, `editor/src/bridge.test.ts`
+- Create: `editor/src/bridge.ts`, `editor/src/bridge.test.ts`, `editor/src/attach.ts`, `editor/src/lsp-convert.ts` (vendored), `editor/src/lsp-convert.test.ts` (vendored)
 - Modify: `editor/src/main.ts`
 
 **Interfaces:**
 - Consumes: protocol (Task 2); `REQUEST_BUDGET_BYTES`, `chunkText`, `splitChanges` (Task 7); `startEditor`, `showNote`, `clearNote` (Task 4).
 - Produces:
   - `type BridgeHost = { request<K extends keyof PluginRequests>(name: K, input: PluginRequestInput<K>, options?: { timeoutMs?: number; signal?: AbortSignal }): Promise<PluginRequestOutput<K>>; on(event: string, handler: (payload: any) => void): { dispose(): void }; readContext(): Promise<{ workspaceId: string | null; branch: string; displayName: string } | null>; onVisible(listener: () => void): { dispose(): void } }` — the real one wraps `orca.plugin` and `orca.host.call('workspace.readContext', {})`.
-  - `type DocumentSource = { language: Language; getText(): string; getLength(): number; getVersion(): number; onChanges(listener: (changes: LspContentChange[], isFlush: boolean) => void): { dispose(): void } }` — the Monaco model adapter in `main.ts` converts `IModelContentChange` with `toLspContentChange` (Task 11).
+  - `type DocumentSource = { language: Language; getText(): string; getLength(): number; getVersion(): number; onChanges(listener: (changes: LspContentChange[], isFlush: boolean) => void): { dispose(): void } }` — the Monaco model adapter in `attach.ts` converts `IModelContentChange` with `toLspContentChange`.
   - `class LspBridge { constructor(host: BridgeHost, source: DocumentSource, options?: { docId?: string; syncDelayMs?: number; retryGapMs?: number; maxRetries?: number }); attach(): Promise<AttachStatus>; readonly status: AttachStatus | null; ask(method: string, params: Record<string, unknown>, signal?: AbortSignal): Promise<unknown | null>; onReady(listener: (status: AttachStatus & { state: 'ready' }) => void): { dispose(): void }; onDiagnostics(listener: (diagnostics: unknown[]) => void): { dispose(): void }; onRefresh(listener: (kinds: string[]) => void): { dispose(): void }; onReveal(listener: (range: LspRange) => void): { dispose(): void }; dispose(): void }`
-  - `attachLanguageServer(ctx: EditorContext): LspBridge` in `editor/src/main.ts`: builds the bridge, shows notes for `single-file` (`PHPantom couldn't tell which file this is, so only highlighting is on. It will try again after you save.`), `remote` (`This file is on <host>. PHPantom runs on this computer only, so only highlighting is on.`) and `error` (the message), clears them on `ready`.
+  - `lsp-convert.ts` copied from `editor/src/lsp-convert.ts` at `da5a680` (header added, `sameUri` imported from `../../src/lsp/uri.ts`), exporting `toLspPosition`, `fromLspRange`, `toLspRange`, `markerSeverity`, `toMarker`, `completionKindName`, `toMarkdown`, `markdownValue`, `toMonacoEdit`, `normalizeLocations`, `splitWorkspaceEdit`, `toDocumentSymbols`, `completionDetails`, the types `LspDiagnostic`, `LspTextEdit`, `LspWorkspaceEdit`, `MonacoRange`, plus one addition: `toLspContentChange(change: { range: MonacoRange; text: string }): LspContentChange`.
+  - `attachLanguageServer(ctx: EditorContext): LspBridge` in `editor/src/attach.ts`, called from `main.ts` after `startEditor()`: builds the bridge, shows notes for `single-file` (`PHPantom couldn't tell which file this is, so only highlighting is on. It will try again after you save.`), `remote` (`This file is on <host>. PHPantom runs on this computer only, so only highlighting is on.`) and `error` (the message), clears them on `ready`.
 
 Rules:
 - `attach` reads the context, sends the text through `phpantom.open` in `chunkText` pieces (sequentially, `timeoutMs: 120_000` on the last piece), and stores the answer. `single-file` and request failures retry later (no sooner than `retryGapMs` 8 s and only after 2 s without typing or when the tab becomes visible, at most `maxRetries` 20 times), as Autocomplete's retry loop does.
@@ -847,7 +851,9 @@ Rules:
 - When the tab becomes visible, read the context; if its `workspaceId` differs from the one used for the current attach, re-attach.
 - `pagehide` sends `phpantom.close`.
 
-- [ ] **Step 1: Write the failing tests** (a fake `BridgeHost` that records calls and scripts answers; a fake `DocumentSource` over a string)
+- [ ] **Step 1: Vendor `lsp-convert.ts` and its test** at `da5a680`. Run `orca plugin test .`; Expected: the vendored tests PASS.
+
+- [ ] **Step 2: Write the failing tests** (a fake `BridgeHost` that records calls and scripts answers; a fake `DocumentSource` over a string; plus `toLspContentChange` in `lsp-convert.test.ts`)
 
 ```ts
 test('sends a large document in chunks and attaches', async () => {
@@ -863,13 +869,16 @@ test('re-opens after the worker reports a new session', async () => { /* request
 test('re-attaches when the tab shows under another workspace', async () => { /* readContext returns ws-a then ws-b on visible → second full open with workspaceId ws-b */ })
 test('drops a formatting result when the text changed meanwhile', async () => { /* version moves before the answer arrives → ask resolves null */ })
 test('retries a single-file attach after typing stops', async () => { /* first open → single-file, then ready on the retry */ })
+test('content changes keep Monaco ranges as zero-based LSP ranges', () => {
+  assert.deepEqual(toLspContentChange({ range: { startLineNumber: 2, startColumn: 3, endLineNumber: 2, endColumn: 5 }, text: 'x' }), { range: { start: { line: 1, character: 2 }, end: { line: 1, character: 4 } }, text: 'x' })
+})
 ```
 
-- [ ] **Step 2: Run, see them fail.**
-- [ ] **Step 3: Implement `bridge.ts` and the `attachLanguageServer` wiring in `main.ts`** (diagnostics go to `monaco.editor.setModelMarkers(model, 'phpantom', …)` via Task 11's `toMarker`; reveals call `editor.revealRangeInCenter` and set the selection).
-- [ ] **Step 4: Run, see them pass; rebuild** — `orca plugin test . && node editor/build.mjs && orca plugin check .`
-- [ ] **Step 5: Look at it** — `orca plugin shot . --editor <laravel>/app/Http/Controllers/Controller.php` after the status bar says ready; Expected: PHPantom markers visible on a file with a known problem.
-- [ ] **Step 6: Commit**
+- [ ] **Step 3: Run, see them fail.**
+- [ ] **Step 4: Implement `bridge.ts`, `toLspContentChange` and `attach.ts`** (diagnostics go to `monaco.editor.setModelMarkers(model, 'phpantom', …)` via `toMarker`; reveals call `editor.revealRangeInCenter` and set the selection).
+- [ ] **Step 5: Run, see them pass; rebuild** — `orca plugin test . && node editor/build.mjs && orca plugin check .`
+- [ ] **Step 6: Look at it** — `orca plugin shot . --editor <laravel>/app/Http/Controllers/Controller.php` after the status bar says ready; Expected: PHPantom markers visible on a file with a known problem.
+- [ ] **Step 7: Commit**
 
 ```bash
 git add editor
@@ -881,13 +890,13 @@ git commit -m "feat(editor): attach to PHPantom, keep it in sync incrementally a
 ### Task 11: Reading features: diagnostics, completion, hover, signature help, semantic tokens, inlay hints, outline
 
 **Files:**
-- Create: `editor/src/lsp-convert.ts` (vendored and extended), `editor/src/lsp-convert.test.ts` (vendored and extended), `editor/src/providers.ts`
-- Modify: `editor/src/main.ts`
+- Create: `editor/src/providers.ts`
+- Modify: `editor/src/lsp-convert.ts`, `editor/src/lsp-convert.test.ts`, `editor/src/attach.ts`
 
 **Interfaces:**
-- Consumes: `LspBridge` (Task 10), `EditorContext` (Task 4).
-- Produces (in `lsp-convert.ts`, besides the vendored exports `toLspPosition`, `fromLspRange`, `toLspRange`, `markerSeverity`, `toMarker`, `completionKindName`, `toMarkdown`, `markdownValue`, `toMonacoEdit`, `normalizeLocations`, `splitWorkspaceEdit`, `toDocumentSymbols`, `completionDetails`):
-  - `toLspContentChange(change: { range: MonacoRange; text: string }): LspContentChange`
+- Consumes: `LspBridge`, `attachLanguageServer` and the vendored `lsp-convert.ts` (Task 10), `EditorContext` (Task 4).
+- Produces (added to `lsp-convert.ts`):
+  - `type LspInlayHint = { position: LspPosition; label: string | { value: string; tooltip?: string }[]; kind?: 1 | 2; tooltip?: string | { kind: string; value: string }; paddingLeft?: boolean; paddingRight?: boolean }`
   - `toCompletionLabel(item: { label: string; labelDetails?: { detail?: string; description?: string } }): string | { label: string; detail?: string; description?: string }`
   - `toInlayHint(hint: LspInlayHint): { label: string | { label: string; tooltip?: string }[]; position: { lineNumber: number; column: number }; kind?: 1 | 2; tooltip?: string | { value: string }; paddingLeft?: boolean; paddingRight?: boolean }`
   - `toSemanticTokens(result: { data: number[]; resultId?: string } | null): { data: Uint32Array; resultId?: string } | null`
@@ -895,13 +904,9 @@ git commit -m "feat(editor): attach to PHPantom, keep it in sync incrementally a
 
 Registration rules: register each provider only when `capabilities` has it, for the model's own language id (`php` or `blade`, never `'*'`), and only answer for `ctx.model`. Completion: as Autocomplete's provider plus `label: toCompletionLabel(item)` and `resolveCompletionItem` through `completionItem/resolve` (this is where PHPantom's auto-import `additionalTextEdits` arrive). Semantic tokens: `getLegend()` returns `capabilities.semanticTokensProvider.legend`; `onDidChange` fires on `phpantom.refresh` with `semanticTokens`; `provideDocumentSemanticTokens` asks `textDocument/semanticTokens/full`. Inlay hints: asks `textDocument/inlayHint` for the visible range; `onDidChangeInlayHints` fires on `phpantom.refresh` with `inlayHints`. Diagnostics: keep the raw LSP diagnostics (Task 12 sends them with code actions) and set markers through `toMarker`. Every provider passes Monaco's cancellation token as an `AbortSignal` to `bridge.ask`.
 
-- [ ] **Step 1: Vendor `lsp-convert.ts` and its test** at `da5a680` (change the `sameUri` import to `../../src/lsp/uri.ts`). Run `orca plugin test .`; Expected: PASS.
-- [ ] **Step 2: Write the failing tests for the additions**
+- [ ] **Step 1: Write the failing tests for the additions**
 
 ```ts
-test('content changes keep Monaco ranges as zero-based LSP ranges', () => {
-  assert.deepEqual(toLspContentChange({ range: { startLineNumber: 2, startColumn: 3, endLineNumber: 2, endColumn: 5 }, text: 'x' }), { range: { start: { line: 1, character: 2 }, end: { line: 1, character: 4 } }, text: 'x' })
-})
 test('completion labels carry PHPantom label details', () => {
   assert.deepEqual(toCompletionLabel({ label: 'greet($who)', labelDetails: { detail: ': string', description: 'User' } }), { label: 'greet($who)', detail: ': string', description: 'User' })
   assert.equal(toCompletionLabel({ label: 'name' }), 'name')
@@ -916,15 +921,15 @@ test('semantic tokens become a Uint32Array', () => {
 })
 ```
 
-- [ ] **Step 3: Run, see them fail.**
-- [ ] **Step 4: Implement the additions and `registerReadingProviders`; call it from `onReady` in `main.ts`** (dispose and re-register on each re-attach, since capabilities can change with a new server).
-- [ ] **Step 5: Run, see them pass; rebuild and check** — `orca plugin test . && node editor/build.mjs && orca plugin check .`
-- [ ] **Step 6: Look at it**
+- [ ] **Step 2: Run, see them fail.**
+- [ ] **Step 3: Implement the additions and `registerReadingProviders`; call it from `onReady` in `attach.ts`** (dispose and re-register on each re-attach, since capabilities can change with a new server).
+- [ ] **Step 4: Run, see them pass; rebuild and check** — `orca plugin test . && node editor/build.mjs && orca plugin check .`
+- [ ] **Step 5: Look at it**
 
 Run against a Laravel project: `orca plugin shot . --editor <file> --act '[{"click":[300,200]},{"key":"End"},{"key":"Enter"},{"key":"$"},{"key":"t"},{"key":"h"},{"key":"i"},{"key":"s"},{"key":"-"},{"key":">","modifiers":["shift"]}]'`
 Expected: a completion list with members; a second shot with a parameter in view shows the parameter coloured and a parameter-name inlay hint. Read the PNGs. If a feature is broken at 1.1.0, drop its registration, note it in `README.md` under "Known gaps", and continue (spec: builder's call).
 
-- [ ] **Step 7: Commit**
+- [ ] **Step 6: Commit**
 
 ```bash
 git add editor
@@ -937,13 +942,14 @@ git commit -m "feat(editor): PHPantom diagnostics, completion, hover, signature 
 
 **Files:**
 - Create: `editor/src/navigation.ts`, `editor/src/navigation.test.ts`
-- Modify: `editor/src/providers.ts`, `editor/src/lsp-convert.ts`, `editor/src/lsp-convert.test.ts`, `editor/src/main.ts`
+- Modify: `editor/src/providers.ts`, `editor/src/lsp-convert.ts`, `editor/src/lsp-convert.test.ts`, `editor/src/attach.ts`
 
 **Interfaces:**
-- Consumes: `LspBridge`, `phpantom.navigate`, `phpantom.peek` (Tasks 9, 10); vendored `normalizeLocations`, `splitWorkspaceEdit` (Task 11); `showNote` (Task 4).
+- Consumes: `LspBridge`, `phpantom.navigate`, `phpantom.peek` (Tasks 9, 10); vendored `normalizeLocations`, `splitWorkspaceEdit` (Task 10); `showNote` (Task 4).
 - Produces:
   - `mapLocations(locations: { uri: string; range: MonacoRange }[], documentUri: string, modelUri: string): { uri: string; range: MonacoRange }[]` — the document's own URI becomes the model's `inmemory://` URI; others stay `file:` URIs.
   - `class PeekModels { constructor(create: (uri: string, text: string) => { dispose(): void }, limit?: number); ensure(files: { uri: string; text: string }[]): void; has(uri: string): boolean; dispose(): void }` — keeps at most `limit` (default 30) read-only models, least recently used dropped first.
+  - `type LspCodeAction = { title: string; kind?: string; isPreferred?: boolean; edit?: LspWorkspaceEdit; data?: unknown; command?: unknown }`; `type MonacoWorkspaceEdit = { edits: { resource: string; textEdit: { range: MonacoRange; text: string }; versionId: undefined }[] }` (the provider turns `resource` into a `monaco.Uri`)
   - `toCodeAction(action: LspCodeAction, documentUri: string, modelUri: string): { title: string; kind?: string; isPreferred?: boolean; edit?: MonacoWorkspaceEdit; needsResolve: boolean; otherFiles: number } | null` — `null` for a bare command (no `edit`, no `data`).
   - `registerEditingProviders(ctx: EditorContext, bridge: LspBridge, capabilities: Record<string, unknown>): { dispose(): void }` in `providers.ts`.
   - `installOpener(ctx: EditorContext, bridge: LspBridge): { dispose(): void }` in `navigation.ts`.
@@ -971,7 +977,7 @@ test('peek models are capped and least recently used go first', () => { /* limit
 ```
 
 - [ ] **Step 2: Run, see them fail.**
-- [ ] **Step 3: Implement `navigation.ts`, `toCodeAction`, and `registerEditingProviders`; wire both in `main.ts` next to Task 11's providers.**
+- [ ] **Step 3: Implement `navigation.ts`, `toCodeAction`, and `registerEditingProviders`; wire both in `attach.ts` next to Task 11's providers.**
 - [ ] **Step 4: Run, see them pass; rebuild and check** — `orca plugin test . && node editor/build.mjs && orca plugin check .`
 - [ ] **Step 5: Try it by hand in Orca** (shots cannot follow a tab switch): in a Laravel project, Cmd-click a model class in a controller → the model file opens in Orca with the class line revealed; Shift+F12 on a method → the peek list shows other files; format a messy file; rename a local variable; apply a "remove unused import" quick fix. Record what worked in the Task 13 smoke notes.
 - [ ] **Step 6: Commit**
