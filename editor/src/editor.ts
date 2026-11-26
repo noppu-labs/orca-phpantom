@@ -3,7 +3,8 @@
 import type { Language } from '../../src/protocol.ts'
 import { monaco } from './monaco.ts'
 import { showNote } from './notes.ts'
-import { bindDocument, type TextView } from './sync.ts'
+import { modelView } from './model-view.ts'
+import { bindDocument } from './sync.ts'
 import { defineThemes, THEME_NAME, typographyOptions } from './theme.ts'
 
 export type EditorContext = {
@@ -47,37 +48,27 @@ export async function startEditor(): Promise<EditorContext> {
   const docId = crypto.randomUUID()
   const model = monaco.editor.createModel('', language, monaco.Uri.parse(`inmemory://phpantom/${docId}.${language}`))
 
-  // True while text from Orca is going in, so it is not taken for typing and sent back.
-  let applying = false
-  const view: TextView = {
-    getValue: () => model.getValue(),
-    applyOutside(splice) {
-      applying = true
-      try {
-        const range = monaco.Range.fromPositions(model.getPositionAt(splice.start), model.getPositionAt(splice.end))
-        // Why: an edit operation, not setValue, so the person's cursor and undo history survive.
-        model.pushEditOperations([], [{ range, text: splice.text }], () => null)
-      } finally {
-        applying = false
-      }
+  // Set once the editor exists, so an outside write's undo step restores the person's selection.
+  let created: monaco.editor.IStandaloneCodeEditor | null = null
+  const view = modelView({
+    getText: () => model.getValue(),
+    getEol: () => (model.getEOL() === '\r\n' ? '\r\n' : '\n'),
+    // Why setValue for the first text: it starts the undo history, so Cmd+Z never empties the file.
+    setText: (text) => model.setValue(text),
+    setEol: (eol) =>
+      model.pushEOL(eol === '\r\n' ? monaco.editor.EndOfLineSequence.CRLF : monaco.editor.EndOfLineSequence.LF),
+    replace(start, end, text) {
+      const range = monaco.Range.fromPositions(model.getPositionAt(start), model.getPositionAt(end))
+      // Why: an edit operation, not setValue, so the person's cursor and undo history survive.
+      model.pushEditOperations(created?.getSelections() ?? null, [{ range, text }], () => null)
     },
-    onUserChange: (listener) =>
-      model.onDidChangeContent(() => {
-        if (!applying) {
-          listener()
-        }
-      })
-  }
+    pushStackElement: () => model.pushStackElement(),
+    onDidChangeContent: (listener) => model.onDidChangeContent(listener)
+  })
   const doc = await bindDocument(view, {
     onConflicts: () => showNote('warning', CONFLICT_NOTE, 'conflict')
   })
-  applying = true
-  try {
-    // Why setValue: the first text starts the undo history, so Cmd+Z never empties the file.
-    model.setValue(doc.initial)
-  } finally {
-    applying = false
-  }
+  view.load(doc.initial)
 
   defineThemes(monaco)
   const typography = await orca.host.call('editor.readTypography', {}).catch((error: unknown) => {
@@ -94,6 +85,7 @@ export async function startEditor(): Promise<EditorContext> {
     fixedOverflowWidgets: true,
     ...(typography ? typographyOptions(typography) : {})
   })
+  created = editor
   orca.on('editor.typography.changed', (next) => editor.updateOptions(typographyOptions(next)))
   // Orca has already switched the `--orca-*` variables and the `dark` class when this fires.
   orca.on('theme', () => {
