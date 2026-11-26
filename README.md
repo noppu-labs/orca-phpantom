@@ -51,6 +51,16 @@ Hover the PHPantom item in the status bar to see the PHPantom version and where 
 (`from PATH`, `downloaded` and so on). Click it for the binary's path, the running servers and the
 open files.
 
+## Commands
+
+Two commands are in the command palette:
+
+- `PHPantom: Show status` lists the binary in use, each running server with its state, and the open
+  files with their error counts. Clicking the status bar item runs it too.
+- `PHPantom: Restart language servers` stops every PHPantom the plugin started. Open editors start
+  them again within a few seconds. It also looks for the binary again, so use it after you install
+  PHPantom or after a download failed.
+
 ## Settings
 
 - `phpantomPath`: full path to `phpantom_lsp`. Leave it empty to use `PATH` or the download.
@@ -93,13 +103,23 @@ Source. It has one icon for each editor that can open the file.
   5,820 methods gave PHPantom an outline bigger than Orca accepts in one answer.
 - If PHPantom can't tell which file an editor tab holds, the tab gets highlighting only, with a note,
   and tries again after you save.
+- A `vendor/` file opened by go to definition attaches again when you switch back to its tab, because
+  the plugin remembers the last 50 files it attached. That memory lasts until Orca restarts the plugin,
+  and it only matches a tab whose text is the same as the file on disk. A `vendor/` tab with unsaved
+  edits, or one restored after a restart, gets highlighting only.
+- Undo history and the cursor position reset when you switch back to a tab, because Orca creates the
+  editor again each time the tab is shown. The text and its unsaved state are kept.
+- When downloading PHPantom fails, the plugin waits two minutes before trying again. Changing a
+  setting or running `PHPantom: Restart language servers` tries again at once.
 - A tab that was already open when the plugin loaded may not attach to PHPantom until you open it
   again.
 - When a file changes on disk while its workspace is in the background, the editor picks up the
   change only once you switch back to that workspace. We haven't compared this with Orca's Source
   view yet.
 - Errors and warnings appear a moment after a file opens, once PHPantom has checked it.
-- When you close a tab, PHPantom lets go of that file about a minute later.
+- When you close a tab, PHPantom lets go of that file about three minutes later. Switching tabs does
+  the same for the hidden copy Orca leaves behind, so a file you switch away from stays open in
+  PHPantom for those minutes too.
 - PHPantom indexes the project when it starts, so the first completions in a big project can take a
   moment. The status bar shows `indexing` while it runs.
 
