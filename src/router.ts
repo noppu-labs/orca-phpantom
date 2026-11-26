@@ -34,6 +34,10 @@ export type RouterOptions = {
   resolve?: typeof resolveBinary
   createServer?: (executable: string, root: string, events: ServerEvents) => PhpantomServer
   idleMs?: number
+  /** A document not heard from (open, change, request, navigate, peek, ping) for this long is released. */
+  leaseMs?: number
+  /** How often to look for such documents. */
+  sweepMs?: number
   sessionId?: string
 }
 
@@ -82,6 +86,8 @@ type Doc = {
   mirror: DocumentMirror
   needsResync: boolean
   diagnostics: number
+  /** When its editor was last heard from; see `leaseMs`. */
+  lastSeen: number
 }
 
 // Orca takes an answer of at most 1 MiB and 10,000 objects by its own measure (see size.ts); this
@@ -102,6 +108,10 @@ const CUTTABLE_LISTS = new Set([
 const PEEK_MAX_FILES = 25
 const PEEK_MAX_BYTES = 600 * 1024
 const IDLE_MS = 10 * 60_000
+// Why a lease: an editor frame that remounts (Orca does on every tab show) or dies never sends its close.
+// The editor pings every 20 s, so a minute is three missed pings.
+const LEASE_MS = 60_000
+const SWEEP_MS = 15_000
 const STATUS_INTERVAL_MS = 1000
 const RESTART_WINDOW_MS = 5 * 60_000
 const MAX_RESTARTS = 3
@@ -122,6 +132,8 @@ export class Router {
   private readonly resolve: typeof resolveBinary
   private readonly createServer: (executable: string, root: string, events: ServerEvents) => PhpantomServer
   private readonly idleMs: number
+  private readonly leaseMs: number
+  private readonly sweepTimer: ReturnType<typeof setInterval>
   private readonly outbox: Outbox
   private readonly reveals = new PendingReveals()
   private readonly pool = new Map<string, Entry>()
@@ -142,8 +154,11 @@ export class Router {
     this.resolve = options.resolve ?? resolveBinary
     this.createServer = options.createServer ?? ((executable, root, events) => new PhpantomServer({ executable, root, events }))
     this.idleMs = options.idleMs ?? IDLE_MS
+    this.leaseMs = options.leaseMs ?? LEASE_MS
     this.session = options.sessionId ?? randomUUID()
     this.outbox = new Outbox((event, payload, postOptions) => host.post(event, payload, postOptions))
+    this.sweepTimer = setInterval(() => this.sweep(), options.sweepMs ?? SWEEP_MS)
+    this.sweepTimer.unref?.()
   }
 
   async open(input: Input<'phpantom.open'>, caller: { panel: string }): Promise<AttachStatus> {
@@ -156,6 +171,7 @@ export class Router {
       return { state: 'error', message: `chunk ${input.index} of ${input.docId} arrived out of order` }
     }
     parts.push(input.chunk)
+    this.seen(input.docId)
     if (!input.last) {
       return { state: 'pending' }
     }
@@ -267,6 +283,10 @@ export class Router {
     return { opened: true }
   }
 
+  async ping(input: Input<'phpantom.ping'>): Promise<Output<'phpantom.ping'>> {
+    return this.attached(input.docId, input.session) ? { ok: true } : { detached: true }
+  }
+
   async peek(input: Input<'phpantom.peek'>): Promise<Output<'phpantom.peek'>> {
     if (!this.attached(input.docId, input.session)) {
       return { files: [], omitted: input.uris.length }
@@ -351,6 +371,7 @@ export class Router {
 
   async dispose(): Promise<void> {
     this.disposed = true
+    clearInterval(this.sweepTimer)
     if (this.statusTimer) {
       clearTimeout(this.statusTimer)
       this.statusTimer = null
@@ -370,6 +391,7 @@ export class Router {
       known.version = 1
       known.needsResync = false
       known.panel = panel
+      known.lastSeen = Date.now()
       this.sendFull(known.server, known.file, text)
       return { state: 'ready', session: this.session, uri: known.uri, capabilities: known.server.capabilities }
     }
@@ -436,7 +458,8 @@ export class Router {
       version: 1,
       mirror: new DocumentMirror(text),
       needsResync: false,
-      diagnostics: file.diagnostics?.length ?? 0
+      diagnostics: file.diagnostics?.length ?? 0,
+      lastSeen: Date.now()
     })
     entry.docs.add(input.docId)
     this.cancelIdle(entry)
@@ -454,9 +477,46 @@ export class Router {
     }
   }
 
+  /** The document when `session` is current and its server alive; finding it renews its lease. */
   private attached(docId: string, session: string): Doc | null {
     const doc = this.docs.get(docId)
-    return session === this.session && doc && doc.server.alive ? doc : null
+    if (session !== this.session || !doc || !doc.server.alive) {
+      return null
+    }
+    doc.lastSeen = Date.now()
+    return doc
+  }
+
+  private seen(docId: string): void {
+    const doc = this.docs.get(docId)
+    if (doc) {
+      doc.lastSeen = Date.now()
+    }
+  }
+
+  /** Releases documents whose editor went quiet, as `close` would. */
+  private sweep(): void {
+    if (this.disposed) {
+      return
+    }
+    const expired = (doc: Doc | undefined): doc is Doc => doc !== undefined && Date.now() - doc.lastSeen > this.leaseMs
+    for (const doc of this.docs.values()) {
+      if (!expired(doc)) {
+        continue
+      }
+      const docId = doc.docId
+      // Why in its lane and checked again there: an open in flight for this docId finishes first, and a
+      // document it attached anew has just been seen.
+      void this.inLane(docId, async () => {
+        const current = this.docs.get(docId)
+        if (this.disposed || current !== doc || !expired(current)) {
+          return
+        }
+        this.host.log(`Released ${current.path}: its editor was not heard from for ${Math.round(this.leaseMs / 1000)} s (${this.docs.size - 1} document(s) still open)`)
+        this.chunks.delete(docId)
+        this.detach(current)
+      }).catch((error: unknown) => this.host.log(`releasing ${docId} failed: ${messageOf(error)}`))
+    }
   }
 
   private detach(doc: Doc): void {

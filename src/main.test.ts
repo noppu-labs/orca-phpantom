@@ -13,6 +13,7 @@ test('registers every handler and sets the status bar', async () => {
     assert.deepEqual(await worker.request('phpantom.request', { docId: 'd1', session: 'old', method: 'textDocument/hover', params: {} }), { detached: true })
     assert.deepEqual(await worker.request('phpantom.navigate', { docId: 'd1', session: 'old', uri: 'file:///x.php', range }), { opened: false, reason: 'failed' })
     assert.deepEqual(await worker.request('phpantom.peek', { docId: 'd1', session: 'old', uris: ['file:///x.php'] }), { files: [], omitted: 1 })
+    assert.deepEqual(await worker.request('phpantom.ping', { docId: 'd1', session: 'old' }), { detached: true })
     assert.deepEqual(await worker.request('phpantom.close', { docId: 'd1' }), { ok: true })
     assert.ok(worker.host.callsOf('statusBar.update').length >= 1)
     assert.equal(typeof (await worker.command('phpantom.status')), 'string')

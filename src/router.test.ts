@@ -41,6 +41,8 @@ async function setup(
     rows?: (dir: string) => WorkspaceRow[]
     list?: (dir: string, options?: { fresh?: boolean }) => WorkspaceRow[]
     idleMs?: number
+    leaseMs?: number
+    sweepMs?: number
     resolve?: () => Promise<Resolution>
   } = {}
 ) {
@@ -78,7 +80,9 @@ async function setup(
       started.push({ root, server, events })
       return server
     },
-    ...(options.idleMs === undefined ? {} : { idleMs: options.idleMs })
+    ...(options.idleMs === undefined ? {} : { idleMs: options.idleMs }),
+    ...(options.leaseMs === undefined ? {} : { leaseMs: options.leaseMs }),
+    ...(options.sweepMs === undefined ? {} : { sweepMs: options.sweepMs })
   })
   cleanups.push(() => rmSync(dir, { recursive: true, force: true }))
   cleanups.push(() => router.dispose())
@@ -98,6 +102,8 @@ async function setup(
           return router.navigate(input)
         case 'phpantom.peek':
           return router.peek(input)
+        case 'phpantom.ping':
+          return router.ping(input)
         default:
           throw new Error(`unknown request ${name}`)
       }
@@ -551,4 +557,72 @@ test('restartAll tells open documents and detaches them', async () => {
   assert.deepEqual(await worker.request('phpantom.request', { docId: 'd1', session: status.session, method: 'textDocument/hover', params: {} }), { detached: true })
   assert.equal((await openWhole(worker, { docId: 'd1', language: 'php', workspaceId: 'ws-a', text: '<?php // ok\n' })).state, 'ready')
   assert.equal(started.length, 2)
+})
+
+test('a document that stops pinging is released after the lease', async () => {
+  const { worker, started, logs } = await setup({ files: { 'a/A.php': '<?php // ok\n' }, leaseMs: 150, sweepMs: 20, idleMs: 50 })
+  const status = await openWhole(worker, { docId: 'd1', language: 'php', workspaceId: 'ws-a', text: '<?php // ok\n' })
+  assert.deepEqual(await worker.request('phpantom.ping', { docId: 'd1', session: status.session }), { ok: true })
+  const server = started[0].server
+  await until(() => server.notified.some((n) => n.method === 'textDocument/didClose'))
+  assert.equal(server.notified.find((n) => n.method === 'textDocument/didClose')!.params.textDocument.uri, status.uri)
+  // It was the server's only document, so the server goes idle and stops.
+  await until(() => !server.alive)
+  assert.deepEqual(await worker.request('phpantom.ping', { docId: 'd1', session: status.session }), { detached: true })
+  assert.ok(logs.some((line) => /Released/.test(line)), logs.join('\n'))
+})
+
+test('a document that keeps pinging is kept', async () => {
+  const { worker, started } = await setup({ files: { 'a/A.php': '<?php // ok\n' }, leaseMs: 150, sweepMs: 20 })
+  const status = await openWhole(worker, { docId: 'd1', language: 'php', workspaceId: 'ws-a', text: '<?php // ok\n' })
+  for (let i = 0; i < 15; i++) {
+    await sleep(30)
+    assert.deepEqual(await worker.request('phpantom.ping', { docId: 'd1', session: status.session }), { ok: true })
+  }
+  assert.ok(!started[0].server.notified.some((n) => n.method === 'textDocument/didClose'))
+  assert.equal(started[0].server.alive, true)
+})
+
+test('changes and requests renew the lease as pings do', async () => {
+  const { worker, started } = await setup({ files: { 'a/A.php': '<?php // ok\n' }, leaseMs: 150, sweepMs: 20 })
+  const status = await openWhole(worker, { docId: 'd1', language: 'php', workspaceId: 'ws-a', text: '<?php // ok\n' })
+  let length = 12
+  for (let version = 2; version < 10; version++) {
+    await sleep(30)
+    length += 1
+    assert.deepEqual(await worker.request('phpantom.change', { docId: 'd1', session: status.session, version, changes: [insert(0, 'x')], length }), { ok: true })
+    await sleep(30)
+    assert.deepEqual(await worker.request('phpantom.request', { docId: 'd1', session: status.session, method: 'textDocument/hover', params: { position: at(0, 0) } }), { result: { contents: { kind: 'markdown', value: `len=${length}` } } })
+  }
+  assert.ok(!started[0].server.notified.some((n) => n.method === 'textDocument/didClose'))
+})
+
+test('two holders on one file: the one that expires leaves the file open for the other', async () => {
+  const text = '<?php // ok\n'
+  const { worker, router, started } = await setup({ files: { 'a/A.php': text }, leaseMs: 150, sweepMs: 20 })
+  const one = await openWhole(worker, { docId: 'd1', language: 'php', workspaceId: 'ws-a', text })
+  const two = await openWhole(worker, { docId: 'd2', language: 'php', workspaceId: 'ws-a', text, panel: 'panel-2' })
+  assert.equal(one.uri, two.uri)
+  assert.match(router.describe(), /2 open document\(s\)/)
+  // d2 edits, so PHPantom holds d2's text when d1 leaves.
+  assert.deepEqual(await worker.request('phpantom.change', { docId: 'd2', session: two.session, version: 2, changes: [insert(0, 'Z')], length: 13 }), { ok: true })
+  // Only d2 renews its lease.
+  const deadline = Date.now() + 4000
+  while (!/1 open document\(s\)/.test(router.describe())) {
+    assert.ok(Date.now() < deadline, 'd1 was never released')
+    await sleep(30)
+    assert.deepEqual(await worker.request('phpantom.ping', { docId: 'd2', session: two.session }), { ok: true })
+  }
+  assert.deepEqual(await worker.request('phpantom.ping', { docId: 'd1', session: one.session }), { detached: true })
+  assert.ok(!started[0].server.notified.some((n) => n.method === 'textDocument/didClose'))
+  assert.equal(await serverText(worker, 'd2', two.session), 'Z<?php // ok\n')
+  assert.equal(started[0].server.alive, true)
+})
+
+test('a ping under a stale session or for an unknown document answers detached', async () => {
+  const { worker } = await setup({ files: { 'a/A.php': '<?php // ok\n' } })
+  const status = await openWhole(worker, { docId: 'd1', language: 'php', workspaceId: 'ws-a', text: '<?php // ok\n' })
+  assert.deepEqual(await worker.request('phpantom.ping', { docId: 'd1', session: 'an-older-session' }), { detached: true })
+  assert.deepEqual(await worker.request('phpantom.ping', { docId: 'unknown', session: status.session }), { detached: true })
+  assert.deepEqual(await worker.request('phpantom.ping', { docId: 'd1', session: status.session }), { ok: true })
 })

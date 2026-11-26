@@ -56,6 +56,7 @@ export default async function activate(orca: OrcaWorkerApi): Promise<void> {
   orca.panels.handle('phpantom.close', (input) => active.close(input))
   orca.panels.handle('phpantom.navigate', (input) => active.navigate(input))
   orca.panels.handle('phpantom.peek', (input) => active.peek(input))
+  orca.panels.handle('phpantom.ping', (input) => active.ping(input))
   orca.commands.register('phpantom.status', () => active.describe())
   orca.commands.register('phpantom.restart', () => active.restartAll())
   orca.settings.onDidChange(() => active.forgetBinary())

@@ -18,6 +18,8 @@ declare module 'orca' {
     'phpantom.close': { input: { docId: string }; output: { ok: true } }
     'phpantom.navigate': { input: { docId: string; session: string; uri: string; range: LspRange }; output: { opened: true } | { opened: false; reason: 'outside-workspace' | 'not-a-file' | 'failed' } }
     'phpantom.peek': { input: { docId: string; session: string; uris: string[] }; output: { files: { uri: string; text: string }[]; omitted: number } }
+    /** Renews the document's lease; the worker releases a document it has not heard from in a minute. */
+    'phpantom.ping': { input: { docId: string; session: string }; output: { ok: true } | { detached: true } }
   }
   interface PluginPanelEvents {
     'phpantom.diagnostics': { docId: string; diagnostics: unknown[]; truncated: number }

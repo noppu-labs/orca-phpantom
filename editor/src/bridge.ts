@@ -62,6 +62,8 @@ export type BridgeOptions = {
   mountWindowMs?: number
   /** How long after a workspace switch `readContext` may still answer the previous workspace (R2). */
   settleMs?: number
+  /** Time between two pings that renew the worker's lease on this document while attached. */
+  pingMs?: number
 }
 
 // Requests whose answer edits the text: applied to a text that moved since, they would corrupt it.
@@ -123,6 +125,7 @@ export class LspBridge {
   private readonly reattachGapMs: number
   private readonly mountWindowMs: number
   private readonly settleMs: number
+  private readonly pingMs: number
   private readonly subscriptions: Disposable[] = []
   private readonly listeners: { [K in keyof Events]: Set<(value: Events[K]) => void> } = {
     ready: new Set(),
@@ -169,6 +172,8 @@ export class LspBridge {
   private reattaching: Promise<boolean> | null = null
   private reattachTimer: ReturnType<typeof setTimeout> | undefined
   private lastReattachAt = Number.NEGATIVE_INFINITY
+  private pingTimer: ReturnType<typeof setInterval> | undefined
+  private pinging = false
 
   constructor(host: BridgeHost, source: DocumentSource, options: BridgeOptions = {}) {
     this.host = host
@@ -182,6 +187,7 @@ export class LspBridge {
     this.reattachGapMs = options.reattachGapMs ?? 5000
     this.mountWindowMs = options.mountWindowMs ?? 1500
     this.settleMs = options.settleMs ?? 1500
+    this.pingMs = options.pingMs ?? 20_000
 
     // Listen before the first open: PHPantom publishes diagnostics while the open is still answering.
     const mine = (payload: { docId?: unknown } | null | undefined): boolean => payload?.docId === this.docId
@@ -317,6 +323,7 @@ export class LspBridge {
     clearTimeout(this.syncTimer)
     clearTimeout(this.reattachTimer)
     clearTimeout(this.retryTimer)
+    this.stopPinging()
     for (const subscription of this.subscriptions) subscription.dispose()
     this.host.request('phpantom.close', { docId: this.docId }).catch(() => undefined)
   }
@@ -354,7 +361,10 @@ export class LspBridge {
     this.queue = []
     this.needsResync = false
     this.accepting = true
-    if (!resync) this.attachedTo = null
+    if (!resync) {
+      this.attachedTo = null
+      this.stopPinging()
+    }
     const chunks = chunkText(text)
     let answer: AttachStatus = { state: 'pending' }
     let cut = false
@@ -402,6 +412,7 @@ export class LspBridge {
       this.broken = 0
       this.retryable = false
       clearTimeout(this.retryTimer)
+      this.startPinging()
       if (fresh) {
         this.settle(answer)
         this.emit('ready', answer)
@@ -432,6 +443,7 @@ export class LspBridge {
   private detach(): void {
     const had = this.attachedTo !== null
     this.attachedTo = null
+    this.stopPinging()
     if (this.current?.state === 'ready') this.current = null
     this.accepting = false
     this.queue = []
@@ -474,6 +486,39 @@ export class LspBridge {
       this.retries += 1
       void this.start(false)
     }, Math.max(delay, this.retryEarliest - Date.now()))
+  }
+
+  // --- the lease ---
+
+  // Why: Orca remounts an editor frame (with a new docId) each time its tab shows, and the old frame's
+  // pagehide close may never reach the worker, so the worker releases what it stops hearing from.
+  private startPinging(): void {
+    if (this.pingTimer !== undefined || this.disposed) return
+    this.pingTimer = setInterval(() => void this.ping(), this.pingMs)
+  }
+
+  private stopPinging(): void {
+    clearInterval(this.pingTimer)
+    this.pingTimer = undefined
+  }
+
+  /** Not in the lane: it must not wait behind a long open. A released document goes the way of a lost one. */
+  private async ping(): Promise<void> {
+    const attachment = this.attachedTo
+    if (!attachment || this.pinging || this.disposed) return
+    this.pinging = true
+    const generation = this.generation
+    let released: boolean
+    try {
+      const answer = await this.host.request('phpantom.ping', { docId: this.docId, session: attachment.session })
+      released = 'detached' in answer
+    } catch (error) {
+      // Only a missing worker means the document is gone; a timeout says nothing about it.
+      released = codeOf(error) === 'unavailable'
+    } finally {
+      this.pinging = false
+    }
+    if (released && generation === this.generation && this.attachedTo === attachment && !this.disposed) this.lost()
   }
 
   // --- the workspace (R2) ---

@@ -34,6 +34,7 @@ type FakeHost = BridgeHost & {
     open: OpenHandler
     change: (input: any, host: FakeHost) => Answer
     request: (input: any, host: FakeHost) => Answer
+    ping: (input: any, host: FakeHost) => Answer
   }
   session: string
   context: WorkspaceContext | null
@@ -87,6 +88,7 @@ function fakeHost(handlers: Partial<FakeHost['handlers']> = {}, context: Workspa
         return { ok: true }
       },
       request: (input, self) => (self.mirror && input.session === self.session ? { result: `answer to ${input.method}` } : { detached: true }),
+      ping: (input, self) => (self.mirror && input.session === self.session ? { ok: true } : { detached: true }),
       ...handlers
     },
     session: 's1',
@@ -130,6 +132,7 @@ function fakeHost(handlers: Partial<FakeHost['handlers']> = {}, context: Workspa
         }
         if (name === 'phpantom.change') return await host.handlers.change(input, host)
         if (name === 'phpantom.request') return await host.handlers.request(input, host)
+        if (name === 'phpantom.ping') return await host.handlers.ping(input, host)
         return { ok: true }
       } finally {
         inFlight[key] -= 1
@@ -739,4 +742,63 @@ test('closing the page closes the document', async () => {
   bridge.dispose()
   await until(() => host.calls('phpantom.close').length === 1, 'a close')
   assert.deepEqual(host.calls('phpantom.close')[0].input, { docId: bridge.docId })
+})
+
+test('pings while attached, and stops after dispose', async () => {
+  const host = fakeHost()
+  const bridge = new LspBridge(host, source('<?php\n'), { ...FAST, pingMs: 15 })
+  await wait(40)
+  // Nothing to renew before the first attach.
+  assert.equal(host.calls('phpantom.ping').length, 0)
+  await bridge.attach()
+  await until(() => host.calls('phpantom.ping').length >= 3, 'three pings')
+  assert.deepEqual(host.calls('phpantom.ping')[0].input, { docId: bridge.docId, session: 's1' })
+  bridge.dispose()
+  const sent = host.calls('phpantom.ping').length
+  await wait(60)
+  assert.equal(host.calls('phpantom.ping').length, sent)
+})
+
+test('does not ping a document that never attached', async () => {
+  const host = fakeHost({ open: (input) => (input.last ? { state: 'remote', host: 'ssh:box' } : { state: 'pending' }) })
+  const bridge = new LspBridge(host, source('<?php\n'), { ...FAST, pingMs: 10 })
+  assert.equal((await bridge.attach()).state, 'remote')
+  await wait(60)
+  assert.equal(host.calls('phpantom.ping').length, 0)
+  bridge.dispose()
+})
+
+test('a detached ping answer re-attaches', async () => {
+  const host = fakeHost()
+  const bridge = new LspBridge(host, source('<?php\n'), { ...FAST, pingMs: 15 })
+  await bridge.attach()
+  const ready: string[] = []
+  bridge.onReady((status) => ready.push(status.session))
+  // The worker released the document (its lease ran out) and now has another session.
+  host.restart('s2')
+  await until(() => ready.length === 1, 'a re-attach')
+  assert.deepEqual(ready, ['s2'])
+  assert.equal(fullOpens(host).length, 2)
+  assert.equal(bridge.status?.state, 'ready')
+  await until(() => host.calls('phpantom.ping').some((call) => call.input.session === 's2'), 'a ping under the new session')
+  bridge.dispose()
+})
+
+test('an unavailable ping re-attaches; another failure keeps pinging', async () => {
+  const host = fakeHost()
+  const bridge = new LspBridge(host, source('<?php\n'), { ...FAST, pingMs: 15 })
+  await bridge.attach()
+  let failures = 0
+  host.handlers.ping = () => {
+    failures += 1
+    if (failures === 1) throw Object.assign(new Error('timed out'), { code: 'timeout' })
+    host.handlers.ping = fakeHost().handlers.ping
+    throw Object.assign(new Error('no worker'), { code: 'unavailable' })
+  }
+  await until(() => fullOpens(host).length === 2, 'a re-attach')
+  // The timeout alone did not re-attach: only the unavailable one did.
+  assert.equal(failures, 2)
+  await until(() => host.calls('phpantom.ping').length >= failures + 2, 'pinging again')
+  assert.equal(bridge.status?.state, 'ready')
+  bridge.dispose()
 })
