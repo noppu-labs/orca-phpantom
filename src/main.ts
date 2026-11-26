@@ -15,8 +15,8 @@ export default async function activate(orca: OrcaWorkerApi): Promise<void> {
     orca.host.call('statusBar.update', update).catch((error: unknown) => orca.log(`status bar update failed: ${String(error)}`))
   }
   const host: RouterHost = {
-    listWorkspaces() {
-      if (!workspaces || Date.now() - workspaces.at > WORKSPACE_LIST_TTL_MS) {
+    listWorkspaces(options) {
+      if (options?.fresh || !workspaces || Date.now() - workspaces.at > WORKSPACE_LIST_TTL_MS) {
         const rows = orca.host.call('workspace.list').then(({ workspaces: list }) =>
           list.map((row): WorkspaceRow => ({ id: row.id, name: row.name, branch: row.branch, path: row.path, hostId: row.hostId }))
         )

@@ -34,7 +34,15 @@ afterEach(async () => {
 
 const spawnFake = ((_executable: string, _args: string[], options: object) => spawn(process.execPath, [FAKE], options as never)) as unknown as typeof spawn
 
-async function setup(options: { files?: Record<string, string>; rows?: (dir: string) => WorkspaceRow[]; idleMs?: number; resolve?: () => Promise<Resolution> } = {}) {
+async function setup(
+  options: {
+    files?: Record<string, string>
+    rows?: (dir: string) => WorkspaceRow[]
+    list?: (dir: string, options?: { fresh?: boolean }) => WorkspaceRow[]
+    idleMs?: number
+    resolve?: () => Promise<Resolution>
+  } = {}
+) {
   const dir = realpathSync(mkdtempSync(join(tmpdir(), 'phpantom-router-')))
   mkdirSync(join(dir, 'a'))
   mkdirSync(join(dir, 'b'))
@@ -54,7 +62,7 @@ async function setup(options: { files?: Record<string, string>; rows?: (dir: str
   const opened: { workspaceId: string; path: string }[] = []
   const logs: string[] = []
   const host: RouterHost = {
-    listWorkspaces: async () => rows,
+    listWorkspaces: async (listOptions) => (options.list ? options.list(dir, listOptions) : rows),
     openEditor: async (workspaceId, path) => void opened.push({ workspaceId, path }),
     post: (event, payload, postOptions) => void posts.push({ event, payload, panel: postOptions.panel }),
     status: (update) => void statuses.push(update),
@@ -185,6 +193,8 @@ test('re-opening a docId closes the old attachment', async () => {
   const text = '<?php BAD\n'
   const { worker, started, posts } = await setup({ files: { 'a/A.php': text, 'b/A.php': text } })
   const first = await openWhole(worker, { docId: 'd1', language: 'php', workspaceId: 'ws-a', text })
+  // Queued for d1 just before the re-attach: it must never be delivered.
+  started[0].events.diagnostics(first.uri, [{ range: { start: at(0, 0), end: at(0, 1) }, message: 'stale-from-a', severity: 1 }])
   const second = await openWhole(worker, { docId: 'd1', language: 'php', workspaceId: 'ws-b', text })
   assert.equal(first.state, 'ready')
   assert.equal(second.state, 'ready')
@@ -193,14 +203,71 @@ test('re-opening a docId closes the old attachment', async () => {
   const [serverA, serverB] = started
   assert.ok(serverA.server.notified.some((n) => n.method === 'textDocument/didClose' && n.params.textDocument.uri === first.uri))
   assert.ok(!serverB.server.notified.some((n) => n.method === 'textDocument/didClose'))
+  serverA.events.diagnostics(first.uri, [{ range: { start: at(0, 6), end: at(0, 9) }, message: 'late-from-a', severity: 1 }])
   await until(() => diagnosticsFor(posts, 'd1').length > 0)
   await sleep(300)
-  posts.length = 0
-  serverA.events.diagnostics(first.uri, [{ range: { start: at(0, 6), end: at(0, 9) }, message: 'bad', severity: 1 }])
-  await sleep(300)
-  assert.equal(diagnosticsFor(posts, 'd1').length, 0)
-  serverB.events.diagnostics(second.uri, [])
-  await until(() => diagnosticsFor(posts, 'd1').length === 1)
+  const messages = diagnosticsFor(posts, 'd1').flatMap((p) => p.payload.diagnostics.map((d: any) => d.message))
+  assert.ok(!messages.includes('stale-from-a') && !messages.includes('late-from-a'), messages.join(','))
+})
+
+test('a re-attach that finds no file drops what the old attachment had queued', async () => {
+  const text = '<?php // ok\n'
+  const { worker, started, posts } = await setup({ files: { 'a/A.php': text } })
+  const first = await openWhole(worker, { docId: 'd1', language: 'php', workspaceId: 'ws-a', text })
+  started[0].events.diagnostics(first.uri, [{ range: { start: at(0, 0), end: at(0, 1) }, message: 'stale-from-a', severity: 1 }])
+  assert.deepEqual(await openWhole(worker, { docId: 'd1', language: 'php', workspaceId: 'ws-a', text: '<?php // found nowhere\n' }), { state: 'single-file', reason: 'no-file' })
+  await sleep(400)
+  assert.deepEqual(diagnosticsFor(posts, 'd1'), [])
+})
+
+test('two documents on one file share it: one didOpen, no didClose while one remains', async () => {
+  const text = '<?php // ok\n'
+  const { worker, started, posts } = await setup({ files: { 'a/A.php': text } })
+  const one = await openWhole(worker, { docId: 'd1', language: 'php', workspaceId: 'ws-a', text })
+  const two = await openWhole(worker, { docId: 'd2', language: 'php', workspaceId: 'ws-a', text, panel: 'panel-2' })
+  assert.equal(one.uri, two.uri)
+  assert.equal(started.length, 1)
+  const server = started[0].server
+  const sent = () => server.notified.filter((n) => n.method.startsWith('textDocument/'))
+  assert.deepEqual(sent().map((n) => n.method), ['textDocument/didOpen', 'textDocument/didChange'])
+  assert.deepEqual(sent()[1].params.contentChanges, [{ text }])
+
+  const insert = (character: number, what: string) => ({ range: { start: at(0, character), end: at(0, character) }, text: what })
+  assert.deepEqual(await worker.request('phpantom.change', { docId: 'd1', session: one.session, version: 2, changes: [insert(5, 'X')], length: 13 }), { ok: true })
+  assert.deepEqual(await worker.request('phpantom.change', { docId: 'd2', session: two.session, version: 2, changes: [insert(5, 'X')], length: 13 }), { ok: true })
+  const versions = sent().filter((n) => n.method !== 'textDocument/didClose').map((n) => n.params.textDocument.version)
+  assert.deepEqual(versions, [1, 2, 3, 4])
+
+  assert.deepEqual(await worker.request('phpantom.close', { docId: 'd1' }), { ok: true })
+  assert.ok(!server.notified.some((n) => n.method === 'textDocument/didClose'))
+  const last = sent().at(-1)!
+  assert.equal(last.method, 'textDocument/didChange')
+  assert.deepEqual(last.params.contentChanges, [{ text: '<?phpX // ok\n' }])
+
+  assert.deepEqual(await worker.request('phpantom.change', { docId: 'd2', session: two.session, version: 3, changes: [insert(0, 'BAD ')], length: 17 }), { ok: true })
+  await until(() => diagnosticsFor(posts, 'd2').some((p) => p.payload.diagnostics.length === 1))
+  assert.equal(diagnosticsFor(posts, 'd2').at(-1)!.panel, 'panel-2')
+  assert.deepEqual(await worker.request('phpantom.request', { docId: 'd2', session: two.session, method: 'textDocument/hover', params: { position: at(0, 0) } }), { result: { contents: { kind: 'markdown', value: 'len=17' } } })
+  assert.deepEqual(await worker.request('phpantom.close', { docId: 'd2' }), { ok: true })
+  assert.equal(server.notified.filter((n) => n.method === 'textDocument/didClose').length, 1)
+})
+
+test('a focused workspace missing from the cached list is looked up again', async () => {
+  const text = '<?php // same in both\n'
+  const fresh: boolean[] = []
+  const { worker, docs } = await setup({
+    files: { 'a/A.php': text, 'b/A.php': text },
+    list: (dir, options) => {
+      fresh.push(options?.fresh === true)
+      const a = { id: 'ws-a', name: 'a', branch: 'main', path: join(dir, 'a'), hostId: 'local' }
+      const b = { id: 'ws-new', name: 'b', branch: 'feat', path: join(dir, 'b'), hostId: 'local' }
+      return options?.fresh ? [a, b] : [a]
+    }
+  })
+  const status = await openWhole(worker, { docId: 'd1', language: 'php', workspaceId: 'ws-new', text })
+  assert.equal(status.state, 'ready')
+  assert.equal(status.uri, pathToFileURL(docs['b/A.php']).href)
+  assert.deepEqual(fresh, [false, true])
 })
 
 test('a length mismatch asks for a resync', async () => {
@@ -283,8 +350,8 @@ test('a file found nowhere is single-file', async () => {
 
 test('navigate stores a reveal that the next open of that file picks up', async () => {
   const yText = '<?php\nclass Y {}\n'
-  const { worker, docs, opened, posts } = await setup({
-    files: { 'a/composer.json': '{}', 'a/app/A.php': '<?php // ok\n', 'a/vendor/x/Y.php': yText }
+  const { worker, docs, opened, posts, started } = await setup({
+    files: { 'a/composer.json': '{}', 'a/app/A.php': '<?php // ok\n', 'a/vendor/x/Y.php': yText, 'a/vendor/x/composer.json': '{}' }
   })
   const status = await openWhole(worker, { docId: 'd1', language: 'php', workspaceId: 'ws-a', text: '<?php // ok\n' })
   const range: LspRange = { start: at(1, 6), end: at(1, 7) }
@@ -295,6 +362,8 @@ test('navigate stores a reveal that the next open of that file picks up', async 
   assert.equal(second.state, 'ready')
   assert.equal(second.uri, target)
   assert.deepEqual(second.reveal, range)
+  // The vendor package has its own composer.json, but it belongs to the project's server.
+  assert.equal(started.length, 1)
 
   // Already open in another tab: that tab is told, and editor.open still focuses it.
   assert.deepEqual(await worker.request('phpantom.navigate', { docId: 'd1', session: status.session, uri: target, range }), { opened: true })

@@ -12,14 +12,15 @@ import { locateFile } from './locate/locate.ts'
 import { composerRoot, isLocal, resolveFocused, workspaceFor, type WorkspaceRow } from './locate/workspaces.ts'
 import { DocumentMirror } from './lsp/mirror.ts'
 import { PhpantomServer, type RefreshKind, type ServerEvents } from './lsp/server.ts'
-import { sameUri } from './lsp/uri.ts'
+import { sameUri, uriKey } from './lsp/uri.ts'
 import { Outbox } from './outbox.ts'
 import type { AttachStatus } from './protocol.ts'
 import { PendingReveals } from './reveals.ts'
 import { aggregate, renderStatus, type ServerState, type StatusBarUpdate } from './status.ts'
 
 export type RouterHost = {
-  listWorkspaces(): Promise<WorkspaceRow[]>
+  /** May answer from a short cache; `fresh` asks Orca again. */
+  listWorkspaces(options?: { fresh?: boolean }): Promise<WorkspaceRow[]>
   /** `path` is relative to the workspace, with forward slashes: `editor.open` refuses absolute paths. */
   openEditor(workspaceId: string, path: string): Promise<void>
   post(event: string, payload: unknown, options: { panel: string }): void
@@ -44,10 +45,20 @@ type Entry = {
   starting: Promise<PhpantomServer> | null
   state: ServerState
   docs: Set<string>
+  /** Open files by `uriKey`: two documents of one file share a single didOpen. */
+  files: Map<string, SharedFile>
   /** When this root was restarted after a crash, for the 3-in-5-minutes budget. */
   restarts: number[]
   crashed: boolean
   idle: ReturnType<typeof setTimeout> | null
+}
+
+/** One file as PHPantom knows it, and the documents attached to it. */
+type SharedFile = {
+  uri: string
+  holders: Set<string>
+  /** What PHPantom is told; it only rises, so a resync never sends PHPantom an older version. */
+  version: number
 }
 
 type Doc = {
@@ -57,11 +68,11 @@ type Doc = {
   path: string
   root: string
   workspace: WorkspaceRow
+  entry: Entry
   server: PhpantomServer
+  file: SharedFile
   /** The editor's version, which restarts at 1 on a resync. */
   version: number
-  /** What PHPantom is told; it only rises, so a resync never sends PHPantom an older version. */
-  lspVersion: number
   mirror: DocumentMirror
   needsResync: boolean
   diagnostics: number
@@ -149,8 +160,7 @@ export class Router {
       return { resync: true }
     }
     doc.version = input.version
-    doc.lspVersion += 1
-    doc.server.notify('textDocument/didChange', { textDocument: { uri: doc.uri, version: doc.lspVersion }, contentChanges: input.changes })
+    this.sendChange(doc.server, doc.file, input.changes)
     return { ok: true }
   }
 
@@ -260,7 +270,8 @@ export class Router {
   /** Stops every server; open editors are told `restarting` and re-attach, which starts them again. */
   async restartAll(): Promise<string> {
     const entries = [...this.pool.values()]
-    for (const doc of this.docs.values()) {
+    for (const doc of [...this.docs.values()]) {
+      this.forget(doc.docId)
       this.outbox.send(doc.panel, `status:${doc.docId}`, 'phpantom.status', { docId: doc.docId, state: 'restarting' })
     }
     this.docs.clear()
@@ -327,10 +338,9 @@ export class Router {
     if (input.resync && known?.server.alive) {
       known.mirror = new DocumentMirror(text)
       known.version = 1
-      known.lspVersion += 1
       known.needsResync = false
       known.panel = panel
-      known.server.notify('textDocument/didChange', { textDocument: { uri: known.uri, version: known.lspVersion }, contentChanges: [{ text }] })
+      this.sendChange(known.server, known.file, [{ text }])
       return { state: 'ready', session: this.session, uri: known.uri, capabilities: known.server.capabilities }
     }
     if (known) {
@@ -338,7 +348,12 @@ export class Router {
       this.detach(known)
     }
 
-    const rows = await this.host.listWorkspaces()
+    let rows = await this.host.listWorkspaces()
+    if (input.workspaceId !== null && !rows.some((row) => row.id === input.workspaceId)) {
+      // Why ask again: a worktree made in the last few seconds is missing from the cached list, and
+      // without its row the file would attach to a sibling's copy (or a remote one to a local look-alike).
+      rows = await this.host.listWorkspaces({ fresh: true })
+    }
     const context = input.branch !== null && input.displayName !== null ? { branch: input.branch, displayName: input.displayName } : undefined
     const focused = resolveFocused(rows, input.workspaceId, context)
     if (focused && !isLocal(focused)) {
@@ -367,7 +382,17 @@ export class Router {
     }
     const { entry, server } = started
     const uri = pathToFileURL(path).href
-    server.notify('textDocument/didOpen', { textDocument: { uri, languageId: input.language, version: 1, text } })
+    const key = uriKey(uri)
+    let file = entry.files.get(key)
+    if (file) {
+      // Another document already holds this file: PHPantom gets this one's text, not a second didOpen.
+      this.sendChange(server, file, [{ text }])
+    } else {
+      file = { uri, holders: new Set(), version: 1 }
+      entry.files.set(key, file)
+      server.notify('textDocument/didOpen', { textDocument: { uri, languageId: input.language, version: 1, text } })
+    }
+    file.holders.add(input.docId)
     this.docs.set(input.docId, {
       docId: input.docId,
       panel,
@@ -375,9 +400,10 @@ export class Router {
       path,
       root,
       workspace,
+      entry,
       server,
+      file,
       version: 1,
-      lspVersion: 1,
       mirror: new DocumentMirror(text),
       needsResync: false,
       diagnostics: 0
@@ -401,15 +427,32 @@ export class Router {
   }
 
   private detach(doc: Doc): void {
-    doc.server.notify('textDocument/didClose', { textDocument: { uri: doc.uri } })
-    this.docs.delete(doc.docId)
-    const entry = this.pool.get(doc.root)
-    if (entry) {
-      entry.docs.delete(doc.docId)
-      if (entry.docs.size === 0) {
-        this.scheduleIdle(entry)
-      }
+    const { entry, file } = doc
+    file.holders.delete(doc.docId)
+    const remaining = [...file.holders].map((docId) => this.docs.get(docId)).find((other) => other !== undefined)
+    if (remaining) {
+      // Why resend: PHPantom holds whatever the leaving document sent last; the one that stays is what is open.
+      this.sendChange(doc.server, file, [{ text: remaining.mirror.text }])
+    } else {
+      entry.files.delete(uriKey(file.uri))
+      doc.server.notify('textDocument/didClose', { textDocument: { uri: file.uri } })
     }
+    this.forget(doc.docId)
+    entry.docs.delete(doc.docId)
+    if (entry.docs.size === 0 && this.pool.get(entry.root) === entry) {
+      this.scheduleIdle(entry)
+    }
+  }
+
+  /** Drops a document and anything still queued for it, so an old attachment never posts to it. */
+  private forget(docId: string): void {
+    this.docs.delete(docId)
+    this.outbox.drop(`diag:${docId}`)
+  }
+
+  private sendChange(server: PhpantomServer, file: SharedFile, contentChanges: unknown[]): void {
+    file.version += 1
+    server.notify('textDocument/didChange', { textDocument: { uri: file.uri, version: file.version }, contentChanges })
   }
 
   private inLane<T>(docId: string, task: () => Promise<T>): Promise<T> {
@@ -444,7 +487,7 @@ export class Router {
         entry.restarts.push(now)
       }
       if (!entry) {
-        entry = { root, server: null, starting: null, state: { phase: 'starting' }, docs: new Set(), restarts: [], crashed: false, idle: null }
+        entry = { root, server: null, starting: null, state: { phase: 'starting' }, docs: new Set(), files: new Map(), restarts: [], crashed: false, idle: null }
         this.pool.set(root, entry)
       }
       const starting = entry
@@ -480,6 +523,7 @@ export class Router {
     const server = this.createServer(resolution.path, entry.root, this.eventsFor(entry, () => current))
     current = server
     entry.server = server
+    entry.files.clear()
     this.host.log(`Starting PHPantom ${resolution.version} for ${entry.root}`)
     try {
       await server.start()
@@ -555,11 +599,12 @@ export class Router {
         for (const docId of entry.docs) {
           const doc = this.docs.get(docId)
           if (doc) {
+            this.forget(docId)
             this.outbox.send(doc.panel, `status:${docId}`, 'phpantom.status', { docId, state: 'error', message })
-            this.docs.delete(docId)
           }
         }
         entry.docs.clear()
+        entry.files.clear()
         this.host.log(`${message} (${entry.root})`)
         this.updateStatus()
       })

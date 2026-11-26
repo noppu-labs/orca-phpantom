@@ -57,3 +57,16 @@ test('the workspace for a file is the local row with the longest containing path
   assert.equal(workspaceFor('/w/application/x.php', rows), rows[3])
   assert.equal(workspaceFor('/elsewhere/x.php', rows), null)
 })
+
+test('a file inside a Composer vendor folder belongs to the project that holds the vendor folder', () => {
+  const ws = join('/w', 'proj')
+  const a = join(ws, 'a')
+  const files = new Set([join(a, 'composer.json'), join(a, 'vendor/x/y/composer.json')])
+  const exists = (p: string) => files.has(p)
+  assert.equal(composerRoot(join(a, 'vendor/x/y/src/Z.php'), ws, exists), a)
+  assert.equal(composerRoot(join(a, 'vendor/x/y/Z.php'), ws, exists), a)
+  // A folder named vendor with no composer.json beside it is an ordinary folder.
+  assert.equal(composerRoot(join(ws, 'b/vendor/x/y/src/Z.php'), ws, (p) => p === join(ws, 'b/vendor/x/y/composer.json')), join(ws, 'b/vendor/x/y'))
+  // A vendor folder at the workspace root.
+  assert.equal(composerRoot(join(ws, 'vendor/laravel/framework/src/A.php'), ws, (p) => p === join(ws, 'composer.json') || p === join(ws, 'vendor/laravel/framework/composer.json')), ws)
+})

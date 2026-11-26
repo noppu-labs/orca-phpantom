@@ -1,5 +1,5 @@
 import { existsSync } from 'node:fs'
-import { dirname, sep } from 'node:path'
+import { basename, dirname, sep } from 'node:path'
 
 /** The fields of a `workspace.list` row this plugin uses. */
 export type WorkspaceRow = { id: string; name: string; branch: string | null; path: string; hostId: string | null }
@@ -37,21 +37,31 @@ function contains(root: string, path: string): boolean {
   return path === root || path.startsWith(root.endsWith(sep) || root.endsWith('/') ? root : root + sep) || path.startsWith(root + '/')
 }
 
-/** The nearest folder at or above the file, and at or below the workspace, holding composer.json. */
+/**
+ * The nearest folder at or above the file, and at or below the workspace, holding composer.json.
+ * A file inside a Composer vendor folder (a `vendor` folder beside a composer.json) belongs to the
+ * project that holds that vendor folder, not to the package's own composer.json.
+ */
 export function composerRoot(filePath: string, workspacePath: string, exists: (path: string) => boolean = existsSync): string {
+  const hasComposer = (directory: string) => exists((directory.endsWith(sep) ? directory : directory + sep) + 'composer.json')
+  const chain: string[] = []
   let directory = dirname(filePath)
   while (contains(workspacePath, directory)) {
-    const candidate = directory.endsWith(sep) ? directory : directory + sep
-    if (exists(candidate + 'composer.json')) {
-      return directory
-    }
+    chain.push(directory)
     const parent = dirname(directory)
     if (parent === directory || directory === workspacePath) {
       break
     }
     directory = parent
   }
-  return workspacePath
+  // Why outermost first: the project's own vendor folder is the one nearest the workspace.
+  for (let i = chain.length - 1; i >= 0; i--) {
+    const parent = dirname(chain[i])
+    if (basename(chain[i]) === 'vendor' && contains(workspacePath, parent) && hasComposer(parent)) {
+      return parent
+    }
+  }
+  return chain.find(hasComposer) ?? workspacePath
 }
 
 /** The local row with the longest path that contains the file. */

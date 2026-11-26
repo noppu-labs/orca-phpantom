@@ -52,6 +52,11 @@ export class Outbox {
     return this.queue.get(key)?.payload
   }
 
+  /** Forgets what waits under `key`, so it is never sent. */
+  drop(key: string): void {
+    this.queue.delete(key)
+  }
+
   dispose(): void {
     this.disposed = true
     if (this.timer) {
