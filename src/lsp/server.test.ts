@@ -117,6 +117,23 @@ test('a deliberate stop does not report an exit', async () => {
   assert.deepEqual(events.exits, [])
 })
 
+test('a start that times out kills the child and reports no exit', async () => {
+  const { server, events, children } = fakeServer({ FAKE_MODE: 'silent' })
+  ;(server as any).options.initializeTimeoutMs = 200
+  await assert.rejects(server.start(), /in time/)
+  assert.notEqual(children[0].exitCode ?? children[0].signalCode, null)
+  assert.equal(server.alive, false)
+  assert.deepEqual(events.exits, [])
+})
+
+test('stop escalates to SIGKILL when the child ignores shutdown and SIGTERM', async () => {
+  const { server, events, children } = fakeServer({ FAKE_MODE: 'stubborn' })
+  await server.start()
+  await server.stop()
+  assert.equal(children[0].signalCode, 'SIGKILL')
+  assert.deepEqual(events.exits, [])
+})
+
 test('a missing executable rejects start', async () => {
   const events: ServerEvents = { diagnostics() {}, progress() {}, refresh() {}, log() {}, exit() {} }
   const server = new PhpantomServer({ executable: '/nonexistent/phpantom_lsp', root: process.cwd(), events, initializeTimeoutMs: 2000 })

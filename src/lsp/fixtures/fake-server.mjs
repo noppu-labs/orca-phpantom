@@ -1,5 +1,12 @@
 // A tiny language server for tests, plain JavaScript with its own framing so `node` runs it directly.
 // FAKE_CONFIG_ITEMS=n: after `initialized`, asks for n configuration items and logs the answer as a warning.
+// FAKE_MODE=silent: never answers initialize. FAKE_MODE=stubborn: answers, then ignores shutdown, exit, stdin end.
+// Both ignore SIGTERM, so only SIGKILL removes them.
+const mode = process.env.FAKE_MODE ?? ''
+if (mode) {
+  process.on('SIGTERM', () => undefined)
+  setInterval(() => undefined, 1000)
+}
 let buffer = Buffer.alloc(0)
 let text = ''
 let uri = ''
@@ -32,6 +39,9 @@ function publish() {
 
 function handle(message) {
   const { id, method, params } = message
+  if (mode === 'silent' || (mode === 'stubborn' && (method === 'shutdown' || method === 'exit'))) {
+    return
+  }
   if (method === 'initialize') {
     send({
       jsonrpc: '2.0',
@@ -93,4 +103,6 @@ process.stdin.on('data', (chunk) => {
     handle(JSON.parse(body))
   }
 })
-process.stdin.on('end', () => process.exit(0))
+if (!mode) {
+  process.stdin.on('end', () => process.exit(0))
+}

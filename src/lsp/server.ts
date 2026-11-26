@@ -29,6 +29,7 @@ const INITIALIZE_TIMEOUT_MS = 60_000
 const STDERR_LINES_KEPT = 8
 const SHUTDOWN_WAIT_MS = 2000
 const KILL_WAIT_MS = 2000
+const CLOSE_WAIT_MS = 1000
 
 const REFRESH_KINDS: Record<string, RefreshKind> = {
   'workspace/semanticTokens/refresh': 'semanticTokens',
@@ -53,6 +54,8 @@ export class PhpantomServer {
   private started = false
   private finished = false
   private stopping = false
+  private exitInfo = 'stopped (code unknown)'
+  private resolveExited: () => void = () => undefined
   private exited: Promise<void> = Promise.resolve()
 
   constructor(options: PhpantomServerOptions) {
@@ -87,9 +90,20 @@ export class PhpantomServer {
     })
     // Why: writing to a child that just died raises EPIPE here; that is the exit, not a second failure.
     stdin.on('error', () => undefined)
-    this.exited = new Promise((resolve) => child.once('close', () => resolve()))
+    this.exited = new Promise((resolve) => {
+      this.resolveExited = resolve
+    })
     child.on('error', (error) => this.finish(`could not start: ${error.message}`))
-    child.on('exit', (code, signal) => this.finish(`stopped (${signal ? `signal ${signal}` : `code ${code ?? 'unknown'}`})`))
+    // Why 'close' and not 'exit': at 'exit' the pipes may still hold unread output, so the stderr tail could be empty or cut.
+    child.on('exit', (code, signal) => {
+      this.exitInfo = `stopped (${signal ? `signal ${signal}` : `code ${code ?? 'unknown'}`})`
+      // Why a fallback: a grandchild holding the pipes can keep 'close' from ever coming.
+      setTimeout(() => {
+        this.destroyPipes()
+        this.finish(this.exitInfo)
+      }, CLOSE_WAIT_MS).unref()
+    })
+    child.on('close', () => this.finish(this.exitInfo))
 
     let timer: ReturnType<typeof setTimeout> | undefined
     try {
@@ -120,7 +134,7 @@ export class PhpantomServer {
     } catch (error) {
       this.stopping = true
       rpc.close('failed to start')
-      child.kill()
+      await this.terminate()
       throw error
     } finally {
       clearTimeout(timer)
@@ -151,13 +165,30 @@ export class PhpantomServer {
       await Promise.race([rpc.request('shutdown', null).catch(() => undefined), delay(SHUTDOWN_WAIT_MS)])
       rpc.notify('exit', null)
     }
+    await this.terminate()
+    rpc.close('stopped')
+  }
+
+  /** Close stdin, give the child 2 s to leave, then SIGKILL; if even that is not seen, drop the pipes and give up on it. */
+  private async terminate(): Promise<void> {
+    const child = this.child
+    if (!child) {
+      return
+    }
     child.stdin?.end()
     if ((await Promise.race([this.exited, delay(KILL_WAIT_MS)])) === 'timeout') {
       child.kill('SIGKILL')
-      await this.exited
+      if ((await Promise.race([this.exited, delay(KILL_WAIT_MS)])) === 'timeout') {
+        this.destroyPipes()
+        this.finish('killed')
+      }
     }
-    this.finished = true
-    rpc.close('stopped')
+  }
+
+  private destroyPipes(): void {
+    this.child?.stdin?.destroy()
+    this.child?.stdout?.destroy()
+    this.child?.stderr?.destroy()
   }
 
   private finish(reason: string): void {
@@ -165,6 +196,7 @@ export class PhpantomServer {
       return
     }
     this.finished = true
+    this.resolveExited()
     this.rpc?.close(reason)
     if (this.started && !this.stopping) {
       const tail = this.stderrTail.length > 0 ? `: ${this.stderrTail.join(' | ')}` : ''
