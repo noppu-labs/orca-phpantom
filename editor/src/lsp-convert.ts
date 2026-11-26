@@ -149,7 +149,7 @@ export function splitWorkspaceEdit(edit: LspWorkspaceEdit | null | undefined, do
   return { own: own.map(toMonacoEdit), otherFiles }
 }
 
-export type MonacoWorkspaceEdit = { edits: { resource: string; textEdit: { range: MonacoRange; text: string }; versionId: undefined }[] }
+export type MonacoWorkspaceEdit = { edits: { resource: string; textEdit: { range: MonacoRange; text: string }; versionId: number | undefined }[] }
 
 export type LspCodeAction = {
   title: string
@@ -164,15 +164,16 @@ export type LspCodeAction = {
 /**
  * A code action as Monaco takes it, with its edits to the open document pointed at the editor's model.
  * PHPantom sends its actions with `data` and no `edit`; the edit comes from `codeAction/resolve`. A bare
- * command (no edit, no data) is null: the server's commands mean nothing to Monaco.
+ * command (no edit, no data) is null: the server's commands mean nothing to Monaco. `versionId` is the
+ * model version the action was computed against: Monaco refuses the edit once the model has moved.
  */
-export function toCodeAction(action: LspCodeAction, documentUri: string, modelUri: string) {
+export function toCodeAction(action: LspCodeAction, documentUri: string, modelUri: string, versionId?: number) {
   if (!action.edit && action.data === undefined) {
     return null
   }
   const split = action.edit ? splitWorkspaceEdit(action.edit, documentUri) : null
   const edit: MonacoWorkspaceEdit | undefined = split
-    ? { edits: split.own.map((textEdit) => ({ resource: modelUri, textEdit, versionId: undefined })) }
+    ? { edits: split.own.map((textEdit) => ({ resource: modelUri, textEdit, versionId })) }
     : undefined
   return {
     title: action.title,

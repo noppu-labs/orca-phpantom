@@ -29,10 +29,11 @@ import {
   type LspInlayHint,
   type LspTextEdit,
   type LspWorkspaceEdit,
-  type MonacoRange
+  type MonacoRange,
+  type MonacoWorkspaceEdit
 } from './lsp-convert.ts'
 import type { monaco } from './monaco.ts'
-import { mapLocations, NAVIGATION_NOTE, PeekModels } from './navigation.ts'
+import { afterPeek, cutResultsNote, mapLocations, moreResultsNote, NAVIGATION_NOTE, PeekModels } from './navigation.ts'
 import { showNote } from './notes.ts'
 
 type Disposable = { dispose(): void }
@@ -288,12 +289,13 @@ export function registerReadingProviders(ctx: EditorContext, bridge: LspBridge, 
   return disposeAll(registered)
 }
 
-// Why 30 s: PHPantom may run Pint to format, which can take a while on a cold start.
-const FORMAT_TIMEOUT_MS = 30_000
+// Why 60 s, twice Orca's default: PHPantom may run Pint to format, which can be slow on a cold start.
+const FORMAT_TIMEOUT_MS = 60_000
 const EDIT_NOTE = 'phpantom-edit'
 const OTHER_FILES_FIX = "This fix also changes other files, which isn't supported yet."
-const renameReachesOtherFiles = (count: number): string =>
-  `Renaming here would also change ${count} other files. Cross-file rename isn't supported yet.`
+const MOVED_FIX = 'The file changed after this fix was offered. Ask for it again.'
+export const renameReachesOtherFiles = (count: number): string =>
+  `Renaming here would also change ${count} other ${count === 1 ? 'file' : 'files'}. Cross-file rename isn't supported yet.`
 
 /** Blade or PHP by the file name, as PHPantom tells them apart. */
 const languageOfUri = (uri: string): string => (/\.blade\.php$/i.test(uri) ? 'blade' : 'php')
@@ -336,8 +338,11 @@ export function registerEditingProviders(ctx: EditorContext, bridge: LspBridge, 
     })
   )
 
-  /** Gives the files `locations` point at a model; those it could not read are left out, with a note. */
-  const withPreviews = async (locations: { uri: string; range: MonacoRange }[], token: monaco.CancellationToken) => {
+  /**
+   * Gives the files `locations` point at a model. Those it could not read are left out, with a note,
+   * unless `keepUnread`: going to a definition goes through the opener and needs no preview.
+   */
+  const withPreviews = async (locations: { uri: string; range: MonacoRange }[], token: monaco.CancellationToken, keepUnread: boolean) => {
     const files = [...new Set(locations.map((location) => location.uri))].filter((uri) => /^file:/i.test(uri))
     peekModels.touch(files)
     const wanted = files.filter((uri) => !monaco.editor.getModel(monaco.Uri.parse(uri)))
@@ -346,18 +351,29 @@ export function registerEditingProviders(ctx: EditorContext, bridge: LspBridge, 
     // No answer at all: keep every result, so going to one still works without its preview.
     if (!answer) return locations
     peekModels.ensure(answer.files)
-    const read = new Set(answer.files.map((file) => file.uri))
-    const missing = new Set(wanted.filter((uri) => !read.has(uri)))
-    const kept = locations.filter((location) => !missing.has(location.uri))
-    const left = locations.length - kept.length
-    if (left > 0) showNote('info', `${left} more results are in files not shown here.`, NAVIGATION_NOTE)
-    return kept
+    const { shown, left } = afterPeek(
+      locations,
+      wanted,
+      answer.files.map((file) => file.uri),
+      keepUnread
+    )
+    if (left > 0) showNote('info', moreResultsNote(left), NAVIGATION_NOTE)
+    return shown
   }
 
-  const locate = async (method: string, m: Model, position: monaco.Position, token: monaco.CancellationToken, extra: Record<string, unknown> = {}) => {
+  const locate = async (
+    method: string,
+    m: Model,
+    position: monaco.Position,
+    token: monaco.CancellationToken,
+    keepUnread: boolean,
+    extra: Record<string, unknown> = {}
+  ) => {
     if (!ours(m)) return null
-    const result = await ask(method, { ...atCursor(position), ...extra }, token)
-    const locations = await withPreviews(mapLocations(normalizeLocations(result), documentUri(), modelUri), token)
+    const answer = await withSignal(token, (signal) => bridge.askDetailed(method, { ...atCursor(position), ...extra }, signal))
+    const found = normalizeLocations(answer?.result)
+    if (answer?.truncated) showNote('info', cutResultsNote(found.length, answer.truncated), `${NAVIGATION_NOTE}-cut`)
+    const locations = await withPreviews(mapLocations(found, documentUri(), modelUri), token, keepUnread)
     return locations.map((location): monaco.languages.Location => ({
       uri: location.uri === modelUri ? model.uri : monaco.Uri.parse(location.uri),
       range: location.range
@@ -367,28 +383,28 @@ export function registerEditingProviders(ctx: EditorContext, bridge: LspBridge, 
   if (caps.definitionProvider) {
     registered.push(
       monaco.languages.registerDefinitionProvider(language, {
-        provideDefinition: (m, position, token) => locate('textDocument/definition', m, position, token)
+        provideDefinition: (m, position, token) => locate('textDocument/definition', m, position, token, true)
       })
     )
   }
   if (caps.declarationProvider) {
     registered.push(
       monaco.languages.registerDeclarationProvider(language, {
-        provideDeclaration: (m, position, token) => locate('textDocument/declaration', m, position, token)
+        provideDeclaration: (m, position, token) => locate('textDocument/declaration', m, position, token, true)
       })
     )
   }
   if (caps.typeDefinitionProvider) {
     registered.push(
       monaco.languages.registerTypeDefinitionProvider(language, {
-        provideTypeDefinition: (m, position, token) => locate('textDocument/typeDefinition', m, position, token)
+        provideTypeDefinition: (m, position, token) => locate('textDocument/typeDefinition', m, position, token, true)
       })
     )
   }
   if (caps.implementationProvider) {
     registered.push(
       monaco.languages.registerImplementationProvider(language, {
-        provideImplementation: (m, position, token) => locate('textDocument/implementation', m, position, token)
+        provideImplementation: (m, position, token) => locate('textDocument/implementation', m, position, token, false)
       })
     )
   }
@@ -396,7 +412,7 @@ export function registerEditingProviders(ctx: EditorContext, bridge: LspBridge, 
     registered.push(
       monaco.languages.registerReferenceProvider(language, {
         provideReferences: (m, position, context, token) =>
-          locate('textDocument/references', m, position, token, { context: { includeDeclaration: context.includeDeclaration } })
+          locate('textDocument/references', m, position, token, false, { context: { includeDeclaration: context.includeDeclaration } })
       })
     )
   }
@@ -450,6 +466,8 @@ export function registerEditingProviders(ctx: EditorContext, bridge: LspBridge, 
           : undefined,
         async provideRenameEdits(m, position, newName, token) {
           if (!ours(m)) return null
+          // The bridge drops an answer the text moved under; the stamp makes Monaco refuse it if it moves later.
+          const versionId = model.getVersionId()
           const result = (await ask('textDocument/rename', { ...atCursor(position), newName }, token)) as LspWorkspaceEdit | null
           if (!result) return null
           const split = splitWorkspaceEdit(result, documentUri())
@@ -459,7 +477,7 @@ export function registerEditingProviders(ctx: EditorContext, bridge: LspBridge, 
             showNote('info', reason, EDIT_NOTE)
             return { edits: [], rejectReason: reason }
           }
-          return { edits: split.own.map((textEdit) => ({ resource: model.uri, textEdit, versionId: undefined })) }
+          return { edits: split.own.map((textEdit) => ({ resource: model.uri, textEdit, versionId })) }
         }
       })
     )
@@ -467,12 +485,13 @@ export function registerEditingProviders(ctx: EditorContext, bridge: LspBridge, 
 
   // --- code actions ---
   if (caps.codeActionProvider) {
-    // The server's own action for each one shown: resolving it needs exactly what the server sent.
-    const serverActions = new WeakMap<object, LspCodeAction>()
+    // The server's own action for each one shown, and the model version it was computed against:
+    // resolving needs exactly what the server sent, and an edit applies only to that version's text.
+    const serverActions = new WeakMap<object, { raw: LspCodeAction; versionId: number }>()
     const kinds = typeof caps.codeActionProvider === 'object' ? caps.codeActionProvider.codeActionKinds : undefined
     const resolves = typeof caps.codeActionProvider === 'object' && Boolean(caps.codeActionProvider.resolveProvider)
-    const toMonacoWorkspaceEdit = (edit: { edits: { resource: string; textEdit: monaco.languages.TextEdit }[] }): monaco.languages.WorkspaceEdit => ({
-      edits: edit.edits.map((item) => ({ resource: item.resource === modelUri ? model.uri : monaco.Uri.parse(item.resource), textEdit: item.textEdit, versionId: undefined }))
+    const toMonacoWorkspaceEdit = (edit: MonacoWorkspaceEdit): monaco.languages.WorkspaceEdit => ({
+      edits: edit.edits.map((item) => ({ ...item, resource: item.resource === modelUri ? model.uri : monaco.Uri.parse(item.resource) }))
     })
     registered.push(
       monaco.languages.registerCodeActionProvider(
@@ -481,6 +500,8 @@ export function registerEditingProviders(ctx: EditorContext, bridge: LspBridge, 
           async provideCodeActions(m, range, context, token) {
             if (!ours(m)) return { actions: [], dispose() {} }
             const lspRange = toLspRange(range)
+            // Why: the lightbulb outlives typing, so an action must not carry an edit for older text.
+            const versionId = model.getVersionId()
             const result = await ask(
               'textDocument/codeAction',
               {
@@ -496,8 +517,9 @@ export function registerEditingProviders(ctx: EditorContext, bridge: LspBridge, 
               token
             )
             const actions: monaco.languages.CodeAction[] = []
+            if (model.getVersionId() !== versionId) return { actions, dispose() {} }
             for (const raw of Array.isArray(result) ? (result as LspCodeAction[]) : []) {
-              const converted = toCodeAction(raw, documentUri(), modelUri)
+              const converted = toCodeAction(raw, documentUri(), modelUri, versionId)
               if (!converted) continue
               if (converted.needsResolve && !resolves) continue
               const action: monaco.languages.CodeAction = {
@@ -509,21 +531,28 @@ export function registerEditingProviders(ctx: EditorContext, bridge: LspBridge, 
                 // resolving is where that case says why nothing happens.
                 ...(converted.edit && converted.otherFiles === 0 ? { edit: toMonacoWorkspaceEdit(converted.edit) } : {})
               }
-              serverActions.set(action, raw)
+              serverActions.set(action, { raw, versionId })
               actions.push(action)
             }
             return { actions, dispose() {} }
           },
           // Monaco calls this unbound, and only for an action that has no edit yet.
           async resolveCodeAction(action, token) {
-            const raw = serverActions.get(action)
-            if (!raw) return action
+            const offered = serverActions.get(action)
+            if (!offered) return action
+            const { raw, versionId } = offered
+            // The action's own ranges are against the text it was offered for; resolving it now would
+            // place its edit wrongly.
+            if (model.getVersionId() !== versionId) {
+              showNote('info', MOVED_FIX, EDIT_NOTE)
+              return action
+            }
             const resolved = raw.edit ? raw : ((await ask('codeAction/resolve', raw as Record<string, unknown>, token)) as LspCodeAction | null)
             if (!resolved) {
               if (token.isCancellationRequested) throw canceled()
               return action
             }
-            const converted = toCodeAction(resolved, documentUri(), modelUri)
+            const converted = toCodeAction(resolved, documentUri(), modelUri, versionId)
             if (!converted?.edit) return action
             if (converted.otherFiles > 0) {
               showNote('info', OTHER_FILES_FIX, EDIT_NOTE)

@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { mapLocations, PeekModels } from './navigation.ts'
+import { afterPeek, cutResultsNote, mapLocations, moreResultsNote, PeekModels } from './navigation.ts'
+import { renameReachesOtherFiles } from './providers.ts'
 
 const r = (startLineNumber: number, startColumn: number, endLineNumber: number, endColumn: number) => ({ startLineNumber, startColumn, endLineNumber, endColumn })
 
@@ -51,4 +52,27 @@ test('disposing drops every peek model', () => {
   peek.dispose()
   assert.deepEqual(disposed.sort(), ['file:///w/a.php', 'file:///w/b.php'])
   assert.equal(peek.has('file:///w/a.php'), false)
+})
+
+const B = 'file:///w/B.php'
+const C = 'file:///w/C.php'
+const inB = { uri: B, range: r(1, 1, 1, 1) }
+const inC = { uri: C, range: r(2, 1, 2, 1) }
+const own = { uri: 'inmemory://phpantom/d1.php', range: r(3, 1, 3, 1) }
+
+test('references leave out locations in files peek did not read', () => {
+  assert.deepEqual(afterPeek([own, inB, inC, inC], [B, C], [B], false), { shown: [own, inB], left: 2 })
+})
+
+test('a definition keeps its location without a preview, so going to it still works', () => {
+  assert.deepEqual(afterPeek([inC], [C], [], true), { shown: [inC], left: 0 })
+})
+
+test('notes count in the singular and the plural', () => {
+  assert.equal(moreResultsNote(1), '1 more result is in a file not shown here.')
+  assert.equal(moreResultsNote(3), '3 more results are in files not shown here.')
+  assert.equal(cutResultsNote(1, 1), 'Showing the first 1 result; 1 more was cut.')
+  assert.equal(cutResultsNote(2400, 3600), 'Showing the first 2400 results; 3600 more were cut.')
+  assert.equal(renameReachesOtherFiles(1), "Renaming here would also change 1 other file. Cross-file rename isn't supported yet.")
+  assert.equal(renameReachesOtherFiles(4), "Renaming here would also change 4 other files. Cross-file rename isn't supported yet.")
 })

@@ -232,6 +232,16 @@ export class LspBridge {
 
   /** Sends `method` once queued changes are in; null when aborted, failed, or (for edits) outdated. */
   async ask(method: string, params: Record<string, unknown>, signal?: AbortSignal, options: { timeoutMs?: number } = {}): Promise<unknown | null> {
+    return (await this.askDetailed(method, params, signal, options))?.result ?? null
+  }
+
+  /** As `ask`, with how many items the worker cut from a list too large for Orca to carry. */
+  async askDetailed(
+    method: string,
+    params: Record<string, unknown>,
+    signal?: AbortSignal,
+    options: { timeoutMs?: number } = {}
+  ): Promise<{ result: unknown; truncated: number } | null> {
     const requestOptions = signal || options.timeoutMs ? { ...(signal ? { signal } : {}), ...(options.timeoutMs ? { timeoutMs: options.timeoutMs } : {}) } : undefined
     for (let attempt = 0; attempt < 2; attempt++) {
       if (signal?.aborted || !this.attachedTo) return null
@@ -260,7 +270,7 @@ export class LspBridge {
       // Why: the session outlives a re-target to another worktree; that answer is about the other copy.
       if (this.attachedTo?.session !== session || this.attachedTo.uri !== attachment.uri) return null
       if (VERSION_GUARDED.has(method) && this.source.getVersion() !== version) return null
-      return answer.result
+      return { result: answer.result ?? null, truncated: answer.truncated ?? 0 }
     }
     return null
   }

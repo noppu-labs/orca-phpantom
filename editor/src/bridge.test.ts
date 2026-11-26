@@ -554,6 +554,17 @@ test('navigate and peek go out under the current session, and answer null before
   bridge.dispose()
 })
 
+test('a list the worker cut says how much was cut; ask still answers the list alone', async () => {
+  const host = fakeHost({ request: () => ({ result: ['a', 'b'], truncated: 3 }) })
+  const bridge = new LspBridge(host, source('<?php\n'), FAST)
+  await bridge.attach()
+  assert.deepEqual(await bridge.askDetailed('textDocument/references', {}), { result: ['a', 'b'], truncated: 3 })
+  assert.deepEqual(await bridge.ask('textDocument/references', {}), ['a', 'b'])
+  host.handlers.request = () => ({ result: null })
+  assert.deepEqual(await bridge.askDetailed('textDocument/references', {}), { result: null, truncated: 0 })
+  bridge.dispose()
+})
+
 test('retries a single-file attach after typing stops', async () => {
   let answers = 0
   const host = fakeHost({

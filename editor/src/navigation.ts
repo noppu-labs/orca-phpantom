@@ -17,6 +17,24 @@ export function mapLocations(locations: Location[], documentUri: string, modelUr
   return locations.map((location) => (sameUri(location.uri, documentUri) ? { ...location, uri: modelUri } : location))
 }
 
+/**
+ * After a peek: the locations to show, and how many were left out because their file was asked for and
+ * not read. `keepUnread` keeps them all: a definition is gone to through the opener, which needs no preview.
+ */
+export function afterPeek(locations: Location[], asked: string[], read: string[], keepUnread: boolean): { shown: Location[]; left: number } {
+  if (keepUnread) return { shown: locations, left: 0 }
+  const got = new Set(read)
+  const missing = new Set(asked.filter((uri) => !got.has(uri)))
+  const shown = locations.filter((location) => !missing.has(location.uri))
+  return { shown, left: locations.length - shown.length }
+}
+
+export const moreResultsNote = (count: number): string =>
+  count === 1 ? '1 more result is in a file not shown here.' : `${count} more results are in files not shown here.`
+
+export const cutResultsNote = (shown: number, cut: number): string =>
+  `Showing the first ${shown} ${shown === 1 ? 'result' : 'results'}; ${cut} more ${cut === 1 ? 'was' : 'were'} cut.`
+
 /** The models made for previews, at most `limit` of them; the least recently used goes first. */
 export class PeekModels {
   private readonly create: (uri: string, text: string) => Disposable

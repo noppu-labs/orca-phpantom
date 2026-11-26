@@ -193,3 +193,8 @@ test('code actions get back the diagnostics that touch the range, as the server 
   const touching = { range: at(5, 0, 1), message: 'starts where the range ends' }
   assert.deepEqual(diagnosticsTouching([near, far, touching], { start: { line: 4, character: 9 }, end: { line: 5, character: 0 } }), [near, touching])
 })
+
+test('an action computed against a version carries it on every edit, so Monaco refuses it once the text moves', () => {
+  const action = toCodeAction({ title: 'Alias', kind: 'refactor.rewrite', edit: { changes: { [U]: [{ range: at(6, 4, 4), newText: 'X' }] } } }, U, M, 12)
+  assert.equal(action?.edit?.edits[0].versionId, 12)
+})
