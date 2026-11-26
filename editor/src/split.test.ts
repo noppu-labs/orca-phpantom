@@ -62,3 +62,14 @@ test('chunkText pieces fit the budget and join back', () => {
   assert.equal(pieces.join(''), text)
   assert.deepEqual(chunkText(''), [''])
 })
+
+test('an insertion after a lone CR whose text starts with LF rebuilds exactly', () => {
+  const change = ins(1, 0, '\n' + 'x\n'.repeat(3000))
+  const expected = new DocumentMirror('a\rb\rc')
+  expected.apply([change])
+  const actual = new DocumentMirror('a\rb\rc')
+  const groups = splitChanges([change], 2048)
+  assert.ok(groups.length > 1)
+  for (const group of groups) actual.apply(group)
+  assert.equal(actual.text, expected.text)
+})

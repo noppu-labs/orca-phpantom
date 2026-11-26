@@ -31,9 +31,10 @@ export function chunkText(text: string, budget: number = REQUEST_BUDGET_BYTES): 
     const width = paired ? 2 : 1
     const cost = jsonCost(unit, paired ? next : null)
     if (size + cost > budget && i > start) {
-      // A piece ending in CR would fuse with a LF that follows it in the document, moving the next insertion point.
+      // A piece starting with LF would fuse with a lone CR before the insertion point and move that point.
       let cut = i
-      if (text.charCodeAt(cut - 1) === 0x0d && cut - 1 > start) cut -= 1
+      while (cut > start + 1 && text.charCodeAt(cut) === 0x0a) cut -= 1
+      if (text.charCodeAt(cut) === 0x0a) cut = i
       pieces.push(text.slice(start, cut))
       start = cut
       i = cut
@@ -47,36 +48,24 @@ export function chunkText(text: string, budget: number = REQUEST_BUDGET_BYTES): 
   return pieces
 }
 
-function endPosition(start: LspPosition, inserted: string): LspPosition {
-  let line = start.line
-  let lastBreakEnd = -1
-  for (let i = 0; i < inserted.length; i++) {
-    const c = inserted.charCodeAt(i)
-    if (c === 0x0d && inserted.charCodeAt(i + 1) === 0x0a) i++
-    else if (c !== 0x0d && c !== 0x0a) continue
-    line++
-    lastBreakEnd = i + 1
-  }
-  if (lastBreakEnd < 0) return { line, character: start.character + inserted.length }
-  return { line, character: inserted.length - lastBreakEnd }
-}
-
 const MAX = 4294967295
 const ENVELOPE = encodedSize({
   range: { start: { line: MAX, character: MAX }, end: { line: MAX, character: MAX } },
   text: '',
 })
 
+/**
+ * The last piece replaces the range and the earlier ones are inserted, last to first, at the range start, so no
+ * position is derived from inserted text. Precondition: the character before the range start is not a lone CR
+ * (Monaco normalises its buffers to a single EOL); chunkText also keeps LF off the start of every later piece.
+ */
 function splitOne(change: LspContentChange, budget: number): LspContentChange[] {
   const textBudget = budget - 2 - ENVELOPE + 2
   const pieces = chunkText(change.text, Math.max(textBudget, 16))
-  const first: LspContentChange = 'range' in change ? { range: change.range, text: pieces[0] } : { text: pieces[0] }
-  const out: LspContentChange[] = [first]
-  let at = endPosition('range' in change ? change.range.start : { line: 0, character: 0 }, pieces[0])
-  for (let i = 1; i < pieces.length; i++) {
-    out.push({ range: { start: at, end: at }, text: pieces[i] })
-    at = endPosition(at, pieces[i])
-  }
+  const last = pieces[pieces.length - 1]
+  const at = 'range' in change ? change.range.start : { line: 0, character: 0 }
+  const out: LspContentChange[] = ['range' in change ? { range: change.range, text: last } : { text: last }]
+  for (let i = pieces.length - 2; i >= 0; i--) out.push({ range: { start: at, end: at }, text: pieces[i] })
   return out
 }
 

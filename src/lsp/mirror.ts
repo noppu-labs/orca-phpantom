@@ -6,32 +6,36 @@ import type { LspContentChange, LspPosition } from '../protocol.ts'
  * is O(document length) with a very small constant (~1 ms at 1 MB).
  */
 export class DocumentMirror {
-  text: string
+  private content: string
   version = 0
 
   constructor(text: string) {
-    this.text = text
+    this.content = text
+  }
+
+  get text(): string {
+    return this.content
   }
 
   get length(): number {
-    return this.text.length
+    return this.content.length
   }
 
   apply(changes: LspContentChange[]): void {
     for (const change of changes) {
       if (!('range' in change)) {
-        this.text = change.text
+        this.content = change.text
         continue
       }
       const start = this.offsetAt(change.range.start)
       const end = Math.max(start, this.offsetAt(change.range.end, start, change.range.start))
-      this.text = this.text.slice(0, start) + change.text + this.text.slice(end)
+      this.content = this.content.slice(0, start) + change.text + this.content.slice(end)
     }
   }
 
   /** Offset of a position; a character past the line's end clamps to the end of its content, a line past the end to the end of the text. */
   private offsetAt(pos: LspPosition, from = 0, fromPos?: LspPosition): number {
-    const text = this.text
+    const text = this.content
     let line = 0
     let i = 0
     if (fromPos && fromPos.line <= pos.line) {
@@ -54,7 +58,7 @@ export class DocumentMirror {
   }
 
   private lineStart(offset: number): number {
-    const text = this.text
+    const text = this.content
     let i = offset
     while (i > 0) {
       const c = text.charCodeAt(i - 1)
@@ -65,7 +69,7 @@ export class DocumentMirror {
   }
 
   private nextLineStart(from: number): number {
-    const text = this.text
+    const text = this.content
     for (let i = from; i < text.length; i++) {
       const c = text.charCodeAt(i)
       if (c === 0x0a) return i + 1
