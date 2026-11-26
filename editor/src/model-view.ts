@@ -81,7 +81,12 @@ export function modelView(port: ModelPort): ModelView {
         // Why: its own undo step, so Cmd+Z never takes the person's typing and the agent's write together.
         port.pushStackElement()
         try {
-          port.setEol(eol)
+          if (eol !== port.getEol()) {
+            port.setEol(eol)
+            // Why: a step of its own. Monaco records the edit's offsets against the new line endings
+            // but redoes a step's edits before its line-ending change, so sharing one corrupts redo.
+            port.pushStackElement()
+          }
           const edit = smallestEdit(port.getText(), target)
           if (edit) {
             port.replace(edit.start, edit.end, edit.text)
