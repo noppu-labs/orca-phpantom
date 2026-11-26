@@ -1,11 +1,26 @@
 <!doctype html>
+<!-- Adapted from actus7/orca-autocomplete editor/languages.mjs (pageFor) @ da5a680 (MIT). See THIRD_PARTY_NOTICES.md. -->
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light dark" />
     <title>PHPantom</title>
+    <link rel="stylesheet" href="../dist/main.css" />
+    <style>
+      html, body, #root { height: 100%; margin: 0; overflow: hidden; }
+      body { background: var(--orca-background); color: var(--orca-foreground); }
+      .start-failed { display: flex; flex-direction: column; gap: 6px; max-width: 60ch; margin: 0 auto; padding: 48px 24px; font: 13px/1.5 system-ui, sans-serif; }
+      .start-failed span { color: var(--orca-muted-foreground); overflow-wrap: anywhere; }
+      .phpantom-notes { position: fixed; top: 8px; right: 20px; z-index: 100; display: flex; flex-direction: column; gap: 6px; max-width: min(56ch, calc(100% - 40px)); }
+      .phpantom-note { display: flex; align-items: flex-start; gap: 8px; padding: 8px 10px; border: 1px solid var(--orca-border); border-radius: var(--orca-radius, 6px); background: var(--orca-popover); color: var(--orca-popover-foreground); font: 12px/1.5 system-ui, sans-serif; box-shadow: 0 2px 8px rgb(0 0 0 / 0.2); }
+      .phpantom-note-warning { border-left: 3px solid var(--orca-destructive); }
+      .phpantom-note span { flex: 1; overflow-wrap: anywhere; }
+      .phpantom-note-close { border: 0; padding: 0 2px; background: none; color: var(--orca-muted-foreground); font: inherit; font-size: 14px; line-height: 1; cursor: pointer; }
+    </style>
   </head>
   <body>
     <div id="root"></div>
+    <script>window.__PHPANTOM_LANGUAGE__ = 'blade'</script>
+    <script type="module" src="../dist/main.js"></script>
   </body>
 </html>

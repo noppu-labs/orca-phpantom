@@ -22,6 +22,7 @@ jobs:
           dirname "$(find "$RUNNER_TEMP/orca" -type f -name orca-ide -path '*resources/bin/*' | head -1)" >> "$GITHUB_PATH"
       - run: orca-ide --version
       - run: npm ci --ignore-scripts
+      - run: node editor/build.mjs && git diff --exit-code -- editor/dist
       - run: orca-ide plugin types .
       - run: npx tsc -p .
       - run: orca-ide plugin validate .
