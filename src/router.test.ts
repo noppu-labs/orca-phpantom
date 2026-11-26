@@ -4,6 +4,7 @@ import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'nod
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
+import type { Resolution } from './binary/resolve.ts'
 import type { LspRange } from './protocol.ts'
 import { PhpantomServer, type ServerEvents } from './lsp/server.ts'
 import type { WorkspaceRow } from './locate/workspaces.ts'
@@ -33,7 +34,7 @@ afterEach(async () => {
 
 const spawnFake = ((_executable: string, _args: string[], options: object) => spawn(process.execPath, [FAKE], options as never)) as unknown as typeof spawn
 
-async function setup(options: { files?: Record<string, string>; rows?: (dir: string) => WorkspaceRow[]; idleMs?: number } = {}) {
+async function setup(options: { files?: Record<string, string>; rows?: (dir: string) => WorkspaceRow[]; idleMs?: number; resolve?: () => Promise<Resolution> } = {}) {
   const dir = realpathSync(mkdtempSync(join(tmpdir(), 'phpantom-router-')))
   mkdirSync(join(dir, 'a'))
   mkdirSync(join(dir, 'b'))
@@ -62,7 +63,7 @@ async function setup(options: { files?: Record<string, string>; rows?: (dir: str
   }
   const started: Started[] = []
   const router = new Router(host, {
-    resolve: async () => ({ ok: true, path: 'phpantom_lsp', version: '1.1.0', source: 'path' }),
+    resolve: options.resolve ?? (async () => ({ ok: true, path: 'phpantom_lsp', version: '1.1.0', source: 'path' })),
     createServer: (executable, root, events) => {
       const server = new RecordingServer({ executable, root, events, spawnImpl: spawnFake, initializeTimeoutMs: 5000 })
       started.push({ root, server, events })
@@ -346,4 +347,40 @@ test('reports the status bar at most once a second, ending on the latest state',
   assert.ok(statuses.length >= 1 && statuses.length <= 3, `saw ${statuses.length} updates`)
   assert.equal(statuses.at(-1)?.icon, 'check')
   assert.match(statuses.at(-1)!.tooltip, /1\.1\.0/)
+})
+
+test('a resolver failure answers error and shows it in the status bar', async () => {
+  const { worker, started, statuses } = await setup({
+    files: { 'a/A.php': '<?php // ok\n' },
+    resolve: async () => ({ ok: false, message: 'no phpantom_lsp here' })
+  })
+  assert.deepEqual(await openWhole(worker, { docId: 'd1', language: 'php', workspaceId: 'ws-a', text: '<?php // ok\n' }), { state: 'error', message: 'no phpantom_lsp here' })
+  assert.equal(started.length, 0)
+  await until(() => statuses.at(-1)?.icon === 'error', 2500)
+  assert.match(statuses.at(-1)!.tooltip, /no phpantom_lsp here/)
+})
+
+test('documents of one composer root share one server, and Blade opens as blade', async () => {
+  const { worker, started } = await setup({ files: { 'a/A.php': '<?php // a\n', 'a/B.php': '<?php // b\n', 'a/v.blade.php': '<p>{{ $x }}</p>\n' } })
+  const [one, two, three] = await Promise.all([
+    openWhole(worker, { docId: 'd1', language: 'php', workspaceId: 'ws-a', text: '<?php // a\n' }),
+    openWhole(worker, { docId: 'd2', language: 'php', workspaceId: 'ws-a', text: '<?php // b\n' }),
+    openWhole(worker, { docId: 'd3', language: 'blade', workspaceId: 'ws-a', text: '<p>{{ $x }}</p>\n' })
+  ])
+  assert.deepEqual([one.state, two.state, three.state], ['ready', 'ready', 'ready'])
+  assert.equal(started.length, 1)
+  const opens = started[0].server.notified.filter((n) => n.method === 'textDocument/didOpen').map((n) => [n.params.textDocument.uri, n.params.textDocument.languageId])
+  assert.deepEqual(opens.sort(), [[one.uri, 'php'], [two.uri, 'php'], [three.uri, 'blade']].sort())
+})
+
+test('restartAll tells open documents and detaches them', async () => {
+  const { worker, router, posts, started } = await setup({ files: { 'a/A.php': '<?php // ok\n' } })
+  const status = await openWhole(worker, { docId: 'd1', language: 'php', workspaceId: 'ws-a', text: '<?php // ok\n' })
+  assert.match(await router.restartAll(), /stopped 1 server/)
+  assert.equal(started[0].server.alive, false)
+  await until(() => posts.some((p) => p.event === 'phpantom.status' && p.payload.state === 'restarting'))
+  assert.deepEqual(posts.find((p) => p.event === 'phpantom.status')?.payload, { docId: 'd1', state: 'restarting' })
+  assert.deepEqual(await worker.request('phpantom.request', { docId: 'd1', session: status.session, method: 'textDocument/hover', params: {} }), { detached: true })
+  assert.equal((await openWhole(worker, { docId: 'd1', language: 'php', workspaceId: 'ws-a', text: '<?php // ok\n' })).state, 'ready')
+  assert.equal(started.length, 2)
 })

@@ -278,6 +278,11 @@ export class Router {
   forgetBinary(): void {
     this.resolution = null
     this.resolved = null
+    // Why clear the error: it described the old settings; the next open finds out about the new ones.
+    if (this.resolveError) {
+      this.resolveError = null
+      this.updateStatus()
+    }
   }
 
   describe(): string {
