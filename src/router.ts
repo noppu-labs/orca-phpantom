@@ -114,8 +114,8 @@ const REMEMBERED_FILES = 50
 const PEEK_MAX_BYTES = 600 * 1024
 const IDLE_MS = 10 * 60_000
 // Why a lease: an editor frame that remounts (Orca does on every tab show) or dies never sends its close.
-// The editor pings every 20 s, so a minute is three missed pings.
-const LEASE_MS = 60_000
+// The editor pings every 20 s; three minutes is nine missed pings, room for a busy or throttled frame.
+const LEASE_MS = 3 * 60_000
 const SWEEP_MS = 15_000
 // A failed lookup or download is kept this long, so tabs retrying (on show, after typing) do not download in a loop.
 const FAILED_BINARY_MS = 2 * 60_000
@@ -141,7 +141,9 @@ export class Router {
   private readonly idleMs: number
   private readonly leaseMs: number
   private readonly now: () => number
+  private readonly sweepMs: number
   private readonly sweepTimer: ReturnType<typeof setInterval>
+  private lastSweepAt: number
   private readonly outbox: Outbox
   private readonly reveals = new PendingReveals()
   /** Paths attached since the worker started, oldest first; see REMEMBERED_FILES. */
@@ -170,7 +172,9 @@ export class Router {
     this.now = options.now ?? Date.now
     this.session = options.sessionId ?? randomUUID()
     this.outbox = new Outbox((event, payload, postOptions) => host.post(event, payload, postOptions))
-    this.sweepTimer = setInterval(() => void this.sweep(), options.sweepMs ?? SWEEP_MS)
+    this.sweepMs = options.sweepMs ?? SWEEP_MS
+    this.lastSweepAt = this.now()
+    this.sweepTimer = setInterval(() => void this.sweep(), this.sweepMs)
     this.sweepTimer.unref?.()
   }
 
@@ -531,6 +535,15 @@ export class Router {
   /** Releases documents whose editor went quiet, as `close` would. The timer calls it; resolves once they are released. */
   async sweep(): Promise<void> {
     if (this.disposed) {
+      return
+    }
+    const now = this.now()
+    const gap = now - this.lastSweepAt
+    this.lastSweepAt = now
+    if (gap > 2 * this.sweepMs) {
+      // The computer slept or the worker was held up: editors could not ping meanwhile either, so silence
+      // says nothing yet. The next tick, on time, judges after they have had the chance.
+      this.host.log(`Lease check ran ${Math.round((gap - this.sweepMs) / 1000)} s late; releasing nothing this time`)
       return
     }
     const expired = (doc: Doc | undefined): doc is Doc => doc !== undefined && this.now() - doc.lastSeen > this.leaseMs

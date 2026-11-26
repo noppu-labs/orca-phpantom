@@ -730,3 +730,24 @@ test('a failed binary lookup is kept for two minutes, and forgotten when the set
   assert.equal((await open()).state, 'error')
   assert.equal(lookups, 4)
 })
+
+test('a sweep that fires late (the computer slept) releases nothing; the next one on time does', async () => {
+  let clock = 1_000_000
+  const { worker, router } = await setup({ files: { 'a/A.php': '<?php // a\n', 'a/B.php': '<?php // b\n' }, leaseMs: 180_000, sweepMs: 60_000, now: () => clock })
+  const a = await openWhole(worker, { docId: 'da', language: 'php', workspaceId: 'ws-a', text: '<?php // a\n' })
+  await openWhole(worker, { docId: 'db', language: 'php', workspaceId: 'ws-a', text: '<?php // b\n', panel: 'panel-2' })
+  clock += 60_000
+  await router.sweep()
+  // An hour asleep: no editor could ping meanwhile, so the lease says nothing about them.
+  clock += 3_600_000
+  await router.sweep()
+  assert.match(router.describe(), /2 open document\(s\)/)
+  // Awake again: da's editor pings, db's never does.
+  clock += 10_000
+  assert.deepEqual(await worker.request('phpantom.ping', { docId: 'da', session: a.session }), { ok: true })
+  clock += 50_000
+  await router.sweep()
+  assert.match(router.describe(), /1 open document\(s\)/)
+  assert.deepEqual(await worker.request('phpantom.ping', { docId: 'da', session: a.session }), { ok: true })
+  assert.deepEqual(await worker.request('phpantom.ping', { docId: 'db', session: a.session }), { detached: true })
+})
