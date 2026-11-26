@@ -6,6 +6,10 @@ const terminated = (chunk: string[]): string => {
   return text === '' || text.endsWith('\n') ? text : `${text}\n`
 }
 
+const MAX_DIFF_LINES = 500
+
+const sameLines = (x: string[], y: string[]): boolean => x.length === y.length && x.every((line, at) => line === y[at])
+
 /** Positions of the longest strictly increasing run of `values` (patience sorting, O(n log n)). */
 function longestIncreasing(values: number[]): number[] {
   const tails: number[] = []
@@ -74,16 +78,33 @@ export function mergeText(base: string, outside: string, mine: string): { text: 
   const outsideLines = lines(outside)
   let text = ''
   let conflicts = 0
+  const conflict = (m: string[], o: string[]): void => {
+    conflicts += 1
+    text += `<<<<<<< your unsaved edits\n${terminated(m)}=======\n${terminated(o)}>>>>>>> file on disk\n`
+  }
   const mergeStretch = (m: string[], b: string[], o: string[]): void => {
     if (m.length === 0 && b.length === 0 && o.length === 0) {
+      return
+    }
+    if (sameLines(m, b)) {
+      text += o.join('')
+      return
+    }
+    if (sameLines(o, b) || sameLines(m, o)) {
+      text += m.join('')
+      return
+    }
+    // Why: diff3's LCS grows roughly cubically on repeated lines and runs on the editor's thread,
+    // so a stretch with no anchors that is too big to diff within budget keeps both sides whole.
+    if (Math.max(m.length, b.length, o.length) > MAX_DIFF_LINES) {
+      conflict(m, o)
       return
     }
     for (const region of diff3Merge(m, b, o, { excludeFalseConflicts: true })) {
       if (region.ok) {
         text += region.ok.join('')
       } else if (region.conflict) {
-        conflicts += 1
-        text += `<<<<<<< your unsaved edits\n${terminated(region.conflict.a)}=======\n${terminated(region.conflict.b)}>>>>>>> file on disk\n`
+        conflict(region.conflict.a, region.conflict.b)
       }
     }
   }

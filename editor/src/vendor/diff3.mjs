@@ -1,3 +1,4 @@
+// Copied from node-diff3 3.2.1 src/diff3.mjs (MIT, see THIRD_PARTY_NOTICES.md).
 export {
   LCS,
   diffComm,

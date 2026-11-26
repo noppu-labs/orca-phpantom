@@ -7,7 +7,11 @@ function fakeView(initial = ''): TextView & { type(text: string): void } {
   const listeners = new Set<() => void>()
   return {
     getValue: () => value,
-    applyOutside: (s) => { value = value.slice(0, s.start) + s.text + value.slice(s.end) },
+    applyOutside: (s) => {
+      value = value.slice(0, s.start) + s.text + value.slice(s.end)
+      // Monaco reports programmatic edits as content changes too; the binding must not echo them.
+      for (const l of listeners) l()
+    },
     onUserChange(listener) {
       listeners.add(listener)
       return { dispose: () => { listeners.delete(listener) } }
