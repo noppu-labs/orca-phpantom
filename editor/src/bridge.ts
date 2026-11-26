@@ -494,7 +494,10 @@ export class LspBridge {
   // pagehide close may never reach the worker, so the worker releases what it stops hearing from.
   private startPinging(): void {
     if (this.pingTimer !== undefined || this.disposed) return
-    this.pingTimer = setInterval(() => void this.ping(), this.pingMs)
+    const timer: { unref?: () => void } | number = setInterval(() => void this.ping(), this.pingMs)
+    // Why: under Node (the tests) a bridge never disposed must not keep the process alive; a browser timer is a number.
+    if (typeof timer === 'object') timer.unref?.()
+    this.pingTimer = timer as ReturnType<typeof setInterval>
   }
 
   private stopPinging(): void {
