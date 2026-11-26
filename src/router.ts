@@ -39,6 +39,8 @@ export type RouterOptions = {
   /** How often to look for such documents. */
   sweepMs?: number
   sessionId?: string
+  /** The clock for leases and the binary-failure cache; tests drive it. */
+  now?: () => number
 }
 
 type Input<K extends keyof PluginRequests> = PluginRequests[K]['input']
@@ -133,6 +135,7 @@ export class Router {
   private readonly createServer: (executable: string, root: string, events: ServerEvents) => PhpantomServer
   private readonly idleMs: number
   private readonly leaseMs: number
+  private readonly now: () => number
   private readonly sweepTimer: ReturnType<typeof setInterval>
   private readonly outbox: Outbox
   private readonly reveals = new PendingReveals()
@@ -155,9 +158,10 @@ export class Router {
     this.createServer = options.createServer ?? ((executable, root, events) => new PhpantomServer({ executable, root, events }))
     this.idleMs = options.idleMs ?? IDLE_MS
     this.leaseMs = options.leaseMs ?? LEASE_MS
+    this.now = options.now ?? Date.now
     this.session = options.sessionId ?? randomUUID()
     this.outbox = new Outbox((event, payload, postOptions) => host.post(event, payload, postOptions))
-    this.sweepTimer = setInterval(() => this.sweep(), options.sweepMs ?? SWEEP_MS)
+    this.sweepTimer = setInterval(() => void this.sweep(), options.sweepMs ?? SWEEP_MS)
     this.sweepTimer.unref?.()
   }
 
@@ -215,6 +219,13 @@ export class Router {
     if (!doc) {
       return { detached: true }
     }
+    if (doc.needsResync) {
+      // Its copy failed the length check: an answer now would be about text the editor does not have.
+      return { error: 'the document is being sent again' }
+    }
+    // Why: several documents can hold one file, and PHPantom holds whichever sent last. Positions in the
+    // question, and edits in the answer, are this document's.
+    this.sendFull(doc.server, doc.file, doc.mirror.text)
     const params = input.method.startsWith('textDocument/') ? { ...input.params, textDocument: { uri: doc.uri } } : input.params
     let result: unknown
     try {
@@ -391,7 +402,7 @@ export class Router {
       known.version = 1
       known.needsResync = false
       known.panel = panel
-      known.lastSeen = Date.now()
+      known.lastSeen = this.now()
       this.sendFull(known.server, known.file, text)
       return { state: 'ready', session: this.session, uri: known.uri, capabilities: known.server.capabilities }
     }
@@ -459,7 +470,7 @@ export class Router {
       mirror: new DocumentMirror(text),
       needsResync: false,
       diagnostics: file.diagnostics?.length ?? 0,
-      lastSeen: Date.now()
+      lastSeen: this.now()
     })
     entry.docs.add(input.docId)
     this.cancelIdle(entry)
@@ -483,23 +494,24 @@ export class Router {
     if (session !== this.session || !doc || !doc.server.alive) {
       return null
     }
-    doc.lastSeen = Date.now()
+    doc.lastSeen = this.now()
     return doc
   }
 
   private seen(docId: string): void {
     const doc = this.docs.get(docId)
     if (doc) {
-      doc.lastSeen = Date.now()
+      doc.lastSeen = this.now()
     }
   }
 
-  /** Releases documents whose editor went quiet, as `close` would. */
-  private sweep(): void {
+  /** Releases documents whose editor went quiet, as `close` would. The timer calls it; resolves once they are released. */
+  async sweep(): Promise<void> {
     if (this.disposed) {
       return
     }
-    const expired = (doc: Doc | undefined): doc is Doc => doc !== undefined && Date.now() - doc.lastSeen > this.leaseMs
+    const expired = (doc: Doc | undefined): doc is Doc => doc !== undefined && this.now() - doc.lastSeen > this.leaseMs
+    const releases: Promise<void>[] = []
     for (const doc of this.docs.values()) {
       if (!expired(doc)) {
         continue
@@ -507,25 +519,33 @@ export class Router {
       const docId = doc.docId
       // Why in its lane and checked again there: an open in flight for this docId finishes first, and a
       // document it attached anew has just been seen.
-      void this.inLane(docId, async () => {
-        const current = this.docs.get(docId)
-        if (this.disposed || current !== doc || !expired(current)) {
-          return
-        }
-        this.host.log(`Released ${current.path}: its editor was not heard from for ${Math.round(this.leaseMs / 1000)} s (${this.docs.size - 1} document(s) still open)`)
-        this.chunks.delete(docId)
-        this.detach(current)
-      }).catch((error: unknown) => this.host.log(`releasing ${docId} failed: ${messageOf(error)}`))
+      releases.push(
+        this.inLane(docId, async () => {
+          const current = this.docs.get(docId)
+          if (this.disposed || current !== doc || !expired(current)) {
+            return
+          }
+          this.host.log(`Released ${current.path}: its editor was not heard from for ${Math.round(this.leaseMs / 1000)} s (${this.docs.size - 1} document(s) still open)`)
+          this.chunks.delete(docId)
+          this.detach(current)
+        }).catch((error: unknown) => this.host.log(`releasing ${docId} failed: ${messageOf(error)}`))
+      )
     }
+    await Promise.all(releases)
   }
 
   private detach(doc: Doc): void {
     const { entry, file } = doc
     file.holders.delete(doc.docId)
-    const remaining = [...file.holders].map((docId) => this.docs.get(docId)).find((other) => other !== undefined)
-    if (remaining) {
-      // Why resend: PHPantom holds whatever the leaving document sent last; the one that stays is what is open.
-      this.sendFull(doc.server, file, remaining.mirror.text)
+    const remaining = [...file.holders].map((docId) => this.docs.get(docId)).filter((other) => other !== undefined)
+    if (remaining.length > 0) {
+      // Why resend: PHPantom holds whatever the leaving document sent last. The one heard from most recently is
+      // the tab on screen; the others are frames Orca replaced that hold on until their lease ends. One waiting
+      // for its resync has a copy that is not its editor's text, and sends the whole text soon anyway.
+      const current = remaining.filter((other) => !other.needsResync).sort((a, b) => b.lastSeen - a.lastSeen)[0]
+      if (current) {
+        this.sendFull(doc.server, file, current.mirror.text)
+      }
     } else {
       entry.files.delete(uriKey(file.uri))
       doc.server.notify('textDocument/didClose', { textDocument: { uri: file.uri } })

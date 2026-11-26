@@ -43,6 +43,7 @@ async function setup(
     idleMs?: number
     leaseMs?: number
     sweepMs?: number
+    now?: () => number
     resolve?: () => Promise<Resolution>
   } = {}
 ) {
@@ -82,7 +83,8 @@ async function setup(
     },
     ...(options.idleMs === undefined ? {} : { idleMs: options.idleMs }),
     ...(options.leaseMs === undefined ? {} : { leaseMs: options.leaseMs }),
-    ...(options.sweepMs === undefined ? {} : { sweepMs: options.sweepMs })
+    ...(options.sweepMs === undefined ? {} : { sweepMs: options.sweepMs }),
+    ...(options.now === undefined ? {} : { now: options.now })
   })
   cleanups.push(() => rmSync(dir, { recursive: true, force: true }))
   cleanups.push(() => router.dispose())
@@ -227,9 +229,9 @@ test('a re-attach that finds no file drops what the old attachment had queued', 
   assert.deepEqual(diagnosticsFor(posts, 'd1'), [])
 })
 
-async function serverText(worker: Worker, docId: string, session: string): Promise<string> {
-  const answer = await worker.request('phpantom.request', { docId, session, method: 'fake/text', params: {} })
-  return answer.result
+/** What PHPantom holds now, asked of the server itself: a request through the router would first send the asker's text. */
+async function serverText(started: Started[]): Promise<string> {
+  return (await started[0].server.request('fake/text', {})) as string
 }
 
 const insert = (character: number, what: string) => ({ range: { start: at(0, character), end: at(0, character) }, text: what })
@@ -244,7 +246,7 @@ async function twoHolders(text = '<?php // ok\n') {
   assert.equal(harness.started.length, 1)
   const change = (docId: string, version: number, changes: unknown[], length: number) =>
     harness.worker.request('phpantom.change', { docId, session: one.session, version, changes, length })
-  return { ...harness, one, two, change, text: (docId = 'd1') => serverText(harness.worker, docId, one.session) }
+  return { ...harness, one, two, change, text: () => serverText(harness.started) }
 }
 
 test('two documents on one file share it: one didOpen, no didClose while one remains', async () => {
@@ -263,13 +265,13 @@ test('two documents on one file share it: one didOpen, no didClose while one rem
 
   assert.deepEqual(await worker.request('phpantom.close', { docId: 'd1' }), { ok: true })
   assert.ok(!server.notified.some((n) => n.method === 'textDocument/didClose'))
-  assert.equal(await text('d2'), '<?phpX // ok\n')
+  assert.equal(await text(), '<?phpX // ok\n')
 
   assert.deepEqual(await change('d2', 3, [insert(0, 'BAD ')], 17), { ok: true })
   await until(() => diagnosticsFor(posts, 'd2').some((p) => p.payload.diagnostics.length === 1))
   assert.equal(diagnosticsFor(posts, 'd2').at(-1)!.panel, 'panel-2')
   assert.deepEqual(await worker.request('phpantom.request', { docId: 'd2', session: two.session, method: 'textDocument/hover', params: { position: at(0, 0) } }), { result: { contents: { kind: 'markdown', value: 'len=17' } } })
-  assert.equal(await text('d2'), 'BAD <?phpX // ok\n')
+  assert.equal(await text(), 'BAD <?phpX // ok\n')
   assert.deepEqual(await worker.request('phpantom.close', { docId: 'd2' }), { ok: true })
   assert.equal(server.notified.filter((n) => n.method === 'textDocument/didClose').length, 1)
   assert.equal(one.uri, two.uri)
@@ -303,12 +305,12 @@ test('shared file (c): a tab joining with the saved text does not strand the edi
   const change = (docId: string, version: number, changes: unknown[], length: number) =>
     harness.worker.request('phpantom.change', { docId, session: one.session, version, changes, length })
   await change('d1', 2, [insert(5, 'abcd')], 16)
-  assert.equal(await serverText(harness.worker, 'd1', one.session), '<?phpabcd // ok\n')
+  assert.equal(await serverText(harness.started), '<?phpabcd // ok\n')
   const two = await openWhole(harness.worker, { docId: 'd2', language: 'php', workspaceId: 'ws-a', text: saved, panel: 'panel-2' })
   assert.equal(two.uri, one.uri)
-  assert.equal(await serverText(harness.worker, 'd2', one.session), saved)
+  assert.equal(await serverText(harness.started), saved)
   assert.deepEqual(await change('d1', 3, [insert(0, 'Q')], 17), { ok: true })
-  assert.equal(await serverText(harness.worker, 'd1', one.session), 'Q<?phpabcd // ok\n')
+  assert.equal(await serverText(harness.started), 'Q<?phpabcd // ok\n')
 })
 
 test('a focused workspace missing from the cached list is looked up again', async () => {
@@ -615,7 +617,7 @@ test('two holders on one file: the one that expires leaves the file open for the
   }
   assert.deepEqual(await worker.request('phpantom.ping', { docId: 'd1', session: one.session }), { detached: true })
   assert.ok(!started[0].server.notified.some((n) => n.method === 'textDocument/didClose'))
-  assert.equal(await serverText(worker, 'd2', two.session), 'Z<?php // ok\n')
+  assert.equal(await serverText(started), 'Z<?php // ok\n')
   assert.equal(started[0].server.alive, true)
 })
 
@@ -625,4 +627,63 @@ test('a ping under a stale session or for an unknown document answers detached',
   assert.deepEqual(await worker.request('phpantom.ping', { docId: 'd1', session: 'an-older-session' }), { detached: true })
   assert.deepEqual(await worker.request('phpantom.ping', { docId: 'unknown', session: status.session }), { detached: true })
   assert.deepEqual(await worker.request('phpantom.ping', { docId: 'd1', session: status.session }), { ok: true })
+})
+
+test('a request first gives PHPantom the asking document\'s text', async () => {
+  const { worker, one, change, text } = await twoHolders()
+  // d2 edits last, so PHPantom holds d2's text; d1 still has the saved one.
+  assert.deepEqual(await change('d2', 2, [insert(0, 'Z')], 13), { ok: true })
+  assert.equal(await text(), 'Z<?php // ok\n')
+  assert.deepEqual(await worker.request('phpantom.request', { docId: 'd1', session: one.session, method: 'textDocument/hover', params: { position: at(0, 0) } }), { result: { contents: { kind: 'markdown', value: 'len=12' } } })
+  assert.equal(await text(), '<?php // ok\n')
+})
+
+test('a request from a document waiting for its resync is refused, not answered against other text', async () => {
+  const { worker, one, change, text } = await twoHolders()
+  assert.deepEqual(await change('d2', 2, [insert(0, 'Z')], 13), { ok: true })
+  // A wrong length: d1's copy is no longer the editor's text.
+  assert.deepEqual(await change('d1', 2, [insert(0, 'Y')], 99), { resync: true })
+  const answer = await worker.request('phpantom.request', { docId: 'd1', session: one.session, method: 'textDocument/hover', params: { position: at(0, 0) } })
+  assert.ok('error' in answer, JSON.stringify(answer))
+  assert.equal(await text(), 'Z<?php // ok\n')
+})
+
+test('three holders: the first expiring hands PHPantom the most recently seen text, not a dead frame\'s', async () => {
+  // Orca mounts a new frame (docId) on each tab show; the old ones go quiet and hold the file until their lease ends.
+  let clock = 1_000_000
+  // Lines enough for a frame with unsaved edits to be placed by likeness.
+  const saved = '<?php\nclass A {\n  function f() {}\n}\n'
+  const { worker, router, started } = await setup({ files: { 'a/A.php': saved, 'a/composer.json': '{}' }, leaseMs: 60_000, sweepMs: 1e9, now: () => clock })
+  const f1 = await openWhole(worker, { docId: 'f1', language: 'php', workspaceId: 'ws-a', text: saved })
+  clock += 10_000
+  await openWhole(worker, { docId: 'f2', language: 'php', workspaceId: 'ws-a', text: saved, panel: 'panel-2' })
+  assert.deepEqual(await worker.request('phpantom.change', { docId: 'f2', session: f1.session, version: 2, changes: [insert(0, 'X')], length: saved.length + 1 }), { ok: true })
+  clock += 20_000
+  await openWhole(worker, { docId: 'f3', language: 'php', workspaceId: 'ws-a', text: 'X' + saved, panel: 'panel-3' })
+  assert.deepEqual(await worker.request('phpantom.change', { docId: 'f3', session: f1.session, version: 2, changes: [insert(0, 'Y')], length: saved.length + 2 }), { ok: true })
+  assert.equal(await serverText(started), 'YX' + saved)
+  // f1 last seen 61 s ago, f2 51 s, f3 31 s: only f1 is past its lease.
+  clock += 31_000
+  await router.sweep()
+  assert.match(router.describe(), /2 open document\(s\)/)
+  assert.equal(await serverText(started), 'YX' + saved)
+})
+
+test('a departing holder skips a holder waiting for its resync', async () => {
+  let clock = 1_000_000
+  // Lines enough for a frame with unsaved edits to be placed by likeness.
+  const saved = '<?php\nclass A {\n  function f() {}\n}\n'
+  const { worker, router, started } = await setup({ files: { 'a/A.php': saved, 'a/composer.json': '{}' }, leaseMs: 60_000, sweepMs: 1e9, now: () => clock })
+  const f1 = await openWhole(worker, { docId: 'f1', language: 'php', workspaceId: 'ws-a', text: saved })
+  clock += 10_000
+  await openWhole(worker, { docId: 'f2', language: 'php', workspaceId: 'ws-a', text: saved, panel: 'panel-2' })
+  assert.deepEqual(await worker.request('phpantom.change', { docId: 'f2', session: f1.session, version: 2, changes: [insert(0, 'X')], length: saved.length + 1 }), { ok: true })
+  clock += 20_000
+  await openWhole(worker, { docId: 'f3', language: 'php', workspaceId: 'ws-a', text: 'X' + saved, panel: 'panel-3' })
+  // f3's copy breaks (a wrong length) just before f1 leaves: its mirror is not the editor's text.
+  assert.deepEqual(await worker.request('phpantom.change', { docId: 'f3', session: f1.session, version: 2, changes: [insert(0, 'Y')], length: 99 }), { resync: true })
+  clock += 31_000
+  await router.sweep()
+  assert.match(router.describe(), /2 open document\(s\)/)
+  assert.equal(await serverText(started), 'X' + saved)
 })
