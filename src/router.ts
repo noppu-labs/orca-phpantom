@@ -57,6 +57,9 @@ type Entry = {
 type SharedFile = {
   uri: string
   holders: Set<string>
+  /** The text PHPantom holds now. Each holder's edits are computed against its own copy, so they are
+   *  forwarded only when that copy is this text. */
+  text: string
   /** What PHPantom is told; it only rises, so a resync never sends PHPantom an older version. */
   version: number
 }
@@ -154,13 +157,24 @@ export class Router {
     if (doc.needsResync || input.version !== doc.version + 1) {
       return { resync: true }
     }
+    const before = doc.mirror.text
     doc.mirror.apply(input.changes)
     if (doc.mirror.length !== input.length) {
       doc.needsResync = true
       return { resync: true }
     }
     doc.version = input.version
-    this.sendChange(doc.server, doc.file, input.changes)
+    const file = doc.file
+    const after = doc.mirror.text
+    // Why no compare for a lone holder: nobody else moves PHPantom's copy, so it is this document's text.
+    // With several, `===` on the same string is a pointer check; lengths that differ fail at once.
+    if (file.holders.size === 1 || before === file.text) {
+      this.sendChange(doc.server, file, input.changes, after)
+    } else if (after !== file.text) {
+      // PHPantom holds another tab's text: this edit would land on the wrong text, so send the whole of it.
+      this.sendFull(doc.server, file, after)
+    }
+    // Otherwise the other tab already sent this same result.
     return { ok: true }
   }
 
@@ -340,7 +354,7 @@ export class Router {
       known.version = 1
       known.needsResync = false
       known.panel = panel
-      this.sendChange(known.server, known.file, [{ text }])
+      this.sendFull(known.server, known.file, text)
       return { state: 'ready', session: this.session, uri: known.uri, capabilities: known.server.capabilities }
     }
     if (known) {
@@ -386,9 +400,9 @@ export class Router {
     let file = entry.files.get(key)
     if (file) {
       // Another document already holds this file: PHPantom gets this one's text, not a second didOpen.
-      this.sendChange(server, file, [{ text }])
+      this.sendFull(server, file, text)
     } else {
-      file = { uri, holders: new Set(), version: 1 }
+      file = { uri, holders: new Set(), text, version: 1 }
       entry.files.set(key, file)
       server.notify('textDocument/didOpen', { textDocument: { uri, languageId: input.language, version: 1, text } })
     }
@@ -432,7 +446,7 @@ export class Router {
     const remaining = [...file.holders].map((docId) => this.docs.get(docId)).find((other) => other !== undefined)
     if (remaining) {
       // Why resend: PHPantom holds whatever the leaving document sent last; the one that stays is what is open.
-      this.sendChange(doc.server, file, [{ text: remaining.mirror.text }])
+      this.sendFull(doc.server, file, remaining.mirror.text)
     } else {
       entry.files.delete(uriKey(file.uri))
       doc.server.notify('textDocument/didClose', { textDocument: { uri: file.uri } })
@@ -450,9 +464,19 @@ export class Router {
     this.outbox.drop(`diag:${docId}`)
   }
 
-  private sendChange(server: PhpantomServer, file: SharedFile, contentChanges: unknown[]): void {
+  /** Forwards an edit made against `file.text`; `after` is the text it gives. */
+  private sendChange(server: PhpantomServer, file: SharedFile, contentChanges: unknown[], after: string): void {
+    file.text = after
     file.version += 1
     server.notify('textDocument/didChange', { textDocument: { uri: file.uri, version: file.version }, contentChanges })
+  }
+
+  /** Sets PHPantom's copy to `text`, unless it already is. */
+  private sendFull(server: PhpantomServer, file: SharedFile, text: string): void {
+    if (text === file.text) {
+      return
+    }
+    this.sendChange(server, file, [{ text }], text)
   }
 
   private inLane<T>(docId: string, task: () => Promise<T>): Promise<T> {
