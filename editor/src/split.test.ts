@@ -73,3 +73,37 @@ test('an insertion after a lone CR whose text starts with LF rebuilds exactly', 
   for (const group of groups) actual.apply(group)
   assert.equal(actual.text, expected.text)
 })
+
+const loneSurrogate = /^[\uDC00-\uDFFF]|[\uD800-\uDBFF]$/
+
+test('a cut back from an LF never lands inside a surrogate pair', () => {
+  for (const [text, budget] of [['😀😀\n', 11], ['ab😀\nx', 9]] as const) {
+    const pieces = chunkText(text, budget)
+    assert.equal(pieces.join(''), text)
+    for (const p of pieces) {
+      assert.ok(!loneSurrogate.test(p))
+      assert.ok(encodedSize(p) <= budget)
+    }
+  }
+})
+
+test('random mixed texts split within budget, without lone surrogates, and rejoin', () => {
+  let seed = 12345
+  const rnd = (n: number) => ((seed = (seed * 1103515245 + 12345) & 0x7fffffff), seed % n)
+  const atoms = ['\r\n', '\n', '\r', '😀', 'é', '"', '\\', 'a', '€', '\t']
+  for (let n = 0; n < 300; n++) {
+    let text = ''
+    for (let k = rnd(200); k > 0; k--) text += atoms[rnd(atoms.length)]
+    const budget = 8 + rnd(60)
+    const pieces = chunkText(text, budget)
+    assert.equal(pieces.join(''), text)
+    for (const p of pieces) {
+      assert.ok(!loneSurrogate.test(p))
+      assert.ok(encodedSize(p) <= budget)
+    }
+    const groups = splitChanges([ins(0, 0, text)], 300 + rnd(200))
+    const actual = new DocumentMirror('')
+    for (const g of groups) actual.apply(g)
+    assert.equal(actual.text, text)
+  }
+})

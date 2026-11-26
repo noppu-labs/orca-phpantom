@@ -33,8 +33,13 @@ export function chunkText(text: string, budget: number = REQUEST_BUDGET_BYTES): 
     if (size + cost > budget && i > start) {
       // A piece starting with LF would fuse with a lone CR before the insertion point and move that point.
       let cut = i
-      while (cut > start + 1 && text.charCodeAt(cut) === 0x0a) cut -= 1
-      if (text.charCodeAt(cut) === 0x0a) cut = i
+      const unsafe = (c: number) => {
+        const u = text.charCodeAt(c)
+        const midPair = u >= 0xdc00 && u <= 0xdfff && (text.charCodeAt(c - 1) & 0xfc00) === 0xd800
+        return u === 0x0a || midPair
+      }
+      while (cut > start + 1 && unsafe(cut)) cut -= 1
+      if (unsafe(cut)) cut = i
       pieces.push(text.slice(start, cut))
       start = cut
       i = cut
