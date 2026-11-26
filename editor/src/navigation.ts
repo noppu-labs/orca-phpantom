@@ -29,6 +29,13 @@ export function afterPeek(locations: Location[], asked: string[], read: string[]
   return { shown, left: locations.length - shown.length }
 }
 
+// The worker reads at most this many files per peek (PEEK_MAX_FILES in src/router.ts); asking for more
+// only makes the request bigger, and a long list of URIs could pass Orca's 64 KiB request limit.
+const PEEK_MAX_FILES = 25
+
+/** The files one peek asks for. Pass the whole list to `afterPeek`, so locations in the rest are left out with a note. */
+export const peekBatch = (wanted: string[]): string[] => wanted.slice(0, PEEK_MAX_FILES)
+
 export const moreResultsNote = (count: number): string =>
   count === 1 ? '1 more result is in a file not shown here.' : `${count} more results are in files not shown here.`
 

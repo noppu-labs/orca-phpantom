@@ -33,7 +33,7 @@ import {
   type MonacoWorkspaceEdit
 } from './lsp-convert.ts'
 import type { monaco } from './monaco.ts'
-import { afterPeek, cutNoteFor, mapLocations, moreResultsNote, NAVIGATION_NOTE, PeekModels } from './navigation.ts'
+import { afterPeek, cutNoteFor, mapLocations, moreResultsNote, NAVIGATION_NOTE, PeekModels, peekBatch } from './navigation.ts'
 import { clearNote, showNote } from './notes.ts'
 
 type Disposable = { dispose(): void }
@@ -347,7 +347,7 @@ export function registerEditingProviders(ctx: EditorContext, bridge: LspBridge, 
     peekModels.touch(files)
     const wanted = files.filter((uri) => !monaco.editor.getModel(monaco.Uri.parse(uri)))
     if (wanted.length === 0) return locations
-    const answer = await withSignal(token, (signal) => bridge.peek(wanted, signal))
+    const answer = await withSignal(token, (signal) => bridge.peek(peekBatch(wanted), signal))
     // No answer at all: keep every result, so going to one still works without its preview.
     if (!answer) return locations
     peekModels.ensure(answer.files)

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { afterPeek, cutNoteFor, cutResultsNote, mapLocations, moreResultsNote, PeekModels } from './navigation.ts'
+import { afterPeek, cutNoteFor, cutResultsNote, mapLocations, moreResultsNote, PeekModels, peekBatch } from './navigation.ts'
 import { renameReachesOtherFiles } from './providers.ts'
 
 const r = (startLineNumber: number, startColumn: number, endLineNumber: number, endColumn: number) => ({ startLineNumber, startColumn, endLineNumber, endColumn })
@@ -80,4 +80,15 @@ test('notes count in the singular and the plural', () => {
 test('the cut note counts what is shown and goes away when nothing was cut', () => {
   assert.equal(cutNoteFor(2, 5), 'Showing the first 2 results; 5 more were cut.')
   assert.equal(cutNoteFor(2, 0), null)
+})
+
+test('a peek asks for at most 25 files; locations in the rest are left out with the note count', () => {
+  const wanted = Array.from({ length: 30 }, (_, i) => `file:///w/F${i}.php`)
+  const asked = peekBatch(wanted)
+  assert.deepEqual(asked, wanted.slice(0, 25))
+  const locations = wanted.map((uri) => ({ uri, range: r(1, 1, 1, 1) }))
+  // The worker read every file it was asked for; the five never asked for count as left out.
+  const { shown, left } = afterPeek(locations, wanted, asked, false)
+  assert.equal(shown.length, 25)
+  assert.equal(left, 5)
 })
