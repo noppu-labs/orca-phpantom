@@ -161,9 +161,10 @@ Then edit it into a `trusted-worker` plugin: `main: "worker.ts"`, capabilities `
 
 Run: `orca plugin dev load "$TMPDIR/phpantom-spike"` (re-run with the printed `--approve <fingerprint>`), then `orca plugin logs local.phpantom-spike` after each trial. For each trial, focus the workspace in Orca first, then run `orca plugin open local.phpantom-spike --editor <absolute file path>` (or click the file in Orca's tree).
 - Trial A1/A2: open `app/Example.php` from worktree A twice (close the tab in between). Trial B1/B2: the same from worktree B.
-- Trial C: open the `.blade.php` file; record which editor (`php` or `blade`) loaded.
+- Trial C: open the `.blade.php` file and a `.php` file by clicking them in Orca's file tree (not `orca plugin open --editor`, which forces the editor); record which editor (`php`, `blade` or Orca's Source) loaded each by default.
 - Trial D: `orca plugin dev request "$TMPDIR/phpantom-spike" spike.open --data '{"workspaceId":"<A id>","path":"app/Models/User.php"}'`, then the same with the absolute path, then with a path outside every workspace. Record each result.
 - Trial E: quit Orca, start it from the Dock (not a terminal), and record the `PATH` line the worker logs.
+- Trial G: have the editor also log `workspace.readContext` on every `visibilitychange`. Open the file in worktree A, switch to worktree B, quit and restart Orca while B is focused, then switch back to A; record what the restored A tab's editor logged at start and when it became visible (Task 10's re-attach relies on it).
 - Trial F (only if Autocomplete is installed): with both plugins enabled, open a `.php` file and record which editor opens by default.
 
 - [ ] **Step 4: Decide go or no-go**
@@ -247,7 +248,7 @@ export type AttachStatus =
   | { state: 'error'; message: string }
 declare module 'orca' {
   interface PluginRequests {
-    'phpantom.open': { input: { docId: string; language: Language; workspaceId: string | null; index: number; chunk: string; last: boolean; resync?: true }; output: AttachStatus }
+    'phpantom.open': { input: { docId: string; language: Language; workspaceId: string | null; branch: string | null; displayName: string | null; index: number; chunk: string; last: boolean; resync?: true }; output: AttachStatus }
     'phpantom.change': { input: { docId: string; session: string; version: number; changes: LspContentChange[]; length: number }; output: { ok: true } | { detached: true } | { resync: true } }
     'phpantom.request': { input: { docId: string; session: string; method: string; params: Record<string, unknown> }; output: { result: unknown } | { detached: true } | { error: string } }
     'phpantom.close': { input: { docId: string }; output: { ok: true } }
@@ -447,7 +448,7 @@ git commit -m "feat(editor): sync the document with Orca and merge outside write
 - Produces:
   - Pages set `window.__PHPANTOM_LANGUAGE__ = 'php' | 'blade'` then load `../dist/main.js` (module) and `../dist/main.css`.
   - `bladeGrammar(html: { conf: object; language: MonarchLanguage }): { conf: object; language: MonarchLanguage }` (pure, does not import Monaco)
-  - `SEMANTIC_TYPES: readonly string[]` (the 15 legend types), `themeRules(dark: boolean): { token: string; foreground?: string; fontStyle?: string }[]`, `THEME_NAME = { dark: 'phpantom-dark', light: 'phpantom-light' }`, `defineThemes(monaco): void`, `typographyOptions(t: EditorTypography): Partial<EditorOptions>` where `EditorTypography` is the `editor.readTypography` result type.
+  - `SEMANTIC_TYPES: readonly string[]` (the 15 legend types), `SEMANTIC_MODIFIERS: readonly string[]` (the 7 legend modifiers, in legend order), `themeColors(vars: Record<string, string>): Record<string, string>`, `themeRules(dark: boolean): { token: string; foreground?: string; fontStyle?: string }[]`, `THEME_NAME = { dark: 'phpantom-dark', light: 'phpantom-light' }`, `defineThemes(monaco): void`, `typographyOptions(t: EditorTypography): Partial<EditorOptions>` where `EditorTypography` is the `editor.readTypography` result type.
   - `showNote(kind: 'info' | 'warning', text: string, key: string): void`, `clearNote(key: string): void` in `editor/src/notes.ts`.
   - `startEditor(): Promise<EditorContext>` in `editor/src/editor.ts`, with `type EditorContext = { monaco: typeof Monaco; editor: Monaco.editor.IStandaloneCodeEditor; model: Monaco.editor.ITextModel; docId: string; language: Language }`. It creates the model with language `php` or `blade` and URI `inmemory://phpantom/<docId>.<language>` (`docId` is `crypto.randomUUID()`), creates the editor and binds the document.
   - `editor/src/main.ts` is the bundle entry and only calls `startEditor()` (Task 10 adds `attachLanguageServer(ctx)`); on a startup error it shows the message in the page, as Autocomplete's `main.ts` does.
@@ -458,7 +459,7 @@ Monaco imports (`editor/src/monaco.ts`): `monaco-editor/editor`, `monaco-editor/
 
 Blade grammar (decided here): a deep copy of HTML's Monarch definition with these rules prepended to `root` and to every tag and attribute-value state: `{{--` … `--}}` → `comment.blade`; `{!!` … `!!}` and `{{` … `}}` → delimiters `delimiter.blade`, contents tokenized by a small `bladeExpression` state (`$name` → `variable`, quoted strings → `string`, numbers → `number`, `->`, `::`, `=>` → `delimiter`, PHP keywords `fn function new return true false null and or not instanceof` → `keyword`, identifiers → `identifier`); `@` + identifier (not preceded by a word character or `@@`) → `keyword.blade`, followed optionally by a balanced `(` … `)` tokenized by `bladeExpression`; `@verbatim` … `@endverbatim` passes contents through as plain HTML text; `<x-` / `</x-` component tags → `tag.blade` with their attributes handled like HTML attributes, and `:attr="…"` values tokenized by `bladeExpression`. `@php` … `@endphp` contents use `bladeExpression`.
 
-Theme (decided here): `phpantom-dark` (base `vs-dark`) and `phpantom-light` (base `vs`), `inherit: true`, a rule for every `SEMANTIC_TYPES` entry with a colour taken from the base theme's colour for the nearest Monarch token (`variable`/`parameter` → the base's `variable` colour, `class`/`interface`/`enum`/`type`/`typeParameter`/`namespace` → `type`, `function`/`method` → the base's function colour, `property`/`enumMember` → `variable`, `keyword` → `keyword`, `comment` → `comment`, `decorator` → `annotation`), plus `*.deprecated` → `fontStyle: 'strikethrough'` and `*.static` → `fontStyle: 'italic'`. Editor options: `'semanticHighlighting.enabled': true`, Orca's native options from Autocomplete's `NATIVE_OPTIONS` (copy the values, not the file), `quickSuggestions: true`, `fixedOverflowWidgets: true`, and `typographyOptions(await orca.host.call('editor.readTypography', {}))`, re-applied on `orca.on('editor.typography.changed', …)`. Theme follows `orca.on('theme', …)` and the `dark` class on `<html>`.
+Theme (decided here): `phpantom-dark` (base `vs-dark`) and `phpantom-light` (base `vs`), `inherit: true`, a rule for every `SEMANTIC_TYPES` entry with a colour taken from the base theme's colour for the nearest Monarch token (`variable`/`parameter` → the base's `variable` colour, `class`/`interface`/`enum`/`type`/`typeParameter`/`namespace` → `type`, `function`/`method` → the base's function colour, `property`/`enumMember` → `variable`, `keyword` → `keyword`, `comment` → `comment`, `decorator` → `annotation`), plus modifier rules. Monaco matches a semantic token as `type.mod1.mod2…` (modifiers in legend order) against theme rules by dot-separated prefix, with no wildcard, so `themeRules` generates, for every type, one rule per non-empty subset of the 7 legend modifiers joined in legend order (15 × 127 rules), with `fontStyle` `italic` when the subset has `static`, `strikethrough` when it has `deprecated`, both joined by a space when it has both, and the type's colour. Editor chrome follows Orca's frame variables: `themeColors(vars: Record<string, string>): Record<string, string>` (pure, values already `#rrggbb`) maps `--orca-background` → `editor.background`, `editorGutter.background`, `minimap.background`; `--orca-foreground` → `editor.foreground`; `--orca-popover` / `--orca-popover-foreground` → `editorWidget.background`, `editorHoverWidget.background`, `editorSuggestWidget.background` and their `.foreground`; `--orca-border` → `editorWidget.border`, `editorHoverWidget.border`, `editorSuggestWidget.border`; `--orca-ring` → `focusBorder`; `--orca-muted-foreground` → `editorLineNumber.foreground`; missing variables are left out so the base theme's colour stays. `readOrcaVars()` (glue, not unit-tested) reads them with `getComputedStyle(document.documentElement)` and converts any CSS colour to hex by filling a 1×1 canvas and reading the pixel; `defineThemes` runs again on each `theme` event. Editor options: `'semanticHighlighting.enabled': true`, Orca's native options from Autocomplete's `NATIVE_OPTIONS` (copy the values, not the file), `quickSuggestions: true`, `fixedOverflowWidgets: true`, and `typographyOptions(await orca.host.call('editor.readTypography', {}))`, re-applied on `orca.on('editor.typography.changed', …)`. Theme follows `orca.on('theme', …)` and the `dark` class on `<html>`.
 
 - [ ] **Step 1: Write the failing grammar and theme tests**
 
@@ -483,8 +484,16 @@ test('every semantic token type has a rule in both themes', () => {
     for (const type of SEMANTIC_TYPES) assert.ok(tokens.has(type), `${type} (${dark ? 'dark' : 'light'})`)
   }
 })
-test('deprecated is struck through', () => {
-  assert.ok(themeRules(true).some((r) => r.token.endsWith('.deprecated') && r.fontStyle === 'strikethrough'))
+test('modifier combinations get exact rules', () => {
+  const byToken = new Map(themeRules(true).map((r) => [r.token, r]))
+  assert.equal(byToken.get('method.deprecated')?.fontStyle, 'strikethrough')
+  assert.equal(byToken.get('method.static.deprecated')?.fontStyle, 'italic strikethrough')
+  assert.equal(byToken.get('method.declaration.static')?.fontStyle, 'italic')
+  assert.equal(byToken.get('parameter.declaration')?.fontStyle, undefined)
+})
+test('maps Orca frame variables to editor colours and skips missing ones', () => {
+  assert.deepEqual(themeColors({ '--orca-background': '#101010', '--orca-foreground': '#eeeeee' }),
+    { 'editor.background': '#101010', 'editorGutter.background': '#101010', 'minimap.background': '#101010', 'editor.foreground': '#eeeeee' })
 })
 test('maps Orca typography to Monaco options', () => {
   assert.deepEqual(typographyOptions({ fontFamily: 'JetBrains Mono', cssFontFamily: '"JetBrains Mono", monospace', fontSize: 14, fontWeight: '400', lineHeight: 20, fontLigatures: true, wordWrap: 'off', minimap: false }),
@@ -772,7 +781,7 @@ git commit -m "feat(worker): locate the open file, focused worktree first"
 
 Router rules:
 - `session` is a `randomUUID()` made at construction; any `change`/`request`/`navigate`/`peek` whose `session` differs, or whose `docId` is unknown or whose server is not `alive`, answers `{ detached: true }` (`navigate` answers `{ opened: false, reason: 'failed' }`, `peek` answers no files).
-- `open` collects chunks per `docId` (index 0 resets) and answers `{ state: 'pending' }` until `last`. Then: find the focused row (`resolveFocused`); if it exists and is not local, answer `{ state: 'remote', host: row.hostId }`; else `locateFile` with `candidates = reveals.paths()`, tier 0 the focused row's path, tier 1 the other local rows; `none`/`ambiguous` → `single-file`. Found → server key `composerRoot(path, workspacePath)`; start the server through `resolveBinary` (status `downloading` via `onDownload`, then `starting`) or reuse it; send `didOpen` with `languageId` from `language`; record `{ docId, panel, uri, version: 1, mirror }`; answer `ready` with `reveal` from `reveals.take(path)` when present. With `resync: true` on a known document, send one full-text `didChange` instead and reset the mirror and version to 1. A resolver failure answers `{ state: 'error', message }` and sets the status bar to error.
+- `open` collects chunks per `docId` (index 0 resets) and answers `{ state: 'pending' }` until `last`. Then: find the focused row (`resolveFocused(rows, workspaceId, { branch, displayName })`); if it exists and is not local, answer `{ state: 'remote', host: row.hostId }`; else `locateFile` with `candidates = reveals.paths()`, tier 0 the focused row's path, tier 1 the other local rows; `none`/`ambiguous` → `single-file`. Found → server key `composerRoot(path, workspacePath)`; start the server through `resolveBinary` (status `downloading` via `onDownload`, then `starting`) or reuse it; send `didOpen` with `languageId` from `language`; record `{ docId, panel, uri, version: 1, mirror }`; answer `ready` with `reveal` from `reveals.take(path)` when present. With `resync: true` on a known document, send one full-text `didChange` instead and reset the mirror and version to 1. Without `resync`, an `open` for a `docId` that is already attached first sends `didClose` to its old server and drops the old record (re-attach under another workspace), so the old server never posts to that `docId` again. A resolver failure answers `{ state: 'error', message }` and sets the status bar to error.
 - `change`: `version !== doc.version + 1` → `{ resync: true }`; else `mirror.apply`, then `mirror.length !== length` → `{ resync: true }`; else forward `didChange` with `version`, store it, `{ ok: true }`.
 - `request`: add `textDocument: { uri }` to `textDocument/*` methods; pass the handler's `signal`; if `JSON.stringify(result)` is over 900 KiB: a completion list keeps the leading items that fit with `isIncomplete: true`, anything else answers `{ error: 'too_large' }`; a server error answers `{ error: message }`.
 - Diagnostics from the server are posted only for attached documents whose `uri` matches (`sameUri`), through `Outbox.send(panel, 'diag:' + docId, 'phpantom.diagnostics', …)`; refresh events are broadcast to each attached panel with key `refresh:<panel>` (kinds merged); a server exit posts `phpantom.status { state: 'error' }` to its documents and drops them (so they get `detached`). A crashed root restarts on the next `open`, at most 3 times in 5 minutes; past that it stays in error.
@@ -781,7 +790,7 @@ Router rules:
 - `peek`: read each `file:` URI's text from disk, in order, stopping before 25 files or 600 KiB in total; `omitted` counts the rest.
 - Status: each server reports its `ServerState`; the router calls `host.status(renderStatus(aggregate(states)))` at most once per second.
 
-- [ ] **Step 1: Write the failing tests** (`mountWorker` with `mockHost`, `workspace.list` answered with `host.respond`, `createServer` returning servers over `fake-server.mjs`, temp folders for workspaces)
+- [ ] **Step 1: Write the failing tests.** Router tests construct `Router` directly with a fake `RouterHost` (scripted `listWorkspaces`, recorded posts, status and `openEditor` calls) and `createServer` returning servers over `fake-server.mjs`, in temp workspace folders. One `mountWorker` test (`registers every handler and sets the status bar`) checks that `activate` handles the six `phpantom.*` names and calls `statusBar.update`.
 
 ```ts
 test('attaches a document and answers hover through the server', async () => {
@@ -791,6 +800,7 @@ test('attaches a document and answers hover through the server', async () => {
   assert.deepEqual(await worker.request('phpantom.request', { docId: 'd1', session: status.session, method: 'textDocument/hover', params: { position: { line: 0, character: 1 } } }), { result: { contents: { kind: 'markdown', value: 'len=12' } } })
 })
 test('a gap in versions asks for a resync', async () => { /* change with version 3 after open: { resync: true } */ })
+test('re-opening a docId closes the old attachment', async () => { /* open d1 in ws-a, then open d1 (no resync) in ws-b: ws-a server got didClose; a BAD diagnostic from ws-a is not posted to d1 */ })
 test('a length mismatch asks for a resync', async () => { /* changes applied but length off by one */ })
 test('posts diagnostics only for attached documents', async () => { /* open a doc with BAD; expect one post with panel set; a second unopened file's diagnostics are not posted */ })
 test('keeps posts under the rate limit and delivers the last set', async () => {
@@ -816,8 +826,8 @@ test('stops an idle server after the idle time', async () => { /* idleMs 50: clo
 - [ ] **Step 4: Run, see them pass.** `orca plugin test .` → PASS.
 - [ ] **Step 5: Try it against the real server**
 
-Run: `orca plugin dev load . --approve <fingerprint>`, open a PHP file of a local Laravel project with `orca plugin open local.phpantom --editor <file>`, then `orca plugin logs local.phpantom`.
-Expected: logs show the resolution source and `PHPantom v1.1.0` startup; `orca plugin shot . --status-bar` shows indexing then ready. The editor does not attach yet (Task 10).
+Run: `orca plugin dev load . --approve <fingerprint>`, then `orca plugin dev request . phpantom.open --data '{"docId":"t1","language":"php","workspaceId":"<id from workspace.list>","branch":null,"displayName":null,"index":0,"chunk":<JSON string of a file from that workspace>,"last":true}'`, then `orca plugin logs local.phpantom` and `orca plugin shot . --status-bar`.
+Expected: the answer is `ready`; logs show the resolution source and `PHPantom v1.1.0` startup; the status bar shows indexing, then ready. Editors attach in Task 10.
 
 - [ ] **Step 6: Commit**
 
@@ -844,7 +854,8 @@ git commit -m "feat(worker): route editor requests to one PHPantom per composer 
   - `attachLanguageServer(ctx: EditorContext): LspBridge` in `editor/src/attach.ts`, called from `main.ts` after `startEditor()`: builds the bridge, shows notes for `single-file` (`PHPantom couldn't tell which file this is, so only highlighting is on. It will try again after you save.`), `remote` (`This file is on <host>. PHPantom runs on this computer only, so only highlighting is on.`) and `error` (the message), clears them on `ready`.
 
 Rules:
-- `attach` reads the context, sends the text through `phpantom.open` in `chunkText` pieces (sequentially, `timeoutMs: 120_000` on the last piece), and stores the answer. `single-file` and request failures retry later (no sooner than `retryGapMs` 8 s and only after 2 s without typing or when the tab becomes visible, at most `maxRetries` 20 times), as Autocomplete's retry loop does.
+- `attach` reads the context (its `workspaceId`, `branch` and `displayName` go into every `phpantom.open`), sends the text through `phpantom.open` in `chunkText` pieces (sequentially, `timeoutMs: 120_000` on the last piece), and stores the answer. `single-file` and request failures retry later (no sooner than `retryGapMs` 8 s and only after 2 s without typing or when the tab becomes visible, at most `maxRetries` 20 times), as Autocomplete's retry loop does.
+- Changes made after the text snapshot of an in-flight attach (which can take up to 120 s on a cold index or a download) are queued and sent in order, starting at version 2, once the answer is `ready`; any other answer drops the queue, since the next attach sends a fresh snapshot.
 - Changes are queued in order and sent after `syncDelayMs` (50 ms) of quiet, one `phpantom.change` in flight at a time; each group from `splitChanges` gets the next version number. `isFlush` (whole value replaced), `{ resync: true }`, or a failed change send the full text again through `phpantom.open` with `resync: true`.
 - `{ detached: true }`, an `unavailable` rejection, or a `ready` answer with a different `session` → full re-attach (with the 5 s gap Autocomplete uses), then the pending `ask` is retried once.
 - `ask` flushes queued changes first, then sends `phpantom.request` with the signal; it returns `null` when the signal aborted, the answer carries `error`, or the document version moved for these methods: `textDocument/formatting`, `textDocument/rangeFormatting`, `textDocument/rename`, `codeAction/resolve`.
@@ -863,6 +874,7 @@ test('sends a large document in chunks and attaches', async () => {
   assert.ok(host.calls('phpantom.open').length > 1)
   assert.ok(host.calls('phpantom.open').every((c) => encodedSize(c.input) <= 64 * 1024))
 })
+test('keeps edits typed while attach is in flight', async () => { /* open answers after a delay; two same-length edits made meanwhile are sent as versions 2 and 3 after ready */ })
 test('sends changes in order with consecutive versions', async () => { /* three edits → change calls with versions 2,3,4 in order, never two in flight */ })
 test('a resync answer sends the whole text again', async () => { /* change answers { resync: true } → open with resync: true */ })
 test('re-opens after the worker reports a new session', async () => { /* request answers { detached: true }; expect a fresh open, then the request retried once */ })
@@ -1001,8 +1013,8 @@ git commit -m "feat(editor): cross-file navigation, references, formatting, rena
 
 - [ ] **Step 1: Run the full gate locally**
 
-Run: `npm ci && orca plugin types . && npx tsc -p . && orca plugin validate . && orca plugin check . && orca plugin test . && node editor/build.mjs && git diff --exit-code -- editor/dist && du -sh --exclude=.git --exclude=node_modules . && git ls-files | wc -l`
-Expected: every command exits 0; the folder is under 50 MiB and under 2,000 files without `node_modules`.
+Run: `npm ci && orca plugin types . && npx tsc -p . && orca plugin validate . && orca plugin check . && orca plugin test . && node editor/build.mjs && git diff --exit-code -- editor/dist && git ls-files -z | xargs -0 du -ck | tail -1 && git ls-files | wc -l`
+Expected: every command exits 0; the tracked files total under 50 MiB (51,200 K) and number under 2,000.
 
 - [ ] **Step 2: Smoke on a real Laravel project with two worktrees open**, installing from the pushed branch (`orca plugin install noppu-labs/orca-phpantom@<branch>`), and record each line as pass or fail in `docs/smoke/v1-smoke.md`: opening `.php` and `.blade.php` opens PHPantom's editor; save, dirty state and the outside-change behaviour match Orca's; an agent (`echo` into the file from a terminal) writing during unsaved edits merges; undo after that still works; each v1 feature from the spec's Goals list; a 1 MB PHP file stays responsive while typing; Cmd-click into `vendor/` opens and reveals; the same file in worktree B attaches to B; a remote (SSH) workspace file shows the remote note; `phpantom.restart` and `orca plugin restart` both recover within a few seconds; status bar phases; with `allowDownload` on and no binary on `PATH`, the download runs and the tooltip says `downloaded`.
 
