@@ -117,7 +117,14 @@ async function locateAlike(candidates: Candidate[], content: string, size: numbe
   return { status: 'found', path: best.file.path, root: best.file.root, approximate: true }
 }
 
-export type LocateInput = { tiers: string[][]; candidates: string[]; language: Language; content: string }
+export type LocateInput = {
+  tiers: string[][]
+  candidates: string[]
+  /** Files located before (open now or not long ago), which the walk may not reach: Composer's vendor folder. */
+  known?: string[]
+  language: Language
+  content: string
+}
 
 /** The workspace path among the tiers that holds the file, the longest when they nest; empty when none does. */
 function rootOf(path: string, tiers: readonly (readonly string[])[]): string {
@@ -166,13 +173,62 @@ export async function locateFile(input: LocateInput, options: Options = {}): Pro
   if (fromCandidates.status !== 'none') {
     return fromCandidates
   }
+  const remembered = knownRelatives(input.known ?? [], input.tiers)
   for (const tier of input.tiers) {
+    const known = await locateKnown(tier, remembered, input.language, input.content)
+    if (known.status !== 'none') {
+      return known
+    }
     const found = await locateInRoots(tier, input.language, input.content, options)
     if (found.status !== 'none') {
       return found
     }
   }
   return { status: 'none' }
+}
+
+/** Each known path relative to the workspace holding it, so the same file can be looked for in every worktree. */
+function knownRelatives(known: readonly string[], tiers: readonly (readonly string[])[]): string[] {
+  const relatives = new Set<string>()
+  for (const path of known) {
+    const root = rootOf(path, tiers)
+    if (root) {
+      relatives.add(path.slice(root.length).replace(/^[\\/]+/, ''))
+    }
+  }
+  return [...relatives]
+}
+
+/**
+ * Known files placed under this tier's workspaces, by exact text only. Why under every workspace: a file
+ * remembered in a sibling worktree has a copy here, and the focused worktree's copy must win.
+ */
+async function locateKnown(roots: readonly string[], relatives: readonly string[], language: Language, content: string): Promise<Located> {
+  if (relatives.length === 0) {
+    return { status: 'none' }
+  }
+  const size = Buffer.byteLength(content, 'utf8')
+  const matches: { path: string; root: string }[] = []
+  for (const root of roots) {
+    for (const relative of relatives) {
+      const path = join(root, relative)
+      if (!nameMatches(path.slice(Math.max(path.lastIndexOf('/'), path.lastIndexOf('\\')) + 1), language)) {
+        continue
+      }
+      const info = await stat(path).catch(() => null)
+      if (!info?.isFile() || (info.size !== size && info.size !== size + BOM_BYTES)) {
+        continue
+      }
+      const text = (await readFile(path, 'utf8').catch(() => null))?.replace(/^\uFEFF/, '')
+      if (text === content) {
+        matches.push({ path, root })
+      }
+    }
+  }
+  if (matches.length === 1) {
+    return { status: 'found', ...matches[0] }
+  }
+  return matches.length > 1 ? { status: 'ambiguous' } : { status: 'none' }
 }
 
 async function locateInRoots(

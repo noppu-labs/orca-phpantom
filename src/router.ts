@@ -108,6 +108,9 @@ const CUTTABLE_LISTS = new Set([
   'textDocument/codeAction'
 ])
 const PEEK_MAX_FILES = 25
+// Files attached before, tried again when a tab of theirs is shown: a new frame must locate its file anew,
+// and the walk never reaches Composer's vendor folder, where go to definition often leads.
+const REMEMBERED_FILES = 50
 const PEEK_MAX_BYTES = 600 * 1024
 const IDLE_MS = 10 * 60_000
 // Why a lease: an editor frame that remounts (Orca does on every tab show) or dies never sends its close.
@@ -139,6 +142,8 @@ export class Router {
   private readonly sweepTimer: ReturnType<typeof setInterval>
   private readonly outbox: Outbox
   private readonly reveals = new PendingReveals()
+  /** Paths attached since the worker started, oldest first; see REMEMBERED_FILES. */
+  private readonly remembered = new Set<string>()
   private readonly pool = new Map<string, Entry>()
   private readonly docs = new Map<string, Doc>()
   private readonly chunks = new Map<string, string[]>()
@@ -424,7 +429,8 @@ export class Router {
     }
     const others = rows.filter((row) => row !== focused && isLocal(row)).map((row) => row.path)
     const tiers = [focused ? [focused.path] : [], others].filter((tier) => tier.length > 0)
-    const located = await locateFile({ tiers, candidates: this.reveals.paths(), language: input.language, content: text })
+    const remembered = new Set([...this.remembered, ...[...this.docs.values()].map((doc) => doc.path)])
+    const located = await locateFile({ tiers, candidates: this.reveals.paths(), known: [...remembered], language: input.language, content: text })
     if (located.status === 'none') {
       return { state: 'single-file', reason: 'no-file' }
     }
@@ -438,6 +444,7 @@ export class Router {
       return { state: 'single-file', reason: 'no-file' }
     }
     const root = composerRoot(path, workspace.path)
+    this.remember(path)
 
     const started = await this.serverFor(root)
     if ('error' in started) {
@@ -485,6 +492,17 @@ export class Router {
       capabilities: server.capabilities,
       ...(located.approximate ? { approximate: true as const } : {}),
       ...(reveal ? { reveal } : {})
+    }
+  }
+
+  private remember(path: string): void {
+    this.remembered.delete(path)
+    this.remembered.add(path)
+    for (const oldest of this.remembered) {
+      if (this.remembered.size <= REMEMBERED_FILES) {
+        break
+      }
+      this.remembered.delete(oldest)
     }
   }
 

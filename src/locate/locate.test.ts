@@ -211,3 +211,29 @@ test('the file cap bounds the walk, directories included', async () => {
     await cleanup()
   }
 })
+
+test('a remembered path the walk cannot reach is found when its text matches exactly', async () => {
+  const root = await tree({ 'composer.json': '{}', 'app/A.php': '<?php // a\n', 'vendor/x/Y.php': SRC })
+  try {
+    const known = [join(root, 'vendor/x/Y.php')]
+    assert.deepEqual(await locateFile({ tiers: [[root]], candidates: [], known, language: 'php', content: SRC }), { status: 'found', path: join(root, 'vendor/x/Y.php'), root })
+    // Exact matches only: edited text is not placed from memory.
+    assert.deepEqual(await locateFile({ tiers: [[root]], candidates: [], known, language: 'php', content: SRC + '// edited\n' }), { status: 'none' })
+  } finally {
+    await cleanup()
+  }
+})
+
+test('a path remembered in a sibling worktree still attaches to the focused worktree\'s copy', async () => {
+  const [focused, sibling] = await twoWorktrees({ 'composer.json': '{}', 'vendor/x/Y.php': SRC })
+  try {
+    const known = [join(sibling, 'vendor/x/Y.php')]
+    assert.deepEqual(await locateFile({ tiers: [[focused], [sibling]], candidates: [], known, language: 'php', content: SRC }), {
+      status: 'found',
+      path: join(focused, 'vendor/x/Y.php'),
+      root: focused
+    })
+  } finally {
+    await cleanup()
+  }
+})

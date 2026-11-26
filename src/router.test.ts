@@ -687,3 +687,17 @@ test('a departing holder skips a holder waiting for its resync', async () => {
   assert.match(router.describe(), /2 open document\(s\)/)
   assert.equal(await serverText(started), 'X' + saved)
 })
+
+test('a vendor file opened by navigation is found again after its document was released', async () => {
+  const yText = '<?php\nclass Y {}\n'
+  const { worker, docs } = await setup({ files: { 'a/composer.json': '{}', 'a/app/A.php': '<?php // ok\n', 'a/vendor/x/Y.php': yText } })
+  const status = await openWhole(worker, { docId: 'd1', language: 'php', workspaceId: 'ws-a', text: '<?php // ok\n' })
+  const target = pathToFileURL(docs['a/vendor/x/Y.php']).href
+  assert.deepEqual(await worker.request('phpantom.navigate', { docId: 'd1', session: status.session, uri: target, range: { start: at(1, 6), end: at(1, 7) } }), { opened: true })
+  assert.equal((await openWhole(worker, { docId: 'd2', language: 'php', workspaceId: 'ws-a', text: yText, panel: 'panel-2' })).uri, target)
+  assert.deepEqual(await worker.request('phpantom.close', { docId: 'd2' }), { ok: true })
+  // The tab is shown again: a new frame, no pending reveal, and the walk skips vendor.
+  const again = await openWhole(worker, { docId: 'd3', language: 'php', workspaceId: 'ws-a', text: yText, panel: 'panel-3' })
+  assert.equal(again.state, 'ready')
+  assert.equal(again.uri, target)
+})
