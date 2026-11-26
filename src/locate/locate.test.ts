@@ -237,3 +237,16 @@ test('a path remembered in a sibling worktree still attaches to the focused work
     await cleanup()
   }
 })
+
+test('a remembered file with an identical copy beside it is still ambiguous', async () => {
+  // Say the person duplicated an open file and opened the copy: it must not attach as the original.
+  const root = await tree({ 'app/X.php': SRC, 'app/Y.php': SRC })
+  try {
+    assert.deepEqual(await locateFile({ tiers: [[root]], candidates: [], known: [join(root, 'app/X.php')], language: 'php', content: SRC }), { status: 'ambiguous' })
+    // A remembered file the walk also finds is one match, not two.
+    await rm(join(root, 'app/Y.php'))
+    assert.deepEqual(await locateFile({ tiers: [[root]], candidates: [], known: [join(root, 'app/X.php')], language: 'php', content: SRC }), { status: 'found', path: join(root, 'app/X.php'), root })
+  } finally {
+    await cleanup()
+  }
+})

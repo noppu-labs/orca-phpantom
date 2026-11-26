@@ -175,11 +175,9 @@ export async function locateFile(input: LocateInput, options: Options = {}): Pro
   }
   const remembered = knownRelatives(input.known ?? [], input.tiers)
   for (const tier of input.tiers) {
+    // Why still walk: an identical copy the walk can see (a duplicated file) makes the answer ambiguous.
     const known = await locateKnown(tier, remembered, input.language, input.content)
-    if (known.status !== 'none') {
-      return known
-    }
-    const found = await locateInRoots(tier, input.language, input.content, options)
+    const found = await locateInRoots(tier, input.language, input.content, options, known)
     if (found.status !== 'none') {
       return found
     }
@@ -203,9 +201,9 @@ function knownRelatives(known: readonly string[], tiers: readonly (readonly stri
  * Known files placed under this tier's workspaces, by exact text only. Why under every workspace: a file
  * remembered in a sibling worktree has a copy here, and the focused worktree's copy must win.
  */
-async function locateKnown(roots: readonly string[], relatives: readonly string[], language: Language, content: string): Promise<Located> {
+async function locateKnown(roots: readonly string[], relatives: readonly string[], language: Language, content: string): Promise<{ path: string; root: string }[]> {
   if (relatives.length === 0) {
-    return { status: 'none' }
+    return []
   }
   const size = Buffer.byteLength(content, 'utf8')
   const matches: { path: string; root: string }[] = []
@@ -225,22 +223,21 @@ async function locateKnown(roots: readonly string[], relatives: readonly string[
       }
     }
   }
-  if (matches.length === 1) {
-    return { status: 'found', ...matches[0] }
-  }
-  return matches.length > 1 ? { status: 'ambiguous' } : { status: 'none' }
+  return matches
 }
 
 async function locateInRoots(
   roots: readonly string[],
   language: Language,
   content: string,
-  options: Options
+  options: Options,
+  /** Exact matches found already (remembered files the walk may not reach). */
+  known: readonly { path: string; root: string }[] = []
 ): Promise<Located> {
   const size = Buffer.byteLength(content, 'utf8')
   const deadline = Date.now() + (options.budgetMs ?? BUDGET_MS)
   let visited = 0
-  const matches: { path: string; root: string }[] = []
+  const matches: { path: string; root: string }[] = [...known]
   const others: Candidate[] = []
 
   // Why breadth-first: the file being edited is nearly always close to the workspace root, so a huge
@@ -287,7 +284,9 @@ async function locateInRoots(
           same = text === content
         }
         if (same) {
-          matches.push({ path, root })
+          if (!matches.some((match) => match.path === path)) {
+            matches.push({ path, root })
+          }
         } else {
           others.push({ path, root, size: info.size })
         }
