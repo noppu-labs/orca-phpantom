@@ -35,6 +35,9 @@ export const moreResultsNote = (count: number): string =>
 export const cutResultsNote = (shown: number, cut: number): string =>
   `Showing the first ${shown} ${shown === 1 ? 'result' : 'results'}; ${cut} more ${cut === 1 ? 'was' : 'were'} cut.`
 
+/** The note for a query whose list was cut: counts what is shown, and is null (clear the note) when nothing was cut. */
+export const cutNoteFor = (shown: number, cut: number): string | null => (cut > 0 ? cutResultsNote(shown, cut) : null)
+
 /** The models made for previews, at most `limit` of them; the least recently used goes first. */
 export class PeekModels {
   private readonly create: (uri: string, text: string) => Disposable

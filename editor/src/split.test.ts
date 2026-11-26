@@ -1,6 +1,7 @@
 import { assert, test } from 'orca/testing'
 import { DocumentMirror } from '../../src/lsp/mirror.ts'
-import { chunkText, encodedSize, REQUEST_BUDGET_BYTES, splitChanges } from './split.ts'
+import { orcaSize } from '../../src/size.ts'
+import { chunkText, encodedSize, REQUEST_BUDGET_BYTES, REQUEST_BUDGET_OBJECTS, splitChanges } from './split.ts'
 
 const ins = (line: number, character: number, text: string) => ({
   range: { start: { line, character }, end: { line, character } },
@@ -40,6 +41,28 @@ test('split full-text and lone-CR changes rebuild the same text', () => {
       }
       assert.equal(actual.text, expected.text)
     }
+  }
+})
+
+test('many one-character edits split into groups under Orca\'s request limit', () => {
+  const changes = Array.from({ length: 3000 }, (_, i) => ins(i, 0, 'x'))
+  const groups = splitChanges(changes)
+  assert.ok(groups.length > 1)
+  for (const group of groups) {
+    const size = orcaSize(group)
+    // 64 KiB and 10,000 objects are Orca's limits for the whole message; the group is held well inside them.
+    assert.ok(size.bytes <= REQUEST_BUDGET_BYTES, `bytes ${size.bytes}`)
+    assert.ok(size.objects <= REQUEST_BUDGET_OBJECTS, `objects ${size.objects}`)
+  }
+  assert.deepEqual(groups.flat(), changes)
+})
+
+test('a large paste splits into pieces under Orca\'s request limit', () => {
+  const groups = splitChanges([ins(0, 0, 'é"\n€😀 '.repeat(20_000))])
+  assert.ok(groups.length > 1)
+  for (const group of groups) {
+    assert.ok(orcaSize(group).bytes <= REQUEST_BUDGET_BYTES)
+    assert.ok(encodedSize(group) <= REQUEST_BUDGET_BYTES)
   }
 })
 

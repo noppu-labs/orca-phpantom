@@ -756,6 +756,15 @@ export class Router {
       const kept = leadingThatFit(result, orcaSize({ result: [], truncated: result.length }), ANSWER_LIMIT)
       return { result: kept, truncated: result.length - kept.length }
     }
+    const tokens = method === 'textDocument/semanticTokens/full' ? (result as { data?: unknown } | null)?.data : undefined
+    if (Array.isArray(tokens)) {
+      // Why whole tokens: `data` is five numbers per token, each relative to the one before, so a leading
+      // run of whole tokens is still correct colouring; a number is 8 bytes plus 4 for its slot in the array.
+      const shell = orcaSize({ result: { ...(result as object), data: [] } })
+      const room = Math.floor((ANSWER_LIMIT.bytes - shell.bytes) / 12)
+      const count = Math.max(0, Math.min(tokens.length, room) - (Math.min(tokens.length, room) % 5))
+      return { result: { ...(result as object), data: tokens.slice(0, count) } }
+    }
     return { error: 'too_large' }
   }
 

@@ -33,8 +33,8 @@ import {
   type MonacoWorkspaceEdit
 } from './lsp-convert.ts'
 import type { monaco } from './monaco.ts'
-import { afterPeek, cutResultsNote, mapLocations, moreResultsNote, NAVIGATION_NOTE, PeekModels } from './navigation.ts'
-import { showNote } from './notes.ts'
+import { afterPeek, cutNoteFor, mapLocations, moreResultsNote, NAVIGATION_NOTE, PeekModels } from './navigation.ts'
+import { clearNote, showNote } from './notes.ts'
 
 type Disposable = { dispose(): void }
 type Capabilities = Record<string, any> // the server's own JSON
@@ -372,8 +372,13 @@ export function registerEditingProviders(ctx: EditorContext, bridge: LspBridge, 
     if (!ours(m)) return null
     const answer = await withSignal(token, (signal) => bridge.askDetailed(method, { ...atCursor(position), ...extra }, signal))
     const found = normalizeLocations(answer?.result)
-    if (answer?.truncated) showNote('info', cutResultsNote(found.length, answer.truncated), `${NAVIGATION_NOTE}-cut`)
     const locations = await withPreviews(mapLocations(found, documentUri(), modelUri), token, keepUnread)
+    // Why after the previews: the note counts what is shown, and a query that was not cut clears the last one's.
+    if (answer) {
+      const cutNote = cutNoteFor(locations.length, answer.truncated)
+      if (cutNote) showNote('info', cutNote, `${NAVIGATION_NOTE}-cut`)
+      else clearNote(`${NAVIGATION_NOTE}-cut`)
+    }
     return locations.map((location): monaco.languages.Location => ({
       uri: location.uri === modelUri ? model.uri : monaco.Uri.parse(location.uri),
       range: location.range

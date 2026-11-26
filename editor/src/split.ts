@@ -1,6 +1,12 @@
 import type { LspContentChange, LspPosition } from '../../src/protocol.ts'
+import { orcaSize } from '../../src/size.ts'
 
+// Orca refuses a panel request ("panel message exceeds the size limit") whose whole message is over 64 KiB or
+// 10,000 arrays and objects by its own measure (see src/size.ts), not by its JSON. A group of changes is held
+// to both budgets below, in JSON bytes and in Orca's measure, which leaves room for the message around it:
+// the session token (up to 128 bytes), the action and request names, and the document id, session and length.
 export const REQUEST_BUDGET_BYTES = 56 * 1024
+export const REQUEST_BUDGET_OBJECTS = 9000
 
 const encoder = new TextEncoder()
 
@@ -54,10 +60,13 @@ export function chunkText(text: string, budget: number = REQUEST_BUDGET_BYTES): 
 }
 
 const MAX = 4294967295
-const ENVELOPE = encodedSize({
+const EMPTY_CHANGE = {
   range: { start: { line: MAX, character: MAX }, end: { line: MAX, character: MAX } },
   text: '',
-})
+}
+const ENVELOPE = encodedSize(EMPTY_CHANGE)
+// A one-change group in Orca's measure, without the text: the array, its element, and the change's own fields.
+const ORCA_ENVELOPE = orcaSize([EMPTY_CHANGE]).bytes
 
 /**
  * The last piece replaces the range and the earlier ones are inserted, last to first, at the range start, so no
@@ -65,7 +74,9 @@ const ENVELOPE = encodedSize({
  * (Monaco normalises its buffers to a single EOL); chunkText also keeps LF off the start of every later piece.
  */
 function splitOne(change: LspContentChange, budget: number): LspContentChange[] {
-  const textBudget = budget - 2 - ENVELOPE + 2
+  // Why the smaller: a piece's raw UTF-8 bytes never exceed its JSON size, so JSON-bounding it bounds Orca's
+  // measure of the text too; this adds what Orca counts around it.
+  const textBudget = Math.min(budget - 2 - ENVELOPE + 2, budget - ORCA_ENVELOPE + 2)
   const pieces = chunkText(change.text, Math.max(textBudget, 16))
   const last = pieces[pieces.length - 1]
   const at = 'range' in change ? change.range.start : { line: 0, character: 0 }
@@ -74,25 +85,37 @@ function splitOne(change: LspContentChange, budget: number): LspContentChange[] 
   return out
 }
 
-export function splitChanges(changes: LspContentChange[], budget: number = REQUEST_BUDGET_BYTES): LspContentChange[][] {
+export function splitChanges(
+  changes: LspContentChange[],
+  budget: number = REQUEST_BUDGET_BYTES,
+  maxObjects: number = REQUEST_BUDGET_OBJECTS
+): LspContentChange[][] {
   const groups: LspContentChange[][] = []
   let current: LspContentChange[] = []
+  // A group is an array: 2 JSON bytes of brackets, 8 Orca bytes and one object.
   let size = 2
+  let orcaBytes = 8
+  let objects = 1
   const flush = () => {
     if (current.length > 0) groups.push(current)
     current = []
     size = 2
+    orcaBytes = 8
+    objects = 1
   }
   for (const change of changes) {
     const own = encodedSize(change)
-    if (own + 2 > budget) {
+    const ownOrca = orcaSize(change)
+    if (own + 2 > budget || ownOrca.bytes + 12 > budget || ownOrca.objects + 1 > maxObjects) {
       flush()
       for (const piece of splitOne(change, budget)) groups.push([piece])
       continue
     }
     const added = own + (current.length > 0 ? 1 : 0)
-    if (size + added > budget) flush()
+    if (size + added > budget || orcaBytes + 4 + ownOrca.bytes > budget || objects + ownOrca.objects > maxObjects) flush()
     size += own + (current.length > 0 ? 1 : 0)
+    orcaBytes += 4 + ownOrca.bytes
+    objects += ownOrca.objects
     current.push(change)
   }
   flush()

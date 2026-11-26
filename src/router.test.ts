@@ -478,6 +478,20 @@ test('cuts an oversized list of locations to what Orca accepts, and says how man
   assert.equal(answer.result[0].uri, 'file:///w/F0.php')
 })
 
+test('cuts oversized semantic tokens at a whole token, keeping the leading colouring', async () => {
+  const { worker } = await setup({ files: { 'a/A.php': '<?php // ok\n' } })
+  const status = await openWhole(worker, { docId: 'd1', language: 'php', workspaceId: 'ws-a', text: '<?php // ok\n' })
+  const answer = await worker.request('phpantom.request', { docId: 'd1', session: status.session, method: 'textDocument/semanticTokens/full', params: {} })
+  assert.ok(!('error' in answer))
+  const size = orcaSize(answer)
+  assert.ok(size.objects <= ORCA_MAX_OBJECTS && size.bytes <= 1024 * 1024, JSON.stringify(size))
+  assert.equal(answer.result.resultId, 'r1')
+  const length = answer.result.data.length
+  assert.ok(length > 50_000 && length < 200_000)
+  assert.equal(length % 5, 0)
+  assert.deepEqual(answer.result.data.slice(0, 7), [0, 1, 2, 3, 4, 0, 1])
+})
+
 test('an oversized edit is refused, never cut', async () => {
   const { worker } = await setup({ files: { 'a/A.php': '<?php // ok\n' } })
   const status = await openWhole(worker, { docId: 'd1', language: 'php', workspaceId: 'ws-a', text: '<?php // ok\n' })

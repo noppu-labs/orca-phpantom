@@ -1,15 +1,16 @@
 // Every post to an editor goes through here, so the plugin stays inside Orca's limits (200 posts per
-// 10 s, 256 KiB each) even when PHPantom publishes diagnostics for hundreds of files at once.
+// 10 s, 256 KiB each, measured by Orca's own function: see size.ts) even when PHPantom publishes diagnostics for hundreds of files at once.
 // Posts are keyed: a newer payload for a key replaces the queued one, so the latest state always
 // arrives and stale ones are never sent.
 
-export type OutboxOptions = { windowMs?: number; maxPosts?: number; maxBytes?: number; delayMs?: number; now?: () => number }
+import { fitsIn, orcaSize, type Size } from './size.ts'
+
+// Orca drops a post over 256 KiB or 10,000 objects by its own measure; this leaves room for what it may miss.
+export type OutboxOptions = { windowMs?: number; maxPosts?: number; maxBytes?: number; maxObjects?: number; delayMs?: number; now?: () => number }
 
 type PostFn = (event: string, payload: unknown, options: { panel: string }) => void
 type Queued = { panel: string; event: string; payload: unknown }
 type DiagnosticsPayload = { diagnostics: unknown[]; truncated?: number }
-
-const bytes = (value: unknown): number => Buffer.byteLength(JSON.stringify(value) ?? '', 'utf8')
 
 function severityOf(diagnostic: unknown): number {
   const severity = (diagnostic as { severity?: unknown } | null)?.severity
@@ -21,7 +22,7 @@ export class Outbox {
   private readonly post: PostFn
   private readonly windowMs: number
   private readonly maxPosts: number
-  private readonly maxBytes: number
+  private readonly limit: Size
   private readonly delayMs: number
   private readonly now: () => number
   private readonly queue = new Map<string, Queued>()
@@ -33,7 +34,7 @@ export class Outbox {
     this.post = post
     this.windowMs = options.windowMs ?? 10_000
     this.maxPosts = options.maxPosts ?? 180
-    this.maxBytes = options.maxBytes ?? 240 * 1024
+    this.limit = { bytes: options.maxBytes ?? 250 * 1024, objects: options.maxObjects ?? 9000 }
     this.delayMs = options.delayMs ?? 150
     this.now = options.now ?? Date.now
   }
@@ -101,25 +102,43 @@ export class Outbox {
     }
   }
 
-  /** A diagnostics payload over the size limit keeps the most severe diagnostics that fit. */
+  /** A payload over Orca's limit is cut to what fits: diagnostics keep the most severe, a message is shortened. */
   private fit(event: string, payload: unknown): unknown {
-    if (event !== 'phpantom.diagnostics' || bytes(payload) <= this.maxBytes) {
+    if (fitsIn(orcaSize(payload), this.limit)) {
       return payload
     }
-    const original = payload as DiagnosticsPayload
+    if (event === 'phpantom.diagnostics') {
+      return this.fitDiagnostics(payload as DiagnosticsPayload)
+    }
+    const message = (payload as { message?: unknown } | null)?.message
+    if (typeof message === 'string') {
+      const shell = orcaSize({ ...(payload as object), message: '' })
+      const room = this.limit.bytes - shell.bytes
+      if (room > 0 && shell.objects <= this.limit.objects) {
+        // Why chars before bytes: a character is at most 4 bytes, so this many always fit.
+        return { ...(payload as object), message: message.slice(0, Math.floor(room / 4)) }
+      }
+    }
+    return payload
+  }
+
+  private fitDiagnostics(original: DiagnosticsPayload): DiagnosticsPayload {
     const earlier = original.truncated ?? 0
     const ranked = original.diagnostics
       .map((diagnostic, index) => ({ diagnostic, index, severity: severityOf(diagnostic) }))
       .sort((a, b) => a.severity - b.severity || a.index - b.index)
-    // Why the largest count: the final `truncated` can only have as many digits or fewer.
-    let room = this.maxBytes - bytes({ ...original, diagnostics: [], truncated: earlier + original.diagnostics.length })
+    // Why the largest count: a number is 8 bytes to Orca whatever its value.
+    const shell = orcaSize({ ...original, diagnostics: [], truncated: earlier + original.diagnostics.length })
+    let bytes = shell.bytes
+    let objects = shell.objects
     const kept: typeof ranked = []
     for (const entry of ranked) {
-      const size = bytes(entry.diagnostic) + (kept.length > 0 ? 1 : 0)
-      if (size > room) {
+      const size = orcaSize(entry.diagnostic)
+      if (bytes + 4 + size.bytes > this.limit.bytes || objects + size.objects > this.limit.objects) {
         break
       }
-      room -= size
+      bytes += 4 + size.bytes
+      objects += size.objects
       kept.push(entry)
     }
     kept.sort((a, b) => a.index - b.index)

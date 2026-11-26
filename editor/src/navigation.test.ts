@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { afterPeek, cutResultsNote, mapLocations, moreResultsNote, PeekModels } from './navigation.ts'
+import { afterPeek, cutNoteFor, cutResultsNote, mapLocations, moreResultsNote, PeekModels } from './navigation.ts'
 import { renameReachesOtherFiles } from './providers.ts'
 
 const r = (startLineNumber: number, startColumn: number, endLineNumber: number, endColumn: number) => ({ startLineNumber, startColumn, endLineNumber, endColumn })
@@ -75,4 +75,9 @@ test('notes count in the singular and the plural', () => {
   assert.equal(cutResultsNote(2400, 3600), 'Showing the first 2400 results; 3600 more were cut.')
   assert.equal(renameReachesOtherFiles(1), "Renaming here would also change 1 other file. Cross-file rename isn't supported yet.")
   assert.equal(renameReachesOtherFiles(4), "Renaming here would also change 4 other files. Cross-file rename isn't supported yet.")
+})
+
+test('the cut note counts what is shown and goes away when nothing was cut', () => {
+  assert.equal(cutNoteFor(2, 5), 'Showing the first 2 results; 5 more were cut.')
+  assert.equal(cutNoteFor(2, 0), null)
 })

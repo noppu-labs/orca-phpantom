@@ -1,6 +1,7 @@
 import { assert, test } from 'orca/testing'
 import { mock } from 'node:test'
 import { Outbox } from './outbox.ts'
+import { orcaSize } from './size.ts'
 
 type Sent = { event: string; payload: unknown; panel: string; at: number }
 
@@ -48,7 +49,7 @@ test('keeps posts under the rate limit and delivers the last set', async () => {
   }
 })
 
-test('truncates a diagnostics post over 240 KiB, most severe first', async () => {
+test('truncates a diagnostics post over the size limit, most severe first', async () => {
   const posts: Sent[] = []
   const outbox = new Outbox((event, payload, options) => posts.push({ event, payload, panel: options.panel, at: 0 }), { delayMs: 0 })
   const severities = [4, 3, 2, 1]
@@ -61,12 +62,64 @@ test('truncates a diagnostics post over 240 KiB, most severe first', async () =>
   await new Promise((resolve) => setTimeout(resolve, 20))
   assert.equal(posts.length, 1)
   const payload = posts[0].payload as { docId: string; diagnostics: { severity: number }[]; truncated: number }
-  assert.ok(Buffer.byteLength(JSON.stringify(payload)) <= 240 * 1024)
+  const size = orcaSize(payload)
+  assert.ok(size.bytes <= 250 * 1024 && size.objects <= 9000)
   assert.equal(payload.docId, 'd1')
   assert.ok(payload.truncated > 0)
   assert.equal(payload.diagnostics.length + payload.truncated, 5000)
   assert.equal(payload.diagnostics.filter((d) => d.severity === 1).length, 1250)
   assert.equal(payload.diagnostics.filter((d) => d.severity === 4).length, 0)
+  outbox.dispose()
+})
+
+test('a diagnostics post under 240 KiB of JSON is still cut when Orca measures it over 256 KiB', async () => {
+  const posts: Sent[] = []
+  const outbox = new Outbox((event, payload, options) => posts.push({ event, payload, panel: options.panel, at: 0 }), { delayMs: 0 })
+  // Short messages: numbers cost 8 bytes to Orca and a few digits as JSON, so Orca's measure is the larger one.
+  const diagnostics = Array.from({ length: 2000 }, (_, i) => ({
+    range: { start: { line: i, character: 0 }, end: { line: i, character: 5 } },
+    severity: 1 + (i % 4),
+    message: 'm' + i
+  }))
+  const whole = { docId: 'd1', diagnostics, truncated: 0 }
+  assert.ok(Buffer.byteLength(JSON.stringify(whole)) < 240 * 1024)
+  assert.ok(orcaSize(whole).bytes > 256 * 1024, `orca measures ${orcaSize(whole).bytes}`)
+  outbox.send('panel-1', 'diag:d1', 'phpantom.diagnostics', whole)
+  await new Promise((resolve) => setTimeout(resolve, 20))
+  const payload = posts[0].payload as { diagnostics: { severity: number }[]; truncated: number }
+  assert.ok(orcaSize(payload).bytes <= 250 * 1024)
+  assert.ok(payload.truncated > 0)
+  assert.equal(payload.diagnostics.length + payload.truncated, 2000)
+  assert.equal(payload.diagnostics.filter((d) => d.severity === 1).length, 500)
+  outbox.dispose()
+})
+
+test('a diagnostics post of many tiny diagnostics stays under 9,000 objects', async () => {
+  const posts: Sent[] = []
+  const outbox = new Outbox((event, payload, options) => posts.push({ event, payload, panel: options.panel, at: 0 }), { delayMs: 0 })
+  const diagnostics = Array.from({ length: 3000 }, (_, i) => ({
+    range: { start: { line: i, character: 0 }, end: { line: i, character: 1 } },
+    severity: 1,
+    message: ''
+  }))
+  outbox.send('panel-1', 'diag:d1', 'phpantom.diagnostics', { docId: 'd1', diagnostics, truncated: 0 })
+  await new Promise((resolve) => setTimeout(resolve, 20))
+  const payload = posts[0].payload as { diagnostics: unknown[]; truncated: number }
+  assert.ok(orcaSize(payload).objects <= 9000)
+  assert.ok(payload.truncated > 0)
+  assert.equal(payload.diagnostics.length + payload.truncated, 3000)
+  outbox.dispose()
+})
+
+test('a status message too long for a post is shortened', async () => {
+  const posts: Sent[] = []
+  const outbox = new Outbox((event, payload, options) => posts.push({ event, payload, panel: options.panel, at: 0 }), { delayMs: 0 })
+  outbox.send('panel-1', 'status:d1', 'phpantom.status', { docId: 'd1', state: 'error', message: 'é'.repeat(300_000) })
+  await new Promise((resolve) => setTimeout(resolve, 20))
+  const payload = posts[0].payload as { message: string; state: string }
+  assert.ok(orcaSize(payload).bytes <= 250 * 1024)
+  assert.equal(payload.state, 'error')
+  assert.ok(payload.message.length > 1000)
   outbox.dispose()
 })
 

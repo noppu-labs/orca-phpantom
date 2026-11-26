@@ -1,7 +1,7 @@
 // A tiny language server for tests, plain JavaScript with its own framing so `node` runs it directly.
 // FAKE_CONFIG_ITEMS=n: after `initialized`, asks for n configuration items and logs the answer as a warning.
 // Hover answers `len=<text length>`; `fake/text` answers the whole text it holds; completion answers 5000 items of about 400 bytes each;
-// references answer 6000 small locations (over Orca's object limit); formatting answers one 1.2 MB edit.
+// references answer 6000 small locations (over Orca's object limit); formatting answers one 1.2 MB edit; semanticTokens/full answers 40,000 tokens (200,000 numbers).
 // FAKE_MODE=silent: never answers initialize. FAKE_MODE=stubborn: answers, then ignores shutdown, exit, stdin end.
 // Both ignore SIGTERM, so only SIGKILL removes them.
 const mode = process.env.FAKE_MODE ?? ''
@@ -90,6 +90,8 @@ function handle(message) {
     send({ jsonrpc: '2.0', id, result: Array.from({ length: 6000 }, (_, i) => ({ uri: `file:///w/F${i}.php`, range })) })
   } else if (method === 'textDocument/formatting') {
     send({ jsonrpc: '2.0', id, result: [{ range: { start: { line: 0, character: 0 }, end: { line: 1, character: 0 } }, newText: 'x'.repeat(1200 * 1024) }] })
+  } else if (method === 'textDocument/semanticTokens/full') {
+    send({ jsonrpc: '2.0', id, result: { resultId: 'r1', data: Array.from({ length: 200_000 }, (_, i) => i % 5) } })
   } else if (method === 'shutdown') {
     send({ jsonrpc: '2.0', id, result: null })
   } else if (method === 'exit') {
