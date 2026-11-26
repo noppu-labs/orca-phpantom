@@ -1,11 +1,12 @@
 // The Monaco side of the bridge: the model as a DocumentSource, and what the person sees (markers,
-// reveals, notes) from what the worker says.
+// reveals, notes, the language features) from what the worker says.
 import type { AttachStatus } from '../../src/protocol.ts'
 import { LspBridge, type DocumentSource } from './bridge.ts'
 import type { EditorContext } from './editor.ts'
 import { frameHost } from './frame-host.ts'
-import { fromLspRange, toLspContentChange, toMarker, type LspDiagnostic } from './lsp-convert.ts'
+import { fromLspRange, toLspContentChange } from './lsp-convert.ts'
 import { clearNote, showNote } from './notes.ts'
+import { registerReadingProviders, showDiagnostics } from './providers.ts'
 
 const NOTE = 'phpantom-attach'
 
@@ -48,10 +49,22 @@ function showStatus(status: AttachStatus): void {
 }
 
 export function attachLanguageServer(ctx: EditorContext): LspBridge {
-  const { monaco, editor, model, docId } = ctx
+  const { editor, docId } = ctx
   const bridge = new LspBridge(frameHost(), modelSource(ctx), { docId })
-  bridge.onDiagnostics((diagnostics) => {
-    monaco.editor.setModelMarkers(model, 'phpantom', (diagnostics as LspDiagnostic[]).map(toMarker))
+  showDiagnostics(ctx, bridge)
+  // Registered anew on each attach: a new server can say it supports something else.
+  let providers: { dispose(): void } | null = null
+  const unregister = (): void => {
+    providers?.dispose()
+    providers = null
+  }
+  bridge.onReady((status) => {
+    unregister()
+    try {
+      providers = registerReadingProviders(ctx, bridge, status.capabilities)
+    } catch (error) {
+      console.error('PHPantom language features failed to register', error)
+    }
   })
   bridge.onReveal((range) => {
     const target = fromLspRange(range)
@@ -59,9 +72,8 @@ export function attachLanguageServer(ctx: EditorContext): LspBridge {
     editor.revealRangeInCenter(target)
   })
   bridge.onStatus((status) => {
-    if (status.state !== 'ready') {
-      monaco.editor.setModelMarkers(model, 'phpantom', [])
-    }
+    // Why unregister: colouring from a server that no longer has this document would stay on screen.
+    if (status.state !== 'ready') unregister()
     showStatus(status)
   })
   window.addEventListener('pagehide', () => bridge.dispose(), { once: true })

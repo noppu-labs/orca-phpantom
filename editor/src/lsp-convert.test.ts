@@ -13,8 +13,11 @@ import {
   toLspPosition,
   toLspContentChange,
   toLspRange,
+  toCompletionLabel,
+  toInlayHint,
   toMarkdown,
-  toMarker
+  toMarker,
+  toSemanticTokens
 } from './lsp-convert.ts'
 
 test('positions and ranges convert between 0-based LSP and 1-based Monaco, and back', () => {
@@ -125,4 +128,17 @@ test('a resolved item that adds nothing adds nothing, so what the list already s
 
 test('content changes keep Monaco ranges as zero-based LSP ranges', () => {
   assert.deepEqual(toLspContentChange({ range: { startLineNumber: 2, startColumn: 3, endLineNumber: 2, endColumn: 5 }, text: 'x' }), { range: { start: { line: 1, character: 2 }, end: { line: 1, character: 4 } }, text: 'x' })
+})
+
+test('completion labels carry PHPantom label details', () => {
+  assert.deepEqual(toCompletionLabel({ label: 'greet($who)', labelDetails: { detail: ': string', description: 'User' } }), { label: 'greet($who)', detail: ': string', description: 'User' })
+  assert.equal(toCompletionLabel({ label: 'name' }), 'name')
+})
+test('inlay hints move to one-based positions and keep their kind', () => {
+  assert.deepEqual(toInlayHint({ position: { line: 12, character: 28 }, label: 'who:', kind: 2, tooltip: 'string $who', paddingRight: true }),
+    { label: 'who:', position: { lineNumber: 13, column: 29 }, kind: 2, tooltip: 'string $who', paddingRight: true })
+})
+test('semantic tokens become a Uint32Array', () => {
+  assert.deepEqual([...toSemanticTokens({ data: [3, 21, 2, 6, 32] })!.data], [3, 21, 2, 6, 32])
+  assert.equal(toSemanticTokens(null), null)
 })

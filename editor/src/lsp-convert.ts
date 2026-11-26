@@ -196,3 +196,59 @@ export function completionDetails(resolved: LspCompletionDetails | null | undefi
     ...(resolved.additionalTextEdits?.length ? { additionalTextEdits: resolved.additionalTextEdits.map(toMonacoEdit) } : {})
   }
 }
+
+/** A completion label, with PHPantom's signature (`detail`) and class (`description`) when it sent them. */
+export function toCompletionLabel(item: {
+  label: string
+  labelDetails?: { detail?: string; description?: string }
+}): string | { label: string; detail?: string; description?: string } {
+  const { detail, description } = item.labelDetails ?? {}
+  if (!detail && !description) {
+    return item.label
+  }
+  return { label: item.label, ...(detail ? { detail } : {}), ...(description ? { description } : {}) }
+}
+
+export type LspInlayHint = {
+  position: LspPosition
+  label: string | { value: string; tooltip?: string }[]
+  kind?: 1 | 2
+  tooltip?: string | { kind: string; value: string }
+  paddingLeft?: boolean
+  paddingRight?: boolean
+}
+
+/** An inlay hint in Monaco's shape. Both number their kinds the same way: 1 type, 2 parameter. */
+export function toInlayHint(hint: LspInlayHint): {
+  label: string | { label: string; tooltip?: string }[]
+  position: { lineNumber: number; column: number }
+  kind?: 1 | 2
+  tooltip?: string | { value: string }
+  paddingLeft?: boolean
+  paddingRight?: boolean
+} {
+  const label =
+    typeof hint.label === 'string'
+      ? hint.label
+      : hint.label.map((part) => ({ label: part.value, ...(part.tooltip !== undefined ? { tooltip: tooltipText(part.tooltip) } : {}) }))
+  return {
+    label,
+    position: { lineNumber: hint.position.line + 1, column: hint.position.character + 1 },
+    ...(hint.kind !== undefined ? { kind: hint.kind } : {}),
+    ...(hint.tooltip !== undefined ? { tooltip: typeof hint.tooltip === 'string' ? hint.tooltip : { value: hint.tooltip.value } } : {}),
+    ...(hint.paddingLeft ? { paddingLeft: true } : {}),
+    ...(hint.paddingRight ? { paddingRight: true } : {})
+  }
+}
+
+// Why: a label part's tooltip may be MarkupContent on the wire even where the type says string.
+const tooltipText = (tooltip: unknown): string =>
+  typeof tooltip === 'string' ? tooltip : String((tooltip as { value?: unknown } | null)?.value ?? '')
+
+/** A full semantic tokens answer as Monaco takes it; null when there is none. */
+export function toSemanticTokens(result: { data: number[]; resultId?: string } | null): { data: Uint32Array; resultId?: string } | null {
+  if (!result || !Array.isArray(result.data)) {
+    return null
+  }
+  return { data: Uint32Array.from(result.data), ...(result.resultId ? { resultId: result.resultId } : {}) }
+}
