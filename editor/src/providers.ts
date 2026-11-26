@@ -325,12 +325,14 @@ export function registerEditingProviders(ctx: EditorContext, bridge: LspBridge, 
     // preview) is read-only, so nobody types into a copy that goes nowhere.
     monaco.editor.onDidCreateEditor((created) => {
       if (created === ctx.editor) return
-      const sync = (): void => {
+      // Why not at once: the event fires inside the editor's constructor, before it has a model.
+      created.onDidChangeModel(() => {
         const shown = created.getModel()
-        created.updateOptions({ readOnly: Boolean(shown && peekModels.has(shown.uri.toString())) })
-      }
-      created.onDidChangeModel(sync)
-      sync()
+        const peek = Boolean(shown && peekModels.has(shown.uri.toString()))
+        // An embedded editor keeps what it is given over its parent's options: never make it writable
+        // when the editor it belongs to is read-only.
+        created.updateOptions({ readOnly: peek || ctx.editor.getOption(monaco.editor.EditorOption.readOnly) })
+      })
     })
   )
 
