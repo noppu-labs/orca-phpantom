@@ -230,7 +230,6 @@
         "unicorn/no-array-reverse": "off",
         "unicorn/no-array-sort": "off",
         "unicorn/no-await-expression-member": "off",
-        "unicorn/no-hex-escape": "off",
         "unicorn/no-immediate-mutation": "off",
         "unicorn/no-negated-condition": "off",
         "unicorn/no-new-array": "off",

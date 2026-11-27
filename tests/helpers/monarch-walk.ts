@@ -14,7 +14,7 @@ type Grammar = {
 export type Token = { type: string; text: string };
 
 function compile(grammar: Grammar, regex: RegExp): RegExp {
-  const source = regex.source.replace(/@@/g, '\x01');
+  const source = regex.source.replace(/@@/g, '\u0001');
   const attribute = /@(\w+)/.exec(source);
   if (attribute) {
     throw new Error(
@@ -22,7 +22,7 @@ function compile(grammar: Grammar, regex: RegExp): RegExp {
     );
   }
   const flags = grammar.language.ignoreCase ? 'i' : '';
-  return new RegExp(`^(?:${source.replaceAll('\x01', '@')})`, flags);
+  return new RegExp(`^(?:${source.replaceAll('\u0001', '@')})`, flags);
 }
 
 function rulesOf(grammar: Grammar, state: string, seen: string[] = []): unknown[] {
