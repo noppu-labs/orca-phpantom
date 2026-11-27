@@ -8,7 +8,7 @@ import {
 } from '../../src/constants/characters.ts';
 import { ORCA_ARRAY_BYTES, ORCA_SLOT_BYTES } from '../../src/constants/orca-measure.ts';
 import { BYTES_PER_KIB } from '../../src/constants/units.ts';
-import type { LspContentChange, LspPosition } from '../../src/protocol.ts';
+import type { LspContentChange } from '../../src/protocol.ts';
 import { orcaSize } from '../../src/utils/size.ts';
 
 // Orca refuses a panel request ("panel message exceeds the size limit") whose whole message is over 64 KiB or

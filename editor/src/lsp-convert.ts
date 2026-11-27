@@ -280,7 +280,7 @@ function splitWorkspaceEdit(
   const own = ownKey === undefined || ownKey === '' ? [] : (byUri.get(ownKey) ?? []);
   const otherFiles =
     [...byUri.keys()].filter((uri) => !sameUri(uri, documentUri)).length + fileOperations;
-  return { otherFiles, own: own.map((edit) => toMonacoEdit(edit)) };
+  return { otherFiles, own: own.map((textEdit) => toMonacoEdit(textEdit)) };
 }
 
 interface MonacoWorkspaceEdit {

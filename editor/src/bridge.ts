@@ -171,13 +171,13 @@ const aborted = (signal: AbortSignal | undefined): boolean => signal?.aborted ==
 /** Resolves after `ms`, or as soon as `signal` aborts. */
 async function sleep(ms: number, signal?: AbortSignal): Promise<void> {
   return new Promise((resolve) => {
-    const done = (): void => {
+    const timer = setTimeout(done, ms);
+    signal?.addEventListener('abort', done, { once: true });
+    function done(): void {
       clearTimeout(timer);
       signal?.removeEventListener('abort', done);
       resolve();
-    };
-    const timer = setTimeout(done, ms);
-    signal?.addEventListener('abort', done, { once: true });
+    }
   });
 }
 
@@ -570,10 +570,11 @@ class LspBridge {
 
   /** The answer of `run`, or of whatever attempt superseded it. */
   private async settled(run: Promise<AttachStatus | null>): Promise<AttachStatus> {
-    let status = await run;
-    while (status === null && !this.disposed && this.latest !== null && this.latest !== run) {
-      run = this.latest;
-      status = await run;
+    let attempt = run;
+    let status = await attempt;
+    while (status === null && !this.disposed && this.latest !== null && this.latest !== attempt) {
+      attempt = this.latest;
+      status = await attempt;
     }
     return status ?? this.current ?? { message: 'PHPantom: the editor closed', state: 'error' };
   }

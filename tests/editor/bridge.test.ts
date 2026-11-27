@@ -987,8 +987,10 @@ function hostError(code: string, message: string, retryAfterMs?: number): Error 
 
 const tooMany = () => hostError('rate_limited', 'too many panel requests');
 /** Refuses the first `count` calls named `name`. */
-const refuseFirst = (name: string, count: number) => (called: string) =>
-  called === name && count-- > 0 ? tooMany() : undefined;
+const refuseFirst = (name: string, count: number) => {
+  let left = count;
+  return (called: string) => (called === name && left-- > 0 ? tooMany() : undefined);
+};
 const PACED = { ...FAST, firstBackoffMs: 20, maxBackoffMs: 40 };
 
 test('a change Orca refuses is sent again as it was, with no resync and no error', async () => {

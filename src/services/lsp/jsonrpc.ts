@@ -2,6 +2,7 @@
 // A minimal JSON-RPC 2.0 connection over the framing every language server uses on stdio:
 // `Content-Length: n`, a blank line, then n bytes of JSON.
 import { isRecord } from '../../utils/json.ts';
+import { RpcError } from './rpc-error.ts';
 
 interface RpcHandlers {
   /** A request the server makes of us (configuration, registering capabilities ...); its result, or what its promise settles to, is the answer. */
@@ -28,16 +29,6 @@ const isRpcMessage = (value: unknown): value is RpcMessage => isRecord(value);
 
 const HEADER_END = Buffer.from('\r\n\r\n');
 const LENGTH_HEADER = /content-length:\s*(?<bytes>\d+)/iu;
-
-class RpcError extends Error {
-  public readonly code: number;
-
-  public constructor(code: number, message: string) {
-    super(message);
-    this.name = 'RpcError';
-    this.code = code;
-  }
-}
 
 class RpcConnection {
   private buffer: Buffer = Buffer.alloc(0);

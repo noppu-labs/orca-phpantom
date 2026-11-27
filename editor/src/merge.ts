@@ -14,7 +14,7 @@ const sameLines = (left: string[], right: string[]): boolean =>
 /** Positions of the longest strictly increasing run of `values` (patience sorting, O(n log n)). */
 function longestIncreasing(values: number[]): number[] {
   const tails: number[] = [];
-  const previous = new Array<number>(values.length).fill(-1);
+  const previous = Array.from({ length: values.length }, () => -1);
   for (let index = 0; index < values.length; index += 1) {
     let low = 0;
     let high = tails.length;

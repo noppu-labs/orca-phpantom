@@ -42,7 +42,7 @@ function showStatus(status: AttachStatus): void {
   switch (status.state) {
     case 'ready': {
       clearNote(NOTE);
-      return;
+      break;
     }
     case 'single-file': {
       showNote(
@@ -50,7 +50,7 @@ function showStatus(status: AttachStatus): void {
         "PHPantom couldn't tell which file this is, so only highlighting is on. It will try again after you save.",
         NOTE
       );
-      return;
+      break;
     }
     case 'remote': {
       showNote(
@@ -58,17 +58,17 @@ function showStatus(status: AttachStatus): void {
         `This file is on ${status.host}. PHPantom runs on this computer only, so only highlighting is on.`,
         NOTE
       );
-      return;
+      break;
     }
     case 'error': {
       showNote('warning', status.message, NOTE);
-      return;
+      break;
     }
     case 'pending': {
-      return;
+      break;
     }
     default: {
-      return;
+      break;
     }
   }
 }

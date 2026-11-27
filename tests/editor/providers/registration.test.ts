@@ -1,3 +1,4 @@
+// oxlint-disable-next-line eslint/max-classes-per-file -- the fake Monaco needs its own Range and Emitter classes, which the providers construct with new
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 

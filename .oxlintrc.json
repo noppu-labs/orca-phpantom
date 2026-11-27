@@ -158,19 +158,7 @@
     {
       "files": ["**/*"],
       "rules": {
-        "eslint/max-classes-per-file": "off",
-        "eslint/no-duplicate-imports": "off",
-        "eslint/no-inline-comments": "off",
-        "eslint/no-param-reassign": "off",
-        "eslint/no-sequences": "off",
-        "eslint/no-shadow": "off",
-        "eslint/no-unused-vars": "off",
-        "eslint/no-use-before-define": "off",
-        "eslint/no-useless-return": "off",
-        "import/unambiguous": "off",
-        "unicorn/no-immediate-mutation": "off",
-        "unicorn/no-new-array": "off",
-        "unicorn/no-useless-collection-argument": "off"
+        "import/unambiguous": "off"
       }
     }
   ],

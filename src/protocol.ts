@@ -19,7 +19,8 @@ type AttachStatus =
       approximate?: true;
       reveal?: LspRange;
     }
-  | { state: 'pending' } // More chunks expected
+  // More chunks are expected.
+  | { state: 'pending' }
   | { state: 'single-file'; reason: 'no-file' | 'ambiguous' }
   | { state: 'remote'; host: string }
   | { state: 'error'; message: string };

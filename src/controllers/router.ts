@@ -934,8 +934,7 @@ class Router {
           const queued = this.outbox.queued(key);
           const kinds = new Set<RefreshKind>(
             isRecord(queued) && Array.isArray(queued.kinds) ? queued.kinds : []
-          );
-          kinds.add(kind);
+          ).add(kind);
           this.outbox.send(panel, key, 'phpantom.refresh', { kinds: [...kinds] });
         }
       }),
