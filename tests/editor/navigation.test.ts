@@ -10,7 +10,7 @@ import {
   PeekModels,
   peekBatch,
 } from '../../editor/src/navigation.ts';
-import { renameReachesOtherFiles } from '../../editor/src/providers.ts';
+import { renameReachesOtherFiles } from '../../editor/src/providers/editing.ts';
 
 const r = (
   startLineNumber: number,

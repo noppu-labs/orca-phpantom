@@ -1,0 +1,279 @@
+// Adapted from actus7/orca-autocomplete editor/src/lsp.ts @ da5a680 (MIT). See THIRD_PARTY_NOTICES.md.
+// Monaco's reading features answered by PHPantom through the bridge: completion, hover, signature help, semantic colouring, inlay hints and the outline.
+// Only what the server says it supports is registered, for the model's own language, and only this editor's model is answered.
+import type { LspBridge, RequestKind } from '../bridge.ts';
+import type { EditorContext } from '../editor.ts';
+import {
+  completionDetails,
+  completionKindName,
+  fromLspRange,
+  inlayHintsWanted,
+  markdownValue,
+  toCompletionLabel,
+  toDocumentSymbols,
+  toInlayHint,
+  toLspPosition,
+  toLspRange,
+  toMarkdown,
+  toMonacoEdit,
+  toSemanticTokens,
+  type LspInlayHint,
+  type LspPosition,
+  type LspTextEdit,
+} from '../lsp-convert.ts';
+import type { monaco } from '../monaco.ts';
+import {
+  SERVER_NAME,
+  canceled,
+  disposeAll,
+  withSignal,
+  type Capabilities,
+  type Disposable,
+  type Model,
+} from './shared.ts';
+
+function registerReadingProviders(
+  ctx: EditorContext,
+  bridge: LspBridge,
+  capabilities: Record<string, unknown>
+): Disposable {
+  const { monaco, model } = ctx;
+  const caps = capabilities as Capabilities;
+  const language = model.getLanguageId();
+  const registered: Disposable[] = [];
+  const ours = (candidate: Model): boolean => candidate === model;
+  const ask = async (
+    method: string,
+    params: Record<string, unknown>,
+    token: monaco.CancellationToken,
+    kind: RequestKind,
+    silent = false
+  ): Promise<any> =>
+    withSignal(token, async (signal) => bridge.ask(method, params, signal, { kind, silent }));
+  const atCursor = (position: monaco.Position): { position: LspPosition } => ({
+    position: toLspPosition(position),
+  });
+  const edits = (list: LspTextEdit[]): monaco.languages.TextEdit[] => list.map(toMonacoEdit);
+
+  // --- completion ---
+  if (caps.completionProvider) {
+    // The server's own item for each suggestion shown: resolving it needs exactly what the server sent.
+    const serverItems = new WeakMap<object, Record<string, unknown>>();
+    registered.push(
+      monaco.languages.registerCompletionItemProvider(language, {
+        async provideCompletionItems(m, position, context, token) {
+          if (!ours(m)) return { suggestions: [] };
+          const result = await ask(
+            'textDocument/completion',
+            {
+              ...atCursor(position),
+              // Monaco counts trigger kinds from 0, LSP from 1, in the same order.
+              context: {
+                triggerKind: context.triggerKind + 1,
+                ...(context.triggerCharacter ? { triggerCharacter: context.triggerCharacter } : {}),
+              },
+            },
+            token,
+            // Why passive even for "invoked" (0): Monaco reports quick suggestions while typing that way too.
+            'passive'
+          );
+          const items: any[] = Array.isArray(result) ? result : (result?.items ?? []);
+          const word = m.getWordUntilPosition(position);
+          const fallback = new monaco.Range(
+            position.lineNumber,
+            word.startColumn,
+            position.lineNumber,
+            word.endColumn
+          );
+          return {
+            incomplete: Boolean(result?.isIncomplete),
+            suggestions: items.map((item) => {
+              const edit = item.textEdit;
+              const range = edit
+                ? edit.range
+                  ? fromLspRange(edit.range)
+                  : { insert: fromLspRange(edit.insert), replace: fromLspRange(edit.replace) }
+                : fallback;
+              const suggestion: monaco.languages.CompletionItem = {
+                additionalTextEdits: item.additionalTextEdits
+                  ? edits(item.additionalTextEdits)
+                  : undefined,
+                commitCharacters: item.commitCharacters,
+                detail: item.detail,
+                documentation: markdownValue(item.documentation),
+                filterText: item.filterText,
+                insertText: edit?.newText ?? item.insertText ?? item.label,
+                insertTextRules:
+                  item.insertTextFormat === 2
+                    ? monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet
+                    : undefined,
+                kind: monaco.languages.CompletionItemKind[
+                  completionKindName(item.kind) as keyof typeof monaco.languages.CompletionItemKind
+                ],
+                label: toCompletionLabel(item),
+                preselect: item.preselect,
+                range,
+                sortText: item.sortText,
+                tags:
+                  item.deprecated || item.tags?.includes(1)
+                    ? [monaco.languages.CompletionItemTag.Deprecated]
+                    : undefined,
+              };
+              serverItems.set(suggestion, item);
+              return suggestion;
+            }),
+          };
+        },
+        // Why: PHPantom sends the `use` import that goes with a class from another namespace only here.
+        resolveCompletionItem: caps.completionProvider.resolveProvider
+          ? async (suggestion, token) => {
+              const raw = serverItems.get(suggestion);
+              if (!raw) return suggestion;
+              // Why user, not passive: Monaco also resolves here when the item is accepted, and a dropped answer would lose the import.
+              // Silent: it resolves every item that gets focus, too.
+              const resolved = await ask('completionItem/resolve', raw, token, 'user', true);
+              // Monaco resolves an item once; one with no answer must say so to be resolved again later.
+              if (resolved === null) throw canceled();
+              return { ...suggestion, ...completionDetails(resolved) };
+            }
+          : undefined,
+        triggerCharacters: caps.completionProvider.triggerCharacters,
+      })
+    );
+  }
+
+  // --- hover and signature help ---
+  if (caps.hoverProvider) {
+    registered.push(
+      monaco.languages.registerHoverProvider(language, {
+        async provideHover(m, position, token) {
+          if (!ours(m)) return null;
+          const result = await ask('textDocument/hover', atCursor(position), token, 'passive');
+          const contents = toMarkdown(result?.contents).map((value) => ({ value }));
+          return contents.length > 0
+            ? { contents, ...(result.range ? { range: fromLspRange(result.range) } : {}) }
+            : null;
+        },
+      })
+    );
+  }
+  if (caps.signatureHelpProvider) {
+    registered.push(
+      monaco.languages.registerSignatureHelpProvider(language, {
+        async provideSignatureHelp(m, position, token, context) {
+          if (!ours(m)) return null;
+          const result = await ask(
+            'textDocument/signatureHelp',
+            {
+              ...atCursor(position),
+              // Both number these trigger kinds the same way: 1 invoked, 2 character, 3 content change.
+              context: {
+                isRetrigger: context.isRetrigger,
+                triggerKind: context.triggerKind,
+                ...(context.triggerCharacter ? { triggerCharacter: context.triggerCharacter } : {}),
+              },
+            },
+            token,
+            // Why passive even for "invoked": Monaco invokes it itself, after a completion that adds parentheses.
+            'passive'
+          );
+          if (!result?.signatures?.length) return null;
+          return {
+            dispose() {},
+            value: {
+              activeParameter: result.activeParameter ?? 0,
+              activeSignature: result.activeSignature ?? 0,
+              signatures: result.signatures.map((signature: any) => ({
+                documentation: markdownValue(signature.documentation),
+                label: signature.label,
+                // A label is either the text or [start, end] offsets into the signature's label, in both.
+                parameters: (signature.parameters ?? []).map((parameter: any) => ({
+                  documentation: markdownValue(parameter.documentation),
+                  label: parameter.label,
+                })),
+                ...(typeof signature.activeParameter === 'number'
+                  ? { activeParameter: signature.activeParameter }
+                  : {}),
+              })),
+            },
+          };
+        },
+        signatureHelpRetriggerCharacters: caps.signatureHelpProvider.retriggerCharacters,
+        signatureHelpTriggerCharacters: caps.signatureHelpProvider.triggerCharacters,
+      })
+    );
+  }
+
+  // --- semantic colouring ---
+  const semantic = caps.semanticTokensProvider;
+  if (semantic?.legend && semantic.full) {
+    const changed = new monaco.Emitter<void>();
+    registered.push(
+      changed,
+      bridge.onRefresh((kinds) => {
+        if (kinds.includes('semanticTokens')) changed.fire();
+      }),
+      monaco.languages.registerDocumentSemanticTokensProvider(language, {
+        getLegend: () => semantic.legend,
+        onDidChange: changed.event,
+        async provideDocumentSemanticTokens(m, _lastResultId, token) {
+          if (!ours(m)) return null;
+          const tokens = toSemanticTokens(
+            await ask('textDocument/semanticTokens/full', {}, token, 'background')
+          );
+          // Why throw: Monaco wipes the colouring on an empty answer but keeps it on an error, and a message with "busy" in it is not reported.
+          // No answer means not now, not "no tokens".
+          if (!tokens) throw new Error('PHPantom is busy');
+          return tokens;
+        },
+        releaseDocumentSemanticTokens() {},
+      })
+    );
+  }
+
+  // --- inlay hints ---
+  if (inlayHintsWanted(language, caps)) {
+    const changed = new monaco.Emitter<void>();
+    registered.push(
+      changed,
+      bridge.onRefresh((kinds) => {
+        if (kinds.includes('inlayHints')) changed.fire();
+      }),
+      monaco.languages.registerInlayHintsProvider(language, {
+        displayName: SERVER_NAME,
+        onDidChangeInlayHints: changed.event,
+        async provideInlayHints(m, range, token) {
+          if (!ours(m)) return null;
+          const result = await ask(
+            'textDocument/inlayHint',
+            { range: toLspRange(range) },
+            token,
+            'background'
+          );
+          if (!Array.isArray(result)) return null;
+          return { dispose() {}, hints: (result as LspInlayHint[]).map(toInlayHint) };
+        },
+      })
+    );
+  }
+
+  // --- the outline ---
+  if (caps.documentSymbolProvider) {
+    registered.push(
+      monaco.languages.registerDocumentSymbolProvider(language, {
+        displayName: SERVER_NAME,
+        async provideDocumentSymbols(m, token) {
+          if (!ours(m)) return null;
+          const result = await ask('textDocument/documentSymbol', {}, token, 'background');
+          return Array.isArray(result)
+            ? (toDocumentSymbols(result) as monaco.languages.DocumentSymbol[])
+            : null;
+        },
+      })
+    );
+  }
+
+  return disposeAll(registered);
+}
+
+export { registerReadingProviders };

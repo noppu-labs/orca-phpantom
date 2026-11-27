@@ -6,11 +6,9 @@ import { frameHost } from './frame-host.ts';
 import { fromLspRange, toLspContentChange } from './lsp-convert.ts';
 import { installOpener } from './navigation.ts';
 import { clearNote, showNote } from './notes.ts';
-import {
-  registerEditingProviders,
-  registerReadingProviders,
-  showDiagnostics,
-} from './providers.ts';
+import { showDiagnostics } from './providers/diagnostics.ts';
+import { registerEditingProviders } from './providers/editing.ts';
+import { registerReadingProviders } from './providers/reading.ts';
 
 const NOTE = 'phpantom-attach';
 const BUSY_NOTE = 'phpantom-busy';
