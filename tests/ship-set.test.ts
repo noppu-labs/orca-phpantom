@@ -44,7 +44,8 @@ test('the plugin folder stays inside Orca install limits', () => {
 const BANNED_EXTENSIONS = new Set(
   (
     '.zip .tar .gz .tgz .bz2 .xz .zst .7z .rar .jar .war .apk .deb .rpm .dmg .iso ' +
-    '.node .so .dylib .dll .exe .bin .wasm .pyc .pyo .class .o .a .lib .ttf .otf'
+    '.node .so .dylib .dll .exe .bin .wasm .pyc .pyo .class .o .a .lib .ttf .otf ' +
+    '.ttc .zst .lz .lzma .cpio .cab .jsc'
   ).split(' ')
 );
 
@@ -67,6 +68,10 @@ const MAGIC: [string, number, number[]][] = [
   ['tar', 257, [0x75, 0x73, 0x74, 0x61, 0x72]],
   ['sfnt font', 0, [0x00, 0x01, 0x00, 0x00]],
   ['OpenType font', 0, [0x4f, 0x54, 0x54, 0x4f]],
+  ['zstd', 0, [0x28, 0xb5, 0x2f, 0xfd]],
+  ['ar/deb', 0, [0x21, 0x3c, 0x61, 0x72, 0x63, 0x68, 0x3e, 0x0a]],
+  ['cab', 0, [0x4d, 0x53, 0x43, 0x46]],
+  ['TrueType collection', 0, [0x74, 0x74, 0x63, 0x66]],
 ];
 
 function head(path: string): Buffer {

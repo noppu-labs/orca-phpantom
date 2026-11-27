@@ -33,7 +33,15 @@ import {
   resolveBinary,
   type ResolveOptions,
 } from '../../../../src/services/binary/resolve.ts';
-import { oneTarGz, oneZip, tar, tarChecksum, tarGz, zip } from '../../../helpers/archives.ts';
+import {
+  oneTarGz,
+  oneZip,
+  paxEntry,
+  tar,
+  tarChecksum,
+  tarGz,
+  zip,
+} from '../../../helpers/archives.ts';
 
 async function withServer(body: Buffer, run: (url: string) => Promise<void>): Promise<void> {
   const server = createServer((_request, response) => {
@@ -81,6 +89,16 @@ test('extracts the one file from each archive kind', () => {
   assert.equal(extractSingleFile(oneZip(), 'zip', 'phpantom_lsp.exe').toString(), 'fake-exe');
   assert.throws(() => extractSingleFile(oneZip(), 'zip', 'other'), /archive has no other/);
   assert.throws(() => extractSingleFile(oneTarGz(), 'tar.gz', 'other'), /archive has no other/);
+});
+test('a pax header named like the member is skipped for the file entry', () => {
+  const archive = tarGz([
+    paxEntry('phpantom_lsp', 'path', 'phpantom_lsp'),
+    { name: 'phpantom_lsp', data: 'real-bytes' },
+  ]);
+  assert.equal(extractSingleFile(archive, 'tar.gz', 'phpantom_lsp').toString(), 'real-bytes');
+});
+test('the generated tar refuses a name over 100 bytes', () => {
+  assert.throws(() => tar({ ['n'.repeat(101)]: 'x' }), /over 100 bytes/);
 });
 test('generated archives carry real gzip and zip framing', () => {
   const gz = oneTarGz();

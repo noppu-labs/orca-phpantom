@@ -19,7 +19,17 @@ export function tarChecksum(header: Buffer): number {
   return sum;
 }
 
-function tarHeader(name: string, size: number): Buffer {
+export type TarEntry = {
+  name: string;
+  data: string | Buffer;
+  /** The ustar typeflag: '0' for a regular file (the default), 'x' for a pax extended header. */
+  type?: string;
+};
+
+function tarHeader(name: string, size: number, type: string): Buffer {
+  if (Buffer.byteLength(name) > 100) {
+    throw new Error(`tar entry name is over 100 bytes: ${name}`);
+  }
   const header = Buffer.alloc(512);
   header.write(name, 0, 100, 'utf8');
   header.write('0000644\0', 100, 'ascii');
@@ -27,26 +37,33 @@ function tarHeader(name: string, size: number): Buffer {
   header.write('0000000\0', 116, 'ascii');
   header.write(`${size.toString(8).padStart(11, '0')}\0`, 124, 'ascii');
   header.write(`${MTIME.toString(8).padStart(11, '0')}\0`, 136, 'ascii');
-  header.write('0', 156, 'ascii');
+  header.write(type, 156, 'ascii');
   header.write('ustar\0', 257, 'ascii');
   header.write('00', 263, 'ascii');
   header.write(`${tarChecksum(header).toString(8).padStart(6, '0')}\0 `, 148, 'ascii');
   return header;
 }
 
-/** An uncompressed ustar archive: one regular-file entry per file, then two zero blocks. */
-export function tar(files: ArchiveFiles): Buffer {
+/** An uncompressed ustar archive: one entry each, regular files unless an entry sets a typeflag, then two zero blocks. */
+export function tar(files: ArchiveFiles | TarEntry[]): Buffer {
+  const entries: TarEntry[] = Array.isArray(files)
+    ? files
+    : Object.entries(files).map(([name, data]) => ({ name, data }));
   const parts: Buffer[] = [];
-  for (const [name, data] of Object.entries(files)) {
+  for (const { name, data, type = '0' } of entries) {
     const body = bytes(data);
-    parts.push(tarHeader(name, body.length), body, Buffer.alloc((512 - (body.length % 512)) % 512));
+    parts.push(
+      tarHeader(name, body.length, type),
+      body,
+      Buffer.alloc((512 - (body.length % 512)) % 512)
+    );
   }
   parts.push(Buffer.alloc(1024));
   return Buffer.concat(parts);
 }
 
 /** A gzip-compressed ustar archive. */
-export function tarGz(files: ArchiveFiles): Buffer {
+export function tarGz(files: ArchiveFiles | TarEntry[]): Buffer {
   return gzipSync(tar(files));
 }
 
@@ -103,8 +120,20 @@ export function zip(files: ArchiveFiles, options: ZipOptions = {}): Buffer {
   return Buffer.concat([...local, directory, end]);
 }
 
-/** What the old committed one.tar.gz held: a single `phpantom_lsp` file. */
-export const oneTarGz = (): Buffer => tarGz({ phpantom_lsp: 'fake-binary' });
+/** A pax extended-header entry: one `<length> key=value\n` record, the length counting itself. */
+export function paxEntry(name: string, key: string, value: string): TarEntry {
+  const record = ` ${key}=${value}\n`;
+  let length = record.length + 1;
+  if (String(length).length + record.length !== length) length += 1;
+  return { name, type: 'x', data: `${length}${record}` };
+}
+
+/** What the old committed one.tar.gz held: a pax header entry, then the `phpantom_lsp` file. */
+export const oneTarGz = (): Buffer =>
+  tarGz([
+    paxEntry('PaxHeader/phpantom_lsp', 'path', 'phpantom_lsp'),
+    { name: 'phpantom_lsp', data: 'fake-binary' },
+  ]);
 
 /** What the old committed one.zip held: a single stored `phpantom_lsp.exe`. */
 export const oneZip = (): Buffer => zip({ 'phpantom_lsp.exe': 'fake-exe' });
