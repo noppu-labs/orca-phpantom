@@ -160,9 +160,12 @@ class Outbox {
 
   private fitDiagnostics(original: DiagnosticsPayload): DiagnosticsPayload {
     const earlier = original.truncated ?? 0;
-    const ranked = original.diagnostics
-      .map((diagnostic, index) => ({ diagnostic, index, severity: severityOf(diagnostic) }))
-      .sort((left, right) => left.severity - right.severity || left.index - right.index);
+    const ranked = original.diagnostics.map((diagnostic, index) => ({
+      diagnostic,
+      index,
+      severity: severityOf(diagnostic),
+    }));
+    ranked.sort((left, right) => left.severity - right.severity || left.index - right.index);
     // Why the largest count: a number is 8 bytes to Orca whatever its value.
     const shell = orcaSize({
       ...original,

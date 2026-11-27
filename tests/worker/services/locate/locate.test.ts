@@ -481,10 +481,11 @@ test("the manifest's php editor opens exactly the extensions the locator accepts
     await readFile(new URL('../../../../orca-plugin.json', import.meta.url), 'utf8')
   );
   const editors = manifest.contributes.customEditors as { id: string; extensions: string[] }[];
-  assert.deepEqual(
-    [...editors.find((editor) => editor.id === 'php')!.extensions].sort(),
-    [...PHP_EXTENSIONS].sort()
-  );
+  const opened = [...editors.find((editor) => editor.id === 'php')!.extensions];
+  const accepted = [...PHP_EXTENSIONS];
+  opened.sort();
+  accepted.sort();
+  assert.deepEqual(opened, accepted);
   assert.deepEqual(editors.find((editor) => editor.id === 'blade')!.extensions, ['.blade.php']);
 });
 

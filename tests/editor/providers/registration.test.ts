@@ -145,10 +145,10 @@ test('a capability that is falsy registers nothing; true or an object registers 
     const capabilities = Object.fromEntries(
       [...EDITING_KEYS, ...READING_KEYS].map((key) => [key, value])
     );
+    const names = registerAll(capabilities).registrations.map((registration) => registration.name);
+    names.sort();
     assert.deepEqual(
-      registerAll(capabilities)
-        .registrations.map((registration) => registration.name)
-        .sort(),
+      names,
       [
         'registerCodeActionProvider',
         'registerCompletionItemProvider',

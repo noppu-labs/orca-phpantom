@@ -699,9 +699,9 @@ class Router {
       // Why resend: PHPantom holds whatever the leaving document sent last.
       // The one heard from most recently is the tab on screen; the others are frames Orca replaced that hold on until their lease ends.
       // One waiting for its resync has a copy that is not its editor's text, and sends the whole text soon anyway.
-      const current = remaining
-        .filter((other) => !other.needsResync)
-        .sort((left, right) => right.lastSeen - left.lastSeen)[0];
+      const fresh = remaining.filter((other) => !other.needsResync);
+      fresh.sort((left, right) => right.lastSeen - left.lastSeen);
+      const [current] = fresh;
       if (current !== undefined) {
         this.sendFull(doc.server, file, current.mirror.text);
       }

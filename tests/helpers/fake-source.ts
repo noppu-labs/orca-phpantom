@@ -48,7 +48,8 @@ function source(initial: string, language: Language = 'php'): FakeSource {
     editMany(edits) {
       const before = value;
       // As Monaco reports them: from the end of the document to the start, each against the old text.
-      const sorted = [...edits].sort((a, b) => b[0] - a[0]);
+      const sorted = [...edits];
+      sorted.sort((a, b) => b[0] - a[0]);
       const changes = sorted.map(([start, end, text]) => ({
         range: { start: positionAt(before, start), end: positionAt(before, end) },
         rangeLength: end - start,

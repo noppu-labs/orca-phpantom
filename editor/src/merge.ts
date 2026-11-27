@@ -34,7 +34,8 @@ function longestIncreasing(values: number[]): number[] {
   for (let at = tails.at(-1) ?? -1; at !== -1; at = previous[at]) {
     run.push(at);
   }
-  return run.reverse();
+  run.reverse();
+  return run;
 }
 
 function occurrences(items: string[]): Map<string, number> {

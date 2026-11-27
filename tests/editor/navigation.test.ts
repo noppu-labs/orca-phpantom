@@ -85,7 +85,8 @@ test('disposing drops every peek model', () => {
   const { disposed, peek } = recorder();
   peek.ensure([file('a'), file('b')]);
   peek.dispose();
-  assert.deepEqual(disposed.sort(), ['file:///w/a.php', 'file:///w/b.php']);
+  disposed.sort();
+  assert.deepEqual(disposed, ['file:///w/a.php', 'file:///w/b.php']);
   assert.equal(peek.has('file:///w/a.php'), false);
 });
 

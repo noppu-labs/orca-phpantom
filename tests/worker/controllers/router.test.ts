@@ -38,7 +38,9 @@ interface Started {
 
 const cleanups: (() => Promise<void> | void)[] = [];
 afterEach(async () => {
-  for (const cleanup of cleanups.splice(0).reverse()) {
+  const pending = cleanups.splice(0);
+  pending.reverse();
+  for (const cleanup of pending) {
     await cleanup();
   }
 });
@@ -428,10 +430,9 @@ test('two documents on one file share it: one didOpen, no didClose while one rem
   assert.deepEqual(await change('d2', 2, [insert(5, 'X')], 13), { ok: true });
   assert.equal(await text(), '<?phpX // ok\n');
   const versions = sent().map((n) => n.params.textDocument.version);
-  assert.deepEqual(
-    versions,
-    [...versions].sort((a, b) => a - b)
-  );
+  const ascending = [...versions];
+  ascending.sort((a, b) => a - b);
+  assert.deepEqual(versions, ascending);
 
   assert.deepEqual(await worker.request('phpantom.close', { docId: 'd1' }), { ok: true });
   assert.ok(!server.notified.some((n) => n.method === 'textDocument/didClose'));
@@ -1018,14 +1019,21 @@ test('documents of one composer root share one server, and Blade opens as blade'
   const opens = started[0].server.notified
     .filter((n) => n.method === 'textDocument/didOpen')
     .map((n) => [n.params.textDocument.uri, n.params.textDocument.languageId]);
-  assert.deepEqual(
-    opens.sort(),
-    [
-      [one.uri, 'php'],
-      [two.uri, 'php'],
-      [three.uri, 'blade'],
-    ].sort()
-  );
+  const expected = [
+    [one.uri, 'php'],
+    [two.uri, 'php'],
+    [three.uri, 'blade'],
+  ];
+  // The default sort's order: each pair compared as its string, by UTF-16 code units.
+  const byText = (left: string[], right: string[]): number => {
+    const leftText = String(left);
+    const rightText = String(right);
+    if (leftText === rightText) return 0;
+    return leftText < rightText ? -1 : 1;
+  };
+  opens.sort(byText);
+  expected.sort(byText);
+  assert.deepEqual(opens, expected);
 });
 
 test('restartAll tells open documents and detaches them', async () => {

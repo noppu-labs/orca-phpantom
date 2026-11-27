@@ -128,16 +128,15 @@ async function locateAlike(
     return { status: 'none' };
   }
   const deadline = Date.now() + budgetMs;
-  const near = candidates
-    .filter(
-      (file) =>
-        file.size <= ALIKE_MAX_BYTES &&
-        file.size * ALIKE_SIZE_RATIO >= size &&
-        file.size <= size * ALIKE_SIZE_RATIO
-    )
-    // Why nearest in size first: a few edits barely change the size, so the right file is read early.
-    .sort((left, right) => Math.abs(left.size - size) - Math.abs(right.size - size))
-    .slice(0, ALIKE_MAX_FILES);
+  const alike = candidates.filter(
+    (file) =>
+      file.size <= ALIKE_MAX_BYTES &&
+      file.size * ALIKE_SIZE_RATIO >= size &&
+      file.size <= size * ALIKE_SIZE_RATIO
+  );
+  // Why nearest in size first: a few edits barely change the size, so the right file is read early.
+  alike.sort((left, right) => Math.abs(left.size - size) - Math.abs(right.size - size));
+  const near = alike.slice(0, ALIKE_MAX_FILES);
   let best: { file: Candidate; score: number } | null = null;
   let second = 0;
   for (const file of near) {

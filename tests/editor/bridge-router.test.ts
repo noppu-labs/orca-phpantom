@@ -43,7 +43,9 @@ async function until(
 
 const cleanups: (() => Promise<void> | void)[] = [];
 afterEach(async () => {
-  for (const cleanup of cleanups.splice(0).reverse()) await cleanup();
+  const pending = cleanups.splice(0);
+  pending.reverse();
+  for (const cleanup of pending) await cleanup();
 });
 
 /** A worker (a Router) behind frames' hosts. `restart` puts a new Router, with a new session, in its place. */
