@@ -173,9 +173,10 @@ colouring on, unless you already have one. The file is `~/.config/phpantom_lsp/.
 (under `$XDG_CONFIG_HOME` if you set it, and `%APPDATA%\phpantom_lsp\.phpantom.toml` on Windows).
 An existing file is never changed. Set `mode = "contextual"` there to go back.
 
-If you installed PHPantom yourself, or the plugin downloaded it before version 0.2.1, nothing is
-written, since other editors may share that config. Add these two lines to the global file, or to
-`.phpantom.toml` at a project's root:
+If you installed PHPantom yourself, the plugin leaves the config to you, since other editors may
+share it. A copy the plugin downloaded before version 0.2.1 gets no file either, because the plugin
+reuses that copy instead of downloading again. In both cases, add these two lines to the global
+file, or to `.phpantom.toml` at a project's root:
 
 ```toml
 [semantic-tokens]
