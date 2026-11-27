@@ -703,7 +703,7 @@ class Router {
     this.sendChange(server, file, [{ text }], text);
   }
 
-  // oxlint-disable-next-line typescript/promise-function-async -- returns the lane promise itself; an async wrapper lets the next lane job run before the caller resumes
+  // oxlint-disable-next-line typescript/promise-function-async -- returns the lane promise itself, as LspBridge.inLane does, so lane timing stays as it was
   private inLane<T>(docId: string, task: () => Promise<T>): Promise<T> {
     const previous = this.lanes.get(docId) ?? Promise.resolve();
     const run = previous.then(task);
