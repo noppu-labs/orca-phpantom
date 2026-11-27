@@ -10,13 +10,24 @@ const WORKSPACE_LIST_TTL_MS = 10_000;
 
 let router: Router | null = null;
 
+/** The settings as the router takes them: a blank path is no path, and downloads are on unless turned off. */
+function readSettings(values: Record<string, unknown>): {
+  phpantomPath: string;
+  allowDownload: boolean;
+} {
+  return {
+    allowDownload: values.allowDownload !== false,
+    phpantomPath: typeof values.phpantomPath === 'string' ? values.phpantomPath.trim() : '',
+  };
+}
+
 async function deactivate(): Promise<void> {
   const active = router;
   router = null;
   await active?.dispose();
 }
 
-export { deactivate };
+export { deactivate, readSettings };
 
 export default async function activate(orca: OrcaWorkerApi): Promise<void> {
   let workspaces: { rows: Promise<WorkspaceRow[]>; at: number } | null = null;
@@ -58,11 +69,7 @@ export default async function activate(orca: OrcaWorkerApi): Promise<void> {
       orca.panels.post(event as 'phpantom.status', payload as never, options);
     },
     async settings() {
-      const values = await orca.settings.get();
-      return {
-        allowDownload: values.allowDownload !== false,
-        phpantomPath: typeof values.phpantomPath === 'string' ? values.phpantomPath.trim() : '',
-      };
+      return readSettings(await orca.settings.get());
     },
     status,
   };
