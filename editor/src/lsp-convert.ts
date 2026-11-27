@@ -75,7 +75,7 @@ export function toMarker(diagnostic: LspDiagnostic) {
     ...fromLspRange(diagnostic.range),
     severity: markerSeverity(diagnostic.severity),
     message: diagnostic.message,
-    ...(code !== undefined ? { code: String(code) } : {}),
+    ...(code === undefined ? {} : { code: String(code) }),
     ...(diagnostic.source ? { source: diagnostic.source } : {}),
     ...(diagnostic.tags?.length ? { tags: diagnostic.tags } : {}),
   };
@@ -366,15 +366,17 @@ export function toInlayHint(hint: LspInlayHint): {
       ? hint.label
       : hint.label.map((part) => ({
           label: part.value,
-          ...(part.tooltip !== undefined ? { tooltip: tooltipText(part.tooltip) } : {}),
+          ...(part.tooltip === undefined ? {} : { tooltip: tooltipText(part.tooltip) }),
         }));
   return {
     label,
     position: { lineNumber: hint.position.line + 1, column: hint.position.character + 1 },
-    ...(hint.kind !== undefined ? { kind: hint.kind } : {}),
-    ...(hint.tooltip !== undefined
-      ? { tooltip: typeof hint.tooltip === 'string' ? hint.tooltip : { value: hint.tooltip.value } }
-      : {}),
+    ...(hint.kind === undefined ? {} : { kind: hint.kind }),
+    ...(hint.tooltip === undefined
+      ? {}
+      : {
+          tooltip: typeof hint.tooltip === 'string' ? hint.tooltip : { value: hint.tooltip.value },
+        }),
     ...(hint.paddingLeft ? { paddingLeft: true } : {}),
     ...(hint.paddingRight ? { paddingRight: true } : {}),
   };

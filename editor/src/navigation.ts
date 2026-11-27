@@ -123,16 +123,16 @@ export function installOpener(ctx: EditorContext, bridge: LspBridge): Disposable
   return monaco.editor.registerEditorOpener({
     async openCodeEditor(_source, resource, selectionOrPosition) {
       if (resource.toString() === model.uri.toString()) return false;
-      const range = !selectionOrPosition
-        ? { startLineNumber: 1, startColumn: 1, endLineNumber: 1, endColumn: 1 }
-        : 'startLineNumber' in selectionOrPosition
+      const range = selectionOrPosition
+        ? 'startLineNumber' in selectionOrPosition
           ? selectionOrPosition
           : {
               startLineNumber: selectionOrPosition.lineNumber,
               startColumn: selectionOrPosition.column,
               endLineNumber: selectionOrPosition.lineNumber,
               endColumn: selectionOrPosition.column,
-            };
+            }
+        : { startLineNumber: 1, startColumn: 1, endLineNumber: 1, endColumn: 1 };
       const answer = await bridge.navigate(resource.toString(), toLspRange(range));
       if (!answer) return false;
       if (!answer.opened) showNote('info', NAVIGATE_NOTES[answer.reason], NAVIGATION_NOTE);

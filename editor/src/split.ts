@@ -22,7 +22,7 @@ function jsonCost(unit: number, pairedWith: number | null): number {
   }
   if (unit < 0x80) return 1;
   if (unit < 0x8_00) return 2;
-  if (unit >= 0xd8_00 && unit <= 0xdf_ff) return pairedWith !== null ? 4 : 6;
+  if (unit >= 0xd8_00 && unit <= 0xdf_ff) return pairedWith === null ? 6 : 4;
   return 3;
 }
 

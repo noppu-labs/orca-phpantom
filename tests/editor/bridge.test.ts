@@ -675,11 +675,11 @@ test('a save retries a single-file attach, even with the typing budget spent', a
   let saved = false;
   const host = fakeHost({
     open: (input, self) =>
-      !input.last
-        ? { state: 'pending' }
-        : saved
+      input.last
+        ? saved
           ? self.ready()
-          : { state: 'single-file', reason: 'no-file' },
+          : { state: 'single-file', reason: 'no-file' }
+        : { state: 'pending' },
   });
   const doc = source('<?php\n');
   const bridge = new LspBridge(host, doc, { ...FAST, retryGapMs: 1, maxRetries: 1 });
@@ -704,11 +704,11 @@ test('an error answer retries when the settings change', async () => {
   let fixed = false;
   const host = fakeHost({
     open: (input, self) =>
-      !input.last
-        ? { state: 'pending' }
-        : fixed
+      input.last
+        ? fixed
           ? self.ready()
-          : { state: 'error', message: 'PHPantom is not installed' },
+          : { state: 'error', message: 'PHPantom is not installed' }
+        : { state: 'pending' },
   });
   const bridge = new LspBridge(host, source('<?php\n'), FAST);
   const statuses: string[] = [];
@@ -728,11 +728,11 @@ test('an error answer retries when the tab shows', async () => {
   let answers = 0;
   const host = fakeHost({
     open: (input, self) =>
-      !input.last
-        ? { state: 'pending' }
-        : ++answers === 1
+      input.last
+        ? ++answers === 1
           ? { state: 'error', message: 'boom' }
-          : self.ready(),
+          : self.ready()
+        : { state: 'pending' },
   });
   const bridge = new LspBridge(host, source('<?php\n'), FAST);
   await bridge.attach();
