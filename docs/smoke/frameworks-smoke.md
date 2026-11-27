@@ -96,7 +96,7 @@ own IDs.
 | W3 | wordpress | A hook name resolves to the `do_action()` that fires it | `wp-content/themes/acme-theme/functions.php:63`, inside `'acme_shop_product_created'` | definition | Pass | `wp-content/plugins/acme-shop/src/ProductRepository.php` line 75, `do_action('acme_shop_product_created', $id);`, 0.61 s. |
 | W4 | wordpress | `$wpdb` members complete | `ProductRepository.php:94`, cursor right after `$wpdb->` | completion | Pass | 104 items, including `get_var($query = ..., $x = ..., $y = ...)` (detail `non-empty-string\|null`) and `prepare($query, ...$args)`, 0.13 s. |
 | D0 | drupal | `.module` and `.theme` files open in PHPantom's editor and attach to the project's server | `web/modules/custom/acme/acme.module`, `web/themes/custom/acme_theme/acme_theme.theme`, core installed under `web/core` | `orca file open --focus` for each, then `phpantom.smoke` | Pass | After a plain open each was listed as attached, root `<fw>/phpantom-fw-drupal`, server `ready`. Time from `orca file open` to the first `phpantom.smoke` that listed it (polled every 0.5 s, CLI start-up included): 1.6 s for `acme.module`, 1.7 s for `acme_theme.theme`. The highlighting half is in D0-shot. |
-| D0-shot | drupal | The same files are highlighted as PHP | the same two files | `orca plugin shot --editor` | Fail | Both shots answered `editorId: php` and show the files with bracket-pair colours only: no keyword, string or comment colours. This is not specific to Drupal. Shots of `GreetingController.php` (`.php`) and `welcome.blade.php` (Blade) taken the same way show no token colours either, while the v1 smoke on Orca 1.4.277 saw Blade directives coloured in the same kind of shot. Not established: whether the editor stopped colouring on Orca 1.4.278, or only these shots catch it before the colours load. Code: the editor builds every model with the language `php` whatever the extension (`editor/src/editor.ts`, `createModel('', language, ...)`), so `.module` and `.theme` get the same highlighting as `.php`. The first pair of shots also showed the note `PHPantom did not answer: too many panel requests`, likely from this run's 0.5 s polling; it was gone from shots taken after 20 quiet seconds. |
+| D0-shot | drupal | The same files are highlighted as PHP | the same two files | `orca plugin shot --editor`, then a check by hand | Pass | Passed on the owner's hand check on Orca 1.4.278, after the run: keywords, strings, comments, PHPantom's semantic tokens and inlay hints all show. The screenshots taken during the run showed bracket-pair colours only, for `.module`, `.theme`, `.php` and Blade alike, so they were an artefact of the shots. Code: the editor builds every model with the language `php` whatever the extension (`editor/src/editor.ts`, `createModel('', language, ...)`), so `.module` and `.theme` get the same highlighting as `.php`. The first pair of shots also showed the note `PHPantom did not answer: too many panel requests`, likely from this run's 0.5 s polling; it was gone from shots taken after 20 quiet seconds. |
 | D1 | drupal | Core interfaces type a procedural hook's parameters | `acme.module:33-36`, `        $route_match->` inserted as line 37 inside `acme_help()` | completion | Pass | 6 items: `getParameter($parameter_name)`, `getParameters()`, `getRawParameter($parameter_name)`, `getRawParameters()`, `getRouteName()`, `getRouteObject()`, 0.12 s. |
 | D2 | drupal | A service ID resolves to the services file | `acme.module:42` (the expected 39-41 are the comment above it), inside `'acme.greeter'` | definition, then navigate | Pass | Definition: `web/modules/custom/acme/acme.services.yml` line 5 (`  acme.greeter:`), 0.13 s. Navigate: `opened: true` (a YAML target does not attach; no CLI lists editor tabs). |
 | D3 | drupal | A method on an injected service resolves | `web/modules/custom/acme/src/Controller/GreetingController.php:38`, on `greet` in `$this->greeter->greet(` | definition | Pass | `web/modules/custom/acme/src/Greeter.php` line 23, `public function greet(string $name): string`, 0.13 s. |
@@ -128,7 +128,7 @@ own IDs.
 - Symfony: Confirmed (S1, S2, S3, S4).
 - WordPress: Partly confirmed (W2-attach failed: go to definition opens the 6 MB stub file, but the file attached to PHPantom after only 1 of 4 navigates; W1 to W4 passed).
 - Drupal: Partly confirmed (D4 failed: a file opened under `web/core` started a second PHPantom rooted at `web/core`; D0 to D3 passed).
-- Drupal file types `.module` and `.theme` in PHPantom's editor: Partly confirmed (D0-shot failed: no token colours in the shot, and none for `.php` or Blade either; the plain open and attach in D0 passed).
+- Drupal file types `.module` and `.theme` in PHPantom's editor: Confirmed (D0, and D0-shot by the owner's hand check on 1.4.278).
 - Yii: Confirmed (Y1, Y2, Y3).
 - Tempest: Confirmed (T1, T2, T3).
 - Laravel views, config keys and Blade's `$loop`: Confirmed (LV1, LV2, LV3).
@@ -143,15 +143,17 @@ own IDs.
 - Mago: Not confirmed (A5 not run).
 - A `.inc` file that is not PHP opens in PHPantom's editor and stays readable: Confirmed (X1). PHPCS reports `Internal.NoCodeFound` on it.
 
-## Hand checklist (not run)
+## Hand checklist
 
 1. On a `.inc` file that is not PHP, switch the tab to Source with the view toggle at the top right
    of the editor. Close the tab, open the file again, and note whether Orca remembers Source.
 2. After installing, look at the plugin's name in Settings → Plugins at a narrow and at a wide
    window. Note whether it is cut off.
 3. On Orca 1.4.278, open a `.php`, a `.blade.php` and a `.module` file by hand in PHPantom's editor
-   and note whether keywords, strings and comments are coloured. The D0 shot showed no token colours
-   in screenshots; the v1 run on 1.4.277 did.
+   and note whether keywords, strings and comments are coloured. Done after the run by the owner:
+   colours show (see D0-shot).
+
+Items 1 and 2 were not run as part of this record.
 
 ## Cleanup
 

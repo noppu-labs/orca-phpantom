@@ -212,7 +212,6 @@ To switch a file to PHPantom, use the view toggle at the top right of the editor
 - A file changed on disk while its workspace is in the background updates only when you switch back.
 - Errors and warnings appear a moment after a file opens. In a big project the first completions wait
   for indexing, shown as `indexing` in the status bar.
-- Orca 1.4.278 screenshots showed no syntax colours in any file type, unlike 1.4.277. Not checked by hand.
 - PHPantom lets go of a file about three minutes after you close its tab or switch away from it.
 
 The test runs behind this README, with checklists for what needs a person at the keyboard, are in
