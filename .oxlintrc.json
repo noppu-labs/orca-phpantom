@@ -121,7 +121,8 @@
     "promise/prefer-await-to-callbacks": "off",
     "promise/catch-or-return": "off",
     "promise/always-return": "off",
-    "promise/prefer-catch": "off"
+    "promise/prefer-catch": "off",
+    "unicorn/number-literal-case": "off"
   },
   "overrides": [
     {
@@ -226,7 +227,6 @@
         "unicorn/no-process-exit": "off",
         "unicorn/no-useless-collection-argument": "off",
         "unicorn/no-useless-spread": "off",
-        "unicorn/number-literal-case": "off",
         "unicorn/prefer-code-point": "off",
         "unicorn/prefer-export-from": "off",
         "unicorn/prefer-global-this": "off",
