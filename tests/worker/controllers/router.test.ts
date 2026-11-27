@@ -106,22 +106,30 @@ async function setup(
   const worker = {
     request(name: string, input: any, panel = 'panel-1'): Promise<any> {
       switch (name) {
-        case 'phpantom.open':
+        case 'phpantom.open': {
           return router.open(input, { panel });
-        case 'phpantom.change':
+        }
+        case 'phpantom.change': {
           return router.change(input);
-        case 'phpantom.request':
+        }
+        case 'phpantom.request': {
           return router.request(input, new AbortController().signal);
-        case 'phpantom.close':
+        }
+        case 'phpantom.close': {
           return router.close(input);
-        case 'phpantom.navigate':
+        }
+        case 'phpantom.navigate': {
           return router.navigate(input);
-        case 'phpantom.peek':
+        }
+        case 'phpantom.peek': {
           return router.peek(input);
-        case 'phpantom.ping':
+        }
+        case 'phpantom.ping': {
           return router.ping(input);
-        default:
+        }
+        default: {
           throw new Error(`unknown request ${name}`);
+        }
       }
     },
   };

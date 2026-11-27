@@ -43,28 +43,33 @@ function modelSource(ctx: EditorContext): DocumentSource {
 
 function showStatus(status: AttachStatus): void {
   switch (status.state) {
-    case 'ready':
+    case 'ready': {
       clearNote(NOTE);
       return;
-    case 'single-file':
+    }
+    case 'single-file': {
       showNote(
         'info',
         "PHPantom couldn't tell which file this is, so only highlighting is on. It will try again after you save.",
         NOTE
       );
       return;
-    case 'remote':
+    }
+    case 'remote': {
       showNote(
         'info',
         `This file is on ${status.host}. PHPantom runs on this computer only, so only highlighting is on.`,
         NOTE
       );
       return;
-    case 'error':
+    }
+    case 'error': {
       showNote('warning', status.message, NOTE);
       return;
-    default:
+    }
+    default: {
       return;
+    }
   }
 }
 

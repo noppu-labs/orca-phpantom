@@ -44,14 +44,18 @@ export const toLspContentChange = (change: {
 /** LSP severity (1 error ... 4 hint) as Monaco's MarkerSeverity (8, 4, 2, 1). */
 export function markerSeverity(severity: number | undefined): number {
   switch (severity) {
-    case 2:
+    case 2: {
       return 4;
-    case 3:
+    }
+    case 3: {
       return 2;
-    case 4:
+    }
+    case 4: {
       return 1;
-    default:
+    }
+    default: {
       return 8;
+    }
   }
 }
 

@@ -237,8 +237,9 @@ export class PhpantomServer {
         const items = (params as { items?: unknown[] } | null)?.items;
         return Array.isArray(items) ? items.map(() => null) : [];
       }
-      case 'workspace/applyEdit':
+      case 'workspace/applyEdit': {
         return { applied: false };
+      }
       default: {
         const kind = REFRESH_KINDS[method];
         if (kind) {

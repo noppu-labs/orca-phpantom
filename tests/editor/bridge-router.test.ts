@@ -111,22 +111,30 @@ function harness(options: { leaseMs?: number; sweepMs?: number } = {}) {
         const current = router;
         const typed = input as any;
         switch (name) {
-          case 'phpantom.open':
+          case 'phpantom.open': {
             return current.open(typed, { panel });
-          case 'phpantom.change':
+          }
+          case 'phpantom.change': {
             return current.change(typed);
-          case 'phpantom.request':
+          }
+          case 'phpantom.request': {
             return current.request(typed, new AbortController().signal);
-          case 'phpantom.close':
+          }
+          case 'phpantom.close': {
             return current.close(typed);
-          case 'phpantom.navigate':
+          }
+          case 'phpantom.navigate': {
             return current.navigate(typed);
-          case 'phpantom.peek':
+          }
+          case 'phpantom.peek': {
             return current.peek(typed);
-          case 'phpantom.ping':
+          }
+          case 'phpantom.ping': {
             return current.ping(typed);
-          default:
+          }
+          default: {
             throw new Error(`unknown request ${String(name)}`);
+          }
         }
       },
       on(event, handler) {

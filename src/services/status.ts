@@ -57,7 +57,7 @@ export function aggregate(states: ServerState[]): StatusState {
 
 export function renderStatus(state: StatusState): StatusBarUpdate {
   switch (state.phase) {
-    case 'idle':
+    case 'idle': {
       return {
         id: 'phpantom',
         text: 'PHPantom',
@@ -65,7 +65,8 @@ export function renderStatus(state: StatusState): StatusBarUpdate {
         tone: 'neutral',
         tooltip: 'PHPantom: no PHP files open',
       };
-    case 'error':
+    }
+    case 'error': {
       return {
         id: 'phpantom',
         text: 'PHPantom: error',
@@ -73,7 +74,8 @@ export function renderStatus(state: StatusState): StatusBarUpdate {
         tone: 'danger',
         tooltip: `PHPantom: ${state.message ?? 'error'}`,
       };
-    case 'downloading':
+    }
+    case 'downloading': {
       return {
         id: 'phpantom',
         text: 'PHPantom: downloading',
@@ -81,7 +83,8 @@ export function renderStatus(state: StatusState): StatusBarUpdate {
         tone: 'accent',
         tooltip: 'PHPantom: downloading the language server',
       };
-    case 'starting':
+    }
+    case 'starting': {
       return {
         id: 'phpantom',
         text: 'PHPantom: starting',
@@ -89,6 +92,7 @@ export function renderStatus(state: StatusState): StatusBarUpdate {
         tone: 'neutral',
         tooltip: 'PHPantom: starting the language server',
       };
+    }
     case 'indexing': {
       const progress = state.percent === undefined ? '' : ` ${state.percent}%`;
       return {
