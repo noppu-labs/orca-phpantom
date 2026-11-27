@@ -843,6 +843,7 @@ export class Router {
         platform: process.platform,
         arch: process.arch,
         home: homedir(),
+        log: (message) => this.host.log(message),
         onDownload: () => {
           this.downloading = true
           this.updateStatus()
