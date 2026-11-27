@@ -164,9 +164,18 @@ macOS, `~/Library/Caches/noppu-labs.phpantom`); hover the status bar item for th
 
 ## Colouring
 
-PHPantom's default `contextual` colouring marks parameters, template parameters, deprecated
-symbols and static member references, and leaves the rest to the editor's own highlighting. For
-full colouring, add this to `.phpantom.toml` at the project root:
+With its `[semantic-tokens]` mode set to `full`, PHPantom colours classes, methods, functions,
+properties, variables, attributes and Blade tokens. Its own default, `contextual`, marks only
+parameters, template parameters, deprecated symbols and static member references.
+
+When the plugin downloads PHPantom, it also writes a global PHPantom config that turns full
+colouring on, unless you already have one. The file is `~/.config/phpantom_lsp/.phpantom.toml`
+(under `$XDG_CONFIG_HOME` if you set it, and `%APPDATA%\phpantom_lsp\.phpantom.toml` on Windows).
+An existing file is never changed. Set `mode = "contextual"` there to go back.
+
+If you installed PHPantom yourself, or the plugin downloaded it before version 0.2.1, nothing is
+written, since other editors may share that config. Add these two lines to the global file, or to
+`.phpantom.toml` at a project's root:
 
 ```toml
 [semantic-tokens]

@@ -1,5 +1,6 @@
 import { chmodSync, existsSync, mkdirSync, renameSync, writeFileSync } from 'node:fs'
 import { posix, win32 } from 'node:path'
+import { writeFullColourDefault } from './colour.ts'
 import { downloadVerified } from './download.ts'
 import { extractSingleFile } from './extract.ts'
 import { atLeast, findExecutable, readVersion, wellKnownDirs } from './find.ts'
@@ -27,6 +28,7 @@ export type ResolveOptions = {
   arch: string
   home: string
   onDownload?(): void
+  log?(message: string): void
   fetchImpl?: typeof fetch
   readVersionImpl?: typeof readVersion
   /** Test seam: where the release assets come from. */
@@ -109,9 +111,12 @@ async function download(
     renameSync(temporary, target)
     writeFileSync(marker, PHPANTOM_VERSION)
     const version = await read(target)
-    return version
-      ? { ok: true, path: target, version, source: 'download' }
-      : { ok: false, message: `The downloaded ${asset.member} did not run.` }
+    if (!version) {
+      return { ok: false, message: `The downloaded ${asset.member} did not run.` }
+    }
+    // Why only here: a PHPantom the user installed may serve other editors, so its config stays theirs.
+    writeFullColourDefault(options.env, options.platform, options.home, options.log ?? (() => {}))
+    return { ok: true, path: target, version, source: 'download' }
   } catch (error) {
     return { ok: false, message: `Could not download PHPantom: ${error instanceof Error ? error.message : String(error)}` }
   }
