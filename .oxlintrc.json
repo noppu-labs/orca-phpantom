@@ -243,7 +243,6 @@
         "unicorn/prefer-global-this": "off",
         "unicorn/prefer-number-properties": "off",
         "unicorn/prefer-query-selector": "off",
-        "unicorn/prefer-single-call": "off",
         "unicorn/prefer-string-raw": "off",
         "unicorn/prefer-string-replace-all": "off",
         "unicorn/prefer-top-level-await": "off",

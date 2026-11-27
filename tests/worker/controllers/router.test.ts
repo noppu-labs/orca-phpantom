@@ -98,8 +98,10 @@ async function setup(
     ...(options.sweepMs === undefined ? {} : { sweepMs: options.sweepMs }),
     ...(options.now === undefined ? {} : { now: options.now }),
   });
-  cleanups.push(() => rmSync(dir, { recursive: true, force: true }));
-  cleanups.push(() => router.dispose());
+  cleanups.push(
+    () => rmSync(dir, { recursive: true, force: true }),
+    () => router.dispose()
+  );
 
   const worker = {
     request(name: string, input: any, panel = 'panel-1'): Promise<any> {
