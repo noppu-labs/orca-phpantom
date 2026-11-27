@@ -517,7 +517,8 @@ export class LspBridge {
   // --- attaching ---
 
   /** Queues a fresh open (or a resync) behind whatever runs; an open still sending chunks stops at the next one. */
-  private async start(resync: boolean): Promise<AttachStatus | null> {
+  // oxlint-disable-next-line typescript/promise-function-async -- returns the promise it stores in this.latest; settled() compares them by identity
+  private start(resync: boolean): Promise<AttachStatus | null> {
     const generation = ++this.generation;
     if (!resync) {
       this.targetWorkspace = this.context?.workspaceId ?? null;
@@ -831,7 +832,8 @@ export class LspBridge {
    * Sends what is queued, behind any open in flight. `drain` (a request about to go out) also sends edits
    * typed meanwhile; the timer sends one batch, and edits typed during it wait for the timer they armed.
    */
-  private async flush(drain: boolean): Promise<unknown> {
+  // oxlint-disable-next-line typescript/promise-function-async -- returns the lane promise itself; an async wrapper lets the next lane job run before the caller resumes
+  private flush(drain: boolean): Promise<unknown> {
     clearTimeout(this.syncTimer);
     this.syncTimer = undefined;
     return this.inLane(async () => this.sync(drain));
@@ -1002,7 +1004,8 @@ export class LspBridge {
 
   // --- plumbing ---
 
-  private async inLane<T>(job: () => Promise<T>): Promise<T> {
+  // oxlint-disable-next-line typescript/promise-function-async -- returns the lane promise itself; an async wrapper lets the next lane job run before the caller resumes
+  private inLane<T>(job: () => Promise<T>): Promise<T> {
     const run = this.lane.then(job, job);
     this.lane = run.catch(() => {});
     return run;

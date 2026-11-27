@@ -706,7 +706,8 @@ export class Router {
     this.sendChange(server, file, [{ text }], text);
   }
 
-  private async inLane<T>(docId: string, task: () => Promise<T>): Promise<T> {
+  // oxlint-disable-next-line typescript/promise-function-async -- returns the lane promise itself; an async wrapper lets the next lane job run before the caller resumes
+  private inLane<T>(docId: string, task: () => Promise<T>): Promise<T> {
     const previous = this.lanes.get(docId) ?? Promise.resolve();
     const run = previous.then(task);
     const settled = run.then(

@@ -563,6 +563,34 @@ test('a request flushes the edits typed before it', async () => {
   bridge.dispose();
 });
 
+test('a request waiting on its flush still goes out when an attach queues behind that flush', async () => {
+  const host = fakeHost();
+  const doc = source('<?php\necho 1;\n');
+  const bridge = new LspBridge(host, doc, { ...FAST, syncDelayMs: 10_000 });
+  await bridge.attach();
+  let release: () => void = () => {};
+  const gate = new Promise<void>((resolve) => (release = resolve));
+  const accept = host.handlers.change;
+  host.handlers.change = async (input, self) => {
+    await gate;
+    return accept(input, self);
+  };
+  host.handlers.request = async () => {
+    await wait(15);
+    return { result: 'answer' };
+  };
+  doc.edit(11, 12, '2');
+  const asked = bridge.ask('textDocument/hover', { position: { line: 1, character: 5 } });
+  await until(() => host.calls('phpantom.change').length === 1, 'the flush to reach Orca');
+  const again = bridge.attach();
+  release();
+  const got = await asked;
+  assert.equal(got, 'answer');
+  assert.equal(host.calls('phpantom.request').length, 1);
+  await again;
+  bridge.dispose();
+});
+
 test('an aborted request answers null', async () => {
   const host = fakeHost();
   const bridge = new LspBridge(host, source('<?php\n'), FAST);
