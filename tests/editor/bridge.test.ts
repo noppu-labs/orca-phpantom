@@ -1448,3 +1448,21 @@ test('a peek Orca refuses after its signal aborted answers null without asking a
   assert.equal(host.calls('phpantom.peek').length, 1);
   bridge.dispose();
 });
+
+test('a null session from the worker is no session: nothing goes out under it', async () => {
+  const host = fakeHost();
+  host.session = null as unknown as string;
+  const bridge = new LspBridge(host, source('<?php\n'), FAST);
+  assert.equal((await bridge.attach()).state, 'ready');
+  const range = { start: { line: 0, character: 0 }, end: { line: 0, character: 0 } };
+  assert.equal(await bridge.ask('textDocument/hover', {}), null);
+  assert.equal(await bridge.navigate('file:///ws-a/app/B.php', range), null);
+  assert.equal(await bridge.peek(['file:///ws-a/app/B.php']), null);
+  assert.equal(
+    host.calls('phpantom.request').length +
+      host.calls('phpantom.navigate').length +
+      host.calls('phpantom.peek').length,
+    0
+  );
+  bridge.dispose();
+});

@@ -337,3 +337,40 @@ test('going to a definition that found nothing shows no note about cut results',
     []
   );
 });
+
+test('completion marks a truthy non-boolean deprecated, and not a null one', async () => {
+  const { provider, model } = registerAll(
+    { completionProvider: {} },
+    {
+      'textDocument/completion': [
+        { label: 'a', deprecated: 1 },
+        { label: 'b', deprecated: null },
+      ],
+    }
+  );
+  const list = await provider('registerCompletionItemProvider').provideCompletionItems(
+    model,
+    position,
+    { triggerKind: 0 },
+    token
+  );
+  assert.deepEqual(
+    list.suggestions.map((suggestion: any) => suggestion.tags),
+    [[1], undefined]
+  );
+});
+
+test('a code action a server marks preferred with a truthy non-boolean is preferred', async () => {
+  const range = { startLineNumber: 1, startColumn: 1, endLineNumber: 1, endColumn: 1 };
+  const { provider, model } = registerAll(
+    { codeActionProvider: { resolveProvider: true } },
+    { 'textDocument/codeAction': [{ title: 'a', data: 1, isPreferred: 1 }] }
+  );
+  const list = await provider('registerCodeActionProvider').provideCodeActions(
+    model,
+    range,
+    { trigger: 1 },
+    token
+  );
+  assert.deepEqual(list.actions, [{ title: 'a', isPreferred: true }]);
+});

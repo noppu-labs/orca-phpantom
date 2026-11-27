@@ -521,3 +521,60 @@ test('semantic tokens leave out an empty or missing result id', () => {
   assert.equal('resultId' in (toSemanticTokens({ data: [] }) ?? {}), false);
   assert.equal(toSemanticTokens({ data: [], resultId: 'r' })?.resultId, 'r');
 });
+
+// A server may send null (or a truthy non-boolean) where LSP types a field as optional: each takes the branch its truthiness gave.
+test('null fields a server sends are left out, as a missing one is', () => {
+  const marker = toMarker({ range: origin, message: 'm', source: null, tags: null } as never);
+  assert.equal('source' in marker, false);
+  assert.equal('tags' in marker, false);
+  assert.deepEqual(
+    toCodeAction(
+      { title: 't', data: 1, kind: null, isPreferred: null, disabled: { reason: null } } as never,
+      'file:///a.php',
+      'm'
+    ),
+    { title: 't', needsResolve: true, otherFiles: 0 }
+  );
+  assert.deepEqual(
+    toCodeAction({ title: 't', data: 1, disabled: null } as never, 'file:///a.php', 'm'),
+    { title: 't', needsResolve: true, otherFiles: 0 }
+  );
+  assert.deepEqual(completionDetails({ detail: null, additionalTextEdits: null }), {});
+  assert.equal(
+    toCompletionLabel({ label: 'a', labelDetails: { detail: null, description: null } } as never),
+    'a'
+  );
+  assert.deepEqual(
+    toCompletionLabel({ label: 'a', labelDetails: { detail: null, description: 'C' } } as never),
+    { label: 'a', description: 'C' }
+  );
+  assert.deepEqual(
+    toCompletionLabel({ label: 'a', labelDetails: { detail: '()', description: null } } as never),
+    { label: 'a', detail: '()' }
+  );
+  const hint = toInlayHint({
+    position: { line: 0, character: 0 },
+    label: 'x',
+    paddingLeft: null,
+    paddingRight: null,
+  } as never);
+  assert.equal('paddingLeft' in hint, false);
+  assert.equal('paddingRight' in hint, false);
+  assert.equal('resultId' in (toSemanticTokens({ data: [], resultId: null }) ?? {}), false);
+});
+
+test('truthy non-boolean flags a server sends count as set', () => {
+  assert.equal(
+    toCodeAction({ title: 't', data: 1, isPreferred: 1 } as never, 'file:///a.php', 'm')
+      ?.isPreferred,
+    true
+  );
+  const hint = toInlayHint({
+    position: { line: 0, character: 0 },
+    label: 'x',
+    paddingLeft: 1,
+    paddingRight: 'yes',
+  } as never);
+  assert.equal(hint.paddingLeft, true);
+  assert.equal(hint.paddingRight, true);
+});
