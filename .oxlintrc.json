@@ -162,7 +162,6 @@
         "eslint/max-classes-per-file": "off",
         "eslint/no-duplicate-imports": "off",
         "eslint/no-inline-comments": "off",
-        "eslint/no-nested-ternary": "off",
         "eslint/no-param-reassign": "off",
         "eslint/no-sequences": "off",
         "eslint/no-shadow": "off",

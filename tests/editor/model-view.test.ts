@@ -21,7 +21,8 @@ function fakeMonacoModel() {
     const crlf = s.includes('\r\n');
     const cr = /\r(?!\n)/u.test(s);
     if (cr || (lf && crlf)) return 'invalid';
-    return lf ? '\n' : crlf ? '\r\n' : 'none';
+    if (lf) return '\n';
+    return crlf ? '\r\n' : 'none';
   };
   const port: ModelPort = {
     getText: () => text,
@@ -32,7 +33,7 @@ function fakeMonacoModel() {
       const cr = (body.match(/\r(?!\n)/gu) ?? []).length;
       const lf = (body.match(/(?<!\r)\n/gu) ?? []).length;
       const total = crlf + cr + lf;
-      eol = total === 0 ? '\n' : cr + crlf > total / 2 ? '\r\n' : '\n';
+      eol = total > 0 && cr + crlf > total / 2 ? '\r\n' : '\n';
       text = body.replaceAll(/\r\n|\r|\n/gu, eol);
       calls.push('setText');
       changed();

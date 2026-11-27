@@ -125,16 +125,23 @@ function installOpener(ctx: EditorContext, bridge: LspBridge): Disposable {
   return monaco.editor.registerEditorOpener({
     async openCodeEditor(_source, resource, selectionOrPosition) {
       if (resource.toString() === model.uri.toString()) return false;
-      const range = selectionOrPosition
-        ? 'startLineNumber' in selectionOrPosition
-          ? selectionOrPosition
-          : {
-              endColumn: selectionOrPosition.column,
-              endLineNumber: selectionOrPosition.lineNumber,
-              startColumn: selectionOrPosition.column,
-              startLineNumber: selectionOrPosition.lineNumber,
-            }
-        : { endColumn: 1, endLineNumber: 1, startColumn: 1, startLineNumber: 1 };
+      let range: MonacoRange = {
+        endColumn: 1,
+        endLineNumber: 1,
+        startColumn: 1,
+        startLineNumber: 1,
+      };
+      if (selectionOrPosition) {
+        range =
+          'startLineNumber' in selectionOrPosition
+            ? selectionOrPosition
+            : {
+                endColumn: selectionOrPosition.column,
+                endLineNumber: selectionOrPosition.lineNumber,
+                startColumn: selectionOrPosition.column,
+                startLineNumber: selectionOrPosition.lineNumber,
+              };
+      }
       const answer = await bridge.navigate(resource.toString(), toLspRange(range));
       if (!answer) return false;
       if (!answer.opened) showNote('info', NAVIGATE_NOTES[answer.reason], NAVIGATION_NOTE);

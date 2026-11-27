@@ -1042,7 +1042,9 @@ class Router {
       return { result };
     }
     if (method === 'textDocument/completion') {
-      const items = Array.isArray(result) ? result : isRecord(result) ? result.items : undefined;
+      let items: unknown;
+      if (Array.isArray(result)) items = result;
+      else if (isRecord(result)) ({ items } = result);
       if (Array.isArray(items)) {
         const shell = isRecord(result) ? result : {};
         const kept = leadingThatFit(

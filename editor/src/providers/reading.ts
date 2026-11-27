@@ -100,11 +100,12 @@ function registerReadingProviders(
             incomplete: isRecord(result) && Boolean(result.isIncomplete),
             suggestions: items.map((item) => {
               const edit = item.textEdit;
-              const range = edit
-                ? edit.range
+              let range: monaco.languages.CompletionItem['range'] = fallback;
+              if (edit) {
+                range = edit.range
                   ? fromLspRange(edit.range)
-                  : { insert: fromLspRange(edit.insert), replace: fromLspRange(edit.replace) }
-                : fallback;
+                  : { insert: fromLspRange(edit.insert), replace: fromLspRange(edit.replace) };
+              }
               const suggestion: monaco.languages.CompletionItem = {
                 additionalTextEdits: item.additionalTextEdits
                   ? edits(item.additionalTextEdits)

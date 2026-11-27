@@ -227,7 +227,9 @@ const isLocation = (value: unknown): value is LspLocation => isRecord(value);
 
 /** Locations (or links) as plain {uri, range}, whichever shape the server used, or none. */
 function normalizeLocations(result: unknown): { uri: string; range: MonacoRange }[] {
-  const list: unknown[] = Array.isArray(result) ? result : isTruthy(result) ? [result] : [];
+  let list: unknown[] = [];
+  if (Array.isArray(result)) list = result;
+  else if (isTruthy(result)) list = [result];
   return list.map((item) => {
     // Why throw: anything else has no location to read, and reading one from it throws too.
     if (!isLocation(item)) throw new TypeError('a location is not an object');
@@ -436,11 +438,9 @@ const isCompletionItemList = (value: unknown): value is LspCompletionItem[] => A
 
 /** A completion answer's items, from a bare list or a CompletionList; none when there is neither. */
 function completionItems(result: unknown): LspCompletionItem[] {
-  const items: unknown = Array.isArray(result)
-    ? result
-    : isRecord(result)
-      ? (result.items ?? [])
-      : [];
+  let items: unknown = [];
+  if (Array.isArray(result)) items = result;
+  else if (isRecord(result)) items = result.items ?? [];
   // Why throw: anything else has no items to read, and mapping over it throws too.
   if (!isCompletionItemList(items)) throw new TypeError('completion items are not a list');
   return items;

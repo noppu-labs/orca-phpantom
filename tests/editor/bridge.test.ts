@@ -712,12 +712,10 @@ test('gives up retrying after maxRetries', async () => {
 test('a save retries a single-file attach, even with the typing budget spent', async () => {
   let saved = false;
   const host = fakeHost({
-    open: (input, self) =>
-      input.last === true
-        ? saved
-          ? self.ready()
-          : { state: 'single-file', reason: 'no-file' }
-        : { state: 'pending' },
+    open: (input, self) => {
+      if (input.last !== true) return { state: 'pending' };
+      return saved ? self.ready() : { state: 'single-file', reason: 'no-file' };
+    },
   });
   const doc = source('<?php\n');
   const bridge = new LspBridge(host, doc, { ...FAST, retryGapMs: 1, maxRetries: 1 });
@@ -741,12 +739,10 @@ test('a save retries a single-file attach, even with the typing budget spent', a
 test('an error answer retries when the settings change', async () => {
   let fixed = false;
   const host = fakeHost({
-    open: (input, self) =>
-      input.last === true
-        ? fixed
-          ? self.ready()
-          : { state: 'error', message: 'PHPantom is not installed' }
-        : { state: 'pending' },
+    open: (input, self) => {
+      if (input.last !== true) return { state: 'pending' };
+      return fixed ? self.ready() : { state: 'error', message: 'PHPantom is not installed' };
+    },
   });
   const bridge = new LspBridge(host, source('<?php\n'), FAST);
   const statuses: string[] = [];
@@ -765,12 +761,10 @@ test('an error answer retries when the settings change', async () => {
 test('an error answer retries when the tab shows', async () => {
   let answers = 0;
   const host = fakeHost({
-    open: (input, self) =>
-      input.last === true
-        ? ++answers === 1
-          ? { state: 'error', message: 'boom' }
-          : self.ready()
-        : { state: 'pending' },
+    open: (input, self) => {
+      if (input.last !== true) return { state: 'pending' };
+      return ++answers === 1 ? { state: 'error', message: 'boom' } : self.ready();
+    },
   });
   const bridge = new LspBridge(host, source('<?php\n'), FAST);
   await bridge.attach();
