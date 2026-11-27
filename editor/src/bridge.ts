@@ -154,7 +154,7 @@ function groupsOf(event: QueuedEvent): { groups: Group[]; lengthBefore: number }
       if (!('range' in change)) {
         return null;
       }
-      const removed = replaced.get(change.range) ?? (isEmpty(change.range) ? 0 : NaN);
+      const removed = replaced.get(change.range) ?? (isEmpty(change.range) ? 0 : Number.NaN);
       length -= change.text.length - removed;
     }
   }
