@@ -59,7 +59,7 @@ Impact: medium, because script in a frame can send every `phpantom.*` request, `
 
 PHPantom's hovers and its completion and signature documentation are rendered by Monaco's Markdown renderer, which sanitizes with DOMPurify. The plugin never marks Markdown as trusted, so command links stay off. The bundle holds Monaco 0.58.0 with DOMPurify 3.4.17, and `npm audit` reports no advisory for either. Each frame is isolated (`"frame": "isolated"` in the manifest).
 
-What remains: the editor does not set Monaco's `markdownImages` option, whose default allows images from any origin, so a hover can hold a remote image. The Orca 1.4.278 app bundle serves plugin files with a Content-Security-Policy whose `img-src` and `connect-src` allow only the plugin's own files, `data:` and `blob:`, which would block that fetch. That this policy covers the editor frame was read from the bundle, not tested in a tab. A fix in Monaco or DOMPurify reaches users only after `npm run build` and a release. Dependabot raises those bumps as their own group.
+What remains: the editor does not set Monaco's `markdownImages` option, and the standalone editor defaults its allowed origins to none, so a hover shows no remote image. The Orca 1.4.278 app bundle also serves plugin files with a Content-Security-Policy whose `img-src` and `connect-src` allow only the plugin's own files, `data:` and `blob:`. That this policy covers the editor frame was read from the bundle, not tested in a tab. A fix in Monaco or DOMPurify reaches users only after `npm run build` and a release. Dependabot raises those bumps as their own group.
 
 ### 6. Opening an untrusted project runs its tools
 
