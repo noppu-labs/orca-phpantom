@@ -18,7 +18,7 @@ function fakeMonacoModel() {
   const changed = (): void => listeners.forEach((l) => l());
   const kind = (s: string): 'none' | Eol | 'invalid' => {
     const lf = /(?<!\r)\n/.test(s);
-    const crlf = /\r\n/.test(s);
+    const crlf = s.includes('\r\n');
     const cr = /\r(?!\n)/.test(s);
     if (cr || (lf && crlf)) return 'invalid';
     return lf ? '\n' : crlf ? '\r\n' : 'none';

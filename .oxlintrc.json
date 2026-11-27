@@ -216,7 +216,6 @@
         "typescript/no-unsafe-return": "off",
         "typescript/no-unsafe-type-assertion": "off",
         "typescript/prefer-for-of": "off",
-        "typescript/prefer-includes": "off",
         "typescript/prefer-nullish-coalescing": "off",
         "typescript/promise-function-async": "off",
         "typescript/require-array-sort-compare": "off",

@@ -1073,7 +1073,7 @@ test('a document that stops pinging is released after the lease', async () => {
     { detached: true }
   );
   assert.ok(
-    logs.some((line) => /Released/.test(line)),
+    logs.some((line) => line.includes('Released')),
     logs.join('\n')
   );
 });
@@ -1171,7 +1171,7 @@ test('two holders on one file: the one that expires leaves the file open for the
   );
   // Only d2 renews its lease.
   const deadline = Date.now() + 4000;
-  while (!/1 open document\(s\)/.test(router.describe())) {
+  while (!router.describe().includes('1 open document(s)')) {
     assert.ok(Date.now() < deadline, 'd1 was never released');
     await sleep(30);
     assert.deepEqual(await worker.request('phpantom.ping', { docId: 'd2', session: two.session }), {

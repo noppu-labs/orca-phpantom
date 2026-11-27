@@ -244,14 +244,14 @@ test('integration: three frames of one tab, two of them dead, keep PHPantom on t
 
   // The first dead frame's lease ends while the second still holds the file.
   await until(
-    () => /2 open document\(s\)/.test(world.router.describe()),
+    () => world.router.describe().includes('2 open document(s)'),
     'the first frame to be released'
   );
   assert.equal(await world.holds(), d3.text);
   // Whatever PHPantom holds, the live frame's question is asked of its own text.
   assert.equal(await b3.ask('fake/text', {}), d3.text);
   await until(
-    () => /1 open document\(s\)/.test(world.router.describe()),
+    () => world.router.describe().includes('1 open document(s)'),
     'the second frame to be released'
   );
   assert.equal(await world.holds(), d3.text);
