@@ -243,7 +243,7 @@ export class Router {
       return { resync: true };
     }
     doc.version = input.version;
-    const file = doc.file;
+    const { file } = doc;
     const after = doc.mirror.text;
     // Why no compare for a lone holder: nobody else moves PHPantom's copy, so it is this document's text.
     // With several, `===` on the same string is a pointer check; lengths that differ fail at once.
@@ -416,7 +416,7 @@ export class Router {
 
   describe(): string {
     const lines: string[] = [];
-    const resolved = this.resolved;
+    const { resolved } = this;
     if (resolved?.ok) {
       lines.push(
         `PHPantom ${resolved.version} (${SOURCE_WORDS[resolved.source]}): ${resolved.path}`
@@ -512,7 +512,7 @@ export class Router {
     if (located.status === 'ambiguous') {
       return { state: 'single-file', reason: 'ambiguous' };
     }
-    const path = located.path;
+    const { path } = located;
     // Why a lookup: a file found through a pending reveal comes back without its workspace.
     const workspace =
       rows.find((row) => row.path === located.root && isLocal(row)) ?? workspaceFor(path, rows);
@@ -628,7 +628,7 @@ export class Router {
       if (!expired(doc)) {
         continue;
       }
-      const docId = doc.docId;
+      const { docId } = doc;
       // Why in its lane and checked again there: an open in flight for this docId finishes first, and a
       // Document it attached anew has just been seen.
       releases.push(
@@ -922,7 +922,7 @@ export class Router {
 
   private async stopEntry(entry: Entry): Promise<void> {
     this.cancelIdle(entry);
-    const server = entry.server;
+    const { server } = entry;
     entry.server = null;
     try {
       await server?.stop();

@@ -520,7 +520,7 @@ export class LspBridge {
 
   private async open(generation: number, resync: boolean): Promise<AttachStatus | null> {
     if (generation !== this.generation || this.disposed) return null;
-    const context = this.context;
+    const { context } = this;
     // Snapshot and queue reset together: every change after this line is queued on top of `text`.
     const text = this.source.getText();
     this.queue = [];
@@ -710,7 +710,7 @@ export class LspBridge {
     if (!attachment || this.pinging || this.disposed || this.pacer.wait() > 0) return;
     const token = {};
     this.pinging = token;
-    const generation = this.generation;
+    const { generation } = this;
     let released: boolean;
     try {
       // Why the timeout: a ping that hangs would otherwise swallow every tick after it.
@@ -818,7 +818,7 @@ export class LspBridge {
 
   private async sync(drain: boolean): Promise<void> {
     while (this.attachedTo && !this.disposed) {
-      const generation = this.generation;
+      const { generation } = this;
       if (this.needsResync) {
         await this.open(++this.generation, true);
         continue;
@@ -841,7 +841,7 @@ export class LspBridge {
           this.resyncNext();
           continue;
         }
-        groups = split.groups;
+        ({ groups } = split);
       }
       for (let index = 0; index < groups.length; index++) {
         const group = groups[index];
@@ -849,7 +849,7 @@ export class LspBridge {
           this.holdBack(groups.slice(index));
           return;
         }
-        const session = this.attachedTo.session;
+        const { session } = this.attachedTo;
         let answer: PluginRequestOutput<'phpantom.change'>;
         try {
           answer = await this.send('phpantom.change', {

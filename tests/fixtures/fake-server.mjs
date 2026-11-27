@@ -112,8 +112,7 @@ function handle(message) {
       params: { type: 2, message: `config=${JSON.stringify(message.result)}` },
     });
   } else if (method === 'textDocument/didOpen') {
-    uri = params.textDocument.uri;
-    text = params.textDocument.text;
+    ({ uri, text } = params.textDocument);
     publish();
   } else if (method === 'textDocument/didChange') {
     for (const change of params.contentChanges) {

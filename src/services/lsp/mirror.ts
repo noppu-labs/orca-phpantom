@@ -39,7 +39,7 @@ export class DocumentMirror {
     let line = 0;
     let i = 0;
     if (fromPos && fromPos.line <= pos.line) {
-      line = fromPos.line;
+      ({ line } = fromPos);
       i = this.lineStart(from);
     }
     while (line < pos.line) {

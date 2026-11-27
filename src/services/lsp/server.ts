@@ -80,9 +80,9 @@ export class PhpantomServer {
       stdio: ['pipe', 'pipe', 'pipe'],
     });
     this.child = child;
-    const stdin = child.stdin;
-    const stdout = child.stdout;
-    const stderr = child.stderr;
+    const { stdin } = child;
+    const { stdout } = child;
+    const { stderr } = child;
     if (!stdin || !stdout || !stderr) {
       child.kill();
       throw new Error('could not open the language server pipes');
@@ -198,7 +198,7 @@ export class PhpantomServer {
 
   /** Close stdin, give the child 2 s to leave, then SIGKILL; if even that is not seen, drop the pipes and give up on it. */
   private async terminate(): Promise<void> {
-    const child = this.child;
+    const { child } = this;
     if (!child) {
       return;
     }

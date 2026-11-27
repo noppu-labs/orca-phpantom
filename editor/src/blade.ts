@@ -116,7 +116,7 @@ export function bladeGrammar<C extends object, L extends MonarchLanguage>(html: 
   language: L;
 }): { conf: C; language: L } {
   const language = structuredClone(html.language);
-  const tokenizer = language.tokenizer;
+  const { tokenizer } = language;
   for (const [state, rules] of Object.entries(tokenizer)) {
     if (state === 'root' || NOT_BLADE.test(state)) {
       continue;

@@ -140,8 +140,8 @@ export class Outbox {
       diagnostics: [],
       truncated: earlier + original.diagnostics.length,
     });
-    let bytes = shell.bytes;
-    let objects = shell.objects;
+    let { bytes } = shell;
+    let { objects } = shell;
     const kept: typeof ranked = [];
     for (const entry of ranked) {
       const size = orcaSize(entry.diagnostic);

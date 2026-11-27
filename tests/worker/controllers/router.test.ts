@@ -400,7 +400,7 @@ async function twoHolders(text = '<?php // ok\n') {
 
 test('two documents on one file share it: one didOpen, no didClose while one remains', async () => {
   const { worker, started, posts, one, two, change, text } = await twoHolders();
-  const server = started[0].server;
+  const { server } = started[0];
   const sent = () => server.notified.filter((n) => n.method.startsWith('textDocument/'));
   // The second holder brings the same text, so PHPantom is told nothing new.
   assert.deepEqual(
@@ -910,7 +910,7 @@ test('cuts oversized semantic tokens at a whole token, keeping the leading colou
   const size = orcaSize(answer);
   assert.ok(size.objects <= ORCA_MAX_OBJECTS && size.bytes <= 1024 * 1024, JSON.stringify(size));
   assert.equal(answer.result.resultId, 'r1');
-  const length = answer.result.data.length;
+  const { length } = answer.result.data;
   assert.ok(length > 50_000 && length < 200_000);
   assert.equal(length % 5, 0);
   assert.deepEqual(answer.result.data.slice(0, 7), [0, 1, 2, 3, 4, 0, 1]);
@@ -1070,7 +1070,7 @@ test('a document that stops pinging is released after the lease', async () => {
     await worker.request('phpantom.ping', { docId: 'd1', session: status.session }),
     { ok: true }
   );
-  const server = started[0].server;
+  const { server } = started[0];
   await until(() => server.notified.some((n) => n.method === 'textDocument/didClose'));
   assert.equal(
     server.notified.find((n) => n.method === 'textDocument/didClose')!.params.textDocument.uri,

@@ -26,7 +26,7 @@ function compile(grammar: Grammar, regex: RegExp): RegExp {
 }
 
 function rulesOf(grammar: Grammar, state: string, seen: string[] = []): unknown[] {
-  const tokenizer = grammar.language.tokenizer;
+  const { tokenizer } = grammar.language;
   let name = state;
   // Monarch's parent matching: `scriptWithCustomType.text/javascript` uses `scriptWithCustomType`.
   while (!(name in tokenizer) && name.includes('.')) {
