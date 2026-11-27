@@ -8,7 +8,7 @@ interface RpcHandlers {
   /** A request the server makes of us (configuration, registering capabilities ...); its result, or what its promise settles to, is the answer. */
   onRequest: (method: string, params: unknown) => unknown;
   onNotification: (method: string, params: unknown) => void;
-  /** A handler threw on a message; the connection carries on with the next one. */
+  /** A message was not an object, or a handler threw on one; the connection carries on with the next. */
   onError?: (message: string) => void;
 }
 
@@ -26,6 +26,13 @@ interface RpcMessage {
 }
 
 const isRpcMessage = (value: unknown): value is RpcMessage => isRecord(value);
+
+/** What a parsed body that is not an object is, for the log. */
+function describe(value: unknown): string {
+  if (value === null) return 'null';
+  if (Array.isArray(value)) return 'an array';
+  return `a ${typeof value}`;
+}
 
 const HEADER_END = Buffer.from('\r\n\r\n');
 const LENGTH_HEADER = /content-length:\s*(?<bytes>\d+)/iu;
@@ -131,10 +138,11 @@ class RpcConnection {
     } catch {
       return;
     }
-    // Why throw: a null body has always thrown here, and skipping it instead is a separate fix.
-    if (message === null) throw new TypeError('the message body is null');
-    // Why: a body that is not an object (a batch, a bare value) carries nothing this connection answers.
-    if (!isRpcMessage(message)) return;
+    // Why: a body that is not an object (null, a batch, a bare value) carries nothing this connection answers.
+    if (!isRpcMessage(message)) {
+      this.handlers.onError?.(`skipped a message that is not a JSON object: ${describe(message)}`);
+      return;
+    }
     if (message.method !== undefined && message.id !== undefined) {
       void this.answer(message.id, message.method, message.params);
     } else if (message.method !== undefined) {
