@@ -187,7 +187,6 @@
         "eslint/sort-keys": "off",
         "import/exports-last": "off",
         "import/group-exports": "off",
-        "import/no-duplicates": "off",
         "import/no-namespace": "off",
         "import/no-unassigned-import": "off",
         "import/unambiguous": "off",

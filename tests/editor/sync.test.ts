@@ -1,5 +1,4 @@
-import { assert, test } from 'orca/testing';
-import { mockEditorHost } from 'orca/testing';
+import { assert, test, mockEditorHost } from 'orca/testing';
 
 import { bindDocument, flushWhenHidden, type TextView } from '../../editor/src/sync.ts';
 
