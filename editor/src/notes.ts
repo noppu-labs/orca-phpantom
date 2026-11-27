@@ -3,7 +3,7 @@
 const notes = new Map<string, { element: HTMLElement; text: HTMLElement }>();
 
 function container(): HTMLElement {
-  let element = document.getElementById('phpantom-notes');
+  let element = document.querySelector<HTMLElement>('#phpantom-notes');
   if (!element) {
     element = document.createElement('div');
     element.id = 'phpantom-notes';

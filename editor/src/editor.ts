@@ -40,7 +40,7 @@ const themeName = (): string =>
   document.documentElement.classList.contains('dark') ? THEME_NAME.dark : THEME_NAME.light;
 
 export async function startEditor(): Promise<EditorContext> {
-  const root = document.getElementById('root');
+  const root = document.querySelector<HTMLElement>('#root');
   if (!root) {
     throw new Error('the page has no #root element');
   }
