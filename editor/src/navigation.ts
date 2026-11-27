@@ -33,11 +33,11 @@ function afterPeek(
   read: string[],
   keepUnread: boolean
 ): { shown: Location[]; left: number } {
-  if (keepUnread) return { shown: locations, left: 0 };
+  if (keepUnread) return { left: 0, shown: locations };
   const got = new Set(read);
   const missing = new Set(asked.filter((uri) => !got.has(uri)));
   const shown = locations.filter((location) => !missing.has(location.uri));
-  return { shown, left: locations.length - shown.length };
+  return { left: locations.length - shown.length, shown };
 }
 
 // The worker reads at most this many files per peek (PEEK_MAX_FILES in src/controllers/router.ts); asking for more only makes the request bigger, and a long list of URIs could pass Orca's 64 KiB request limit.
@@ -107,9 +107,9 @@ class PeekModels {
 }
 
 const NAVIGATE_NOTES = {
-  'outside-workspace': 'That definition is outside your open workspaces.',
-  'not-a-file': "That definition is in PHP's built-in stubs, which have no file to open.",
   'failed': "PHPantom couldn't open that file.",
+  'not-a-file': "That definition is in PHP's built-in stubs, which have no file to open.",
+  'outside-workspace': 'That definition is outside your open workspaces.',
 } as const;
 
 /**
@@ -126,12 +126,12 @@ function installOpener(ctx: EditorContext, bridge: LspBridge): Disposable {
         ? 'startLineNumber' in selectionOrPosition
           ? selectionOrPosition
           : {
-              startLineNumber: selectionOrPosition.lineNumber,
-              startColumn: selectionOrPosition.column,
-              endLineNumber: selectionOrPosition.lineNumber,
               endColumn: selectionOrPosition.column,
+              endLineNumber: selectionOrPosition.lineNumber,
+              startColumn: selectionOrPosition.column,
+              startLineNumber: selectionOrPosition.lineNumber,
             }
-        : { startLineNumber: 1, startColumn: 1, endLineNumber: 1, endColumn: 1 };
+        : { endColumn: 1, endLineNumber: 1, startColumn: 1, startLineNumber: 1 };
       const answer = await bridge.navigate(resource.toString(), toLspRange(range));
       if (!answer) return false;
       if (!answer.opened) showNote('info', NAVIGATE_NOTES[answer.reason], NAVIGATION_NOTE);

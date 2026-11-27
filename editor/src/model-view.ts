@@ -63,13 +63,6 @@ function modelView(port: ModelPort): ModelView {
     }
   };
   const view: ModelView = {
-    getValue: () => bom + port.getText(),
-    load(initial) {
-      bom = initial.startsWith(BOM) ? BOM : '';
-      quietly(() => {
-        port.setText(initial.slice(bom.length));
-      });
-    },
     applyOutside(splice: Splice) {
       const current = view.getValue();
       const next = current.slice(0, splice.start) + splice.text + current.slice(splice.end);
@@ -99,6 +92,13 @@ function modelView(port: ModelPort): ModelView {
         }
       });
       bom = nextBom;
+    },
+    getValue: () => bom + port.getText(),
+    load(initial) {
+      bom = initial.startsWith(BOM) ? BOM : '';
+      quietly(() => {
+        port.setText(initial.slice(bom.length));
+      });
     },
     onUserChange: (listener) =>
       port.onDidChangeContent(() => {

@@ -41,37 +41,37 @@ type Base = 'variable' | 'type' | 'keyword' | 'comment' | 'annotation';
 // Neither has a function colour, so functions and methods keep the editor's foreground, as they do without semantic tokens.
 const BASE_COLOURS: Record<'dark' | 'light', Record<Base, string>> = {
   dark: {
-    variable: '74B0DF',
-    type: '3DC9B0',
-    keyword: '569CD6',
-    comment: '608B4E',
     annotation: 'cc6666',
+    comment: '608B4E',
+    keyword: '569CD6',
+    type: '3DC9B0',
+    variable: '74B0DF',
   },
   light: {
-    variable: '001188',
-    type: '008080',
-    keyword: '0000FF',
-    comment: '008000',
     annotation: '808080',
+    comment: '008000',
+    keyword: '0000FF',
+    type: '008080',
+    variable: '001188',
   },
 };
 
 const NEAREST: Record<string, Base | null> = {
-  namespace: 'type',
   class: 'type',
-  interface: 'type',
+  comment: 'comment',
+  decorator: 'annotation',
   enum: 'type',
-  type: 'type',
-  typeParameter: 'type',
-  parameter: 'variable',
-  variable: 'variable',
-  property: 'variable',
   enumMember: 'variable',
   function: null,
-  method: null,
-  decorator: 'annotation',
+  interface: 'type',
   keyword: 'keyword',
-  comment: 'comment',
+  method: null,
+  namespace: 'type',
+  parameter: 'variable',
+  property: 'variable',
+  type: 'type',
+  typeParameter: 'type',
+  variable: 'variable',
 };
 
 interface ThemeRule {
@@ -152,12 +152,12 @@ function typographyOptions(t: EditorTypography): {
 } {
   return {
     fontFamily: t.cssFontFamily,
+    fontLigatures: t.fontLigatures,
     fontSize: t.fontSize,
     fontWeight: t.fontWeight,
     lineHeight: t.lineHeight,
-    fontLigatures: t.fontLigatures,
-    wordWrap: t.wordWrap,
     minimap: { enabled: t.minimap },
+    wordWrap: t.wordWrap,
   };
 }
 
@@ -216,15 +216,15 @@ function defineThemes(monaco: ThemeHost): void {
   const colors = themeColors(readOrcaVars());
   monaco.editor.defineTheme(THEME_NAME.dark, {
     base: 'vs-dark',
+    colors,
     inherit: true,
     rules: themeRules(true),
-    colors,
   });
   monaco.editor.defineTheme(THEME_NAME.light, {
     base: 'vs',
+    colors,
     inherit: true,
     rules: themeRules(false),
-    colors,
   });
 }
 

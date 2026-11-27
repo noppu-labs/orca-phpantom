@@ -29,9 +29,11 @@ const SEMANTIC_TOKEN_MODIFIERS = [
   'defaultLibrary',
 ];
 
+// oxlint-disable-next-line eslint/sort-keys -- order matters because the initialize request carries these capabilities to PHPantom as written
 const CLIENT_CAPABILITIES = {
   general: { positionEncodings: ['utf-16'] },
   window: { workDoneProgress: true },
+  // oxlint-disable-next-line eslint/sort-keys -- order matters because the initialize request carries these capabilities to PHPantom as written
   workspace: {
     workspaceFolders: true,
     configuration: true,
@@ -40,9 +42,11 @@ const CLIENT_CAPABILITIES = {
     semanticTokens: { refreshSupport: true },
     inlayHint: { refreshSupport: true },
   },
+  // oxlint-disable-next-line eslint/sort-keys -- order matters because the initialize request carries these capabilities to PHPantom as written
   textDocument: {
     synchronization: { didSave: false, willSave: false },
     completion: {
+      // oxlint-disable-next-line eslint/sort-keys -- order matters because the initialize request carries these capabilities to PHPantom as written
       completionItem: {
         snippetSupport: true,
         documentationFormat: ['markdown', 'plaintext'],
@@ -65,6 +69,7 @@ const CLIENT_CAPABILITIES = {
     formatting: {},
     rangeFormatting: {},
     rename: { prepareSupport: true },
+    // oxlint-disable-next-line eslint/sort-keys -- order matters because the initialize request carries these capabilities to PHPantom as written
     codeAction: {
       codeActionLiteralSupport: {
         codeActionKind: { valueSet: ['quickfix', 'refactor', 'source'] },
@@ -73,6 +78,7 @@ const CLIENT_CAPABILITIES = {
       dataSupport: true,
       resolveSupport: { properties: ['edit'] },
     },
+    // oxlint-disable-next-line eslint/sort-keys -- order matters because the initialize request carries these capabilities to PHPantom as written
     semanticTokens: {
       requests: { full: true },
       formats: ['relative'],
@@ -80,6 +86,7 @@ const CLIENT_CAPABILITIES = {
       tokenModifiers: SEMANTIC_TOKEN_MODIFIERS,
     },
     inlayHint: { resolveSupport: { properties: ['tooltip'] } },
+    // oxlint-disable-next-line eslint/sort-keys -- order matters because the initialize request carries these capabilities to PHPantom as written
     publishDiagnostics: {
       relatedInformation: false,
       versionSupport: false,

@@ -17,7 +17,7 @@ class PendingReveals {
   public add(path: string, range: LspRange): void {
     // Why delete first: a re-added path becomes the newest, so it is the last to be dropped.
     this.entries.delete(path);
-    this.entries.set(path, { range, at: this.now() });
+    this.entries.set(path, { at: this.now(), range });
     for (const oldest of this.entries.keys()) {
       if (this.entries.size <= MAX_ENTRIES) {
         break;

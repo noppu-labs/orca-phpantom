@@ -9,15 +9,15 @@ interface ReleaseAsset {
 
 const tar = (asset: string, sha256: string): ReleaseAsset => ({
   asset,
-  sha256,
-  member: 'phpantom_lsp',
   kind: 'tar.gz',
+  member: 'phpantom_lsp',
+  sha256,
 });
 const zip = (asset: string, sha256: string): ReleaseAsset => ({
   asset,
-  sha256,
-  member: 'phpantom_lsp.exe',
   kind: 'zip',
+  member: 'phpantom_lsp.exe',
+  sha256,
 });
 
 const ASSETS: Record<string, ReleaseAsset> = {

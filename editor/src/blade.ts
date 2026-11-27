@@ -54,7 +54,7 @@ function bladeRules(text: string): Rule[] {
     [/@@verbatim\b/, 'keyword.blade', '@bladeVerbatim'],
     [
       /(@@[a-zA-Z_]\w*)(\s*)(\()/,
-      ['keyword.blade', '', { token: 'delimiter.parenthesis', next: '@bladeArguments' }],
+      ['keyword.blade', '', { next: '@bladeArguments', token: 'delimiter.parenthesis' }],
     ],
     [/@@php\b/, 'keyword.blade', '@bladePhp'],
     [/@@[a-zA-Z_]\w*/, 'keyword.blade'],
@@ -135,29 +135,25 @@ function bladeGrammar<C extends object, L extends MonarchLanguage>(html: {
   }
   tokenizer.root = [
     ...bladeRules(''),
-    [/(<\/?)(x-[\w\-.:]+)/, ['delimiter', { token: 'tag.blade', next: '@bladeComponent' }]],
+    [/(<\/?)(x-[\w\-.:]+)/, ['delimiter', { next: '@bladeComponent', token: 'tag.blade' }]],
     ...textRules('', '<'),
     ...tokenizer.root,
   ];
   Object.assign(tokenizer, {
-    bladeEcho: [[/\}\}/, 'delimiter.blade', '@pop'], { include: '@bladeExpression' }],
-    bladeRaw: [[/!!\}/, 'delimiter.blade', '@pop'], { include: '@bladeExpression' }],
-    bladeComment: [
-      [/--\}\}/, 'comment.blade', '@pop'],
-      [/[^-]+/, 'comment.blade'],
-      [/./, 'comment.blade'],
-    ],
     // Balanced parentheses, so `@if(count($a) > 1)` ends at the right one, across lines too.
     bladeArguments: [
       [/\(/, 'delimiter.parenthesis', '@push'],
       [/\)/, 'delimiter.parenthesis', '@pop'],
       { include: '@bladeExpression' },
     ],
-    bladePhp: [[/@@endphp\b/, 'keyword.blade', '@pop'], { include: '@bladeExpression' }],
-    bladeVerbatim: [
-      [/@@endverbatim\b/, 'keyword.blade', '@pop'],
-      [/[^@@]+/, ''],
-      [/@@/, ''],
+    bladeAttributeValueDouble: attributeValue('"'),
+    bladeAttributeValueSingle: attributeValue("'"),
+    bladeBoundDouble: [[/"/, 'delimiter', '@pop'], { include: '@bladeExpression' }],
+    bladeBoundSingle: [[/'/, 'delimiter', '@pop'], { include: '@bladeExpression' }],
+    bladeComment: [
+      [/--\}\}/, 'comment.blade', '@pop'],
+      [/[^-]+/, 'comment.blade'],
+      [/./, 'comment.blade'],
     ],
     bladeComponent: [
       ...bladeRules(''),
@@ -165,19 +161,23 @@ function bladeGrammar<C extends object, L extends MonarchLanguage>(html: {
       // A `^` as the very first character
       [
         /(^:[\w\-.:]+)(\s*)(=)(\s*)(")/,
-        ['attribute.name', '', 'delimiter', '', { token: 'delimiter', next: '@bladeBoundDouble' }],
+        ['attribute.name', '', 'delimiter', '', { next: '@bladeBoundDouble', token: 'delimiter' }],
       ],
       [
         /(^:[\w\-.:]+)(\s*)(=)(\s*)(')/,
-        ['attribute.name', '', 'delimiter', '', { token: 'delimiter', next: '@bladeBoundSingle' }],
+        ['attribute.name', '', 'delimiter', '', { next: '@bladeBoundSingle', token: 'delimiter' }],
       ],
       ...componentAttributes,
     ],
-    bladeBoundDouble: [[/"/, 'delimiter', '@pop'], { include: '@bladeExpression' }],
-    bladeBoundSingle: [[/'/, 'delimiter', '@pop'], { include: '@bladeExpression' }],
-    bladeAttributeValueDouble: attributeValue('"'),
-    bladeAttributeValueSingle: attributeValue("'"),
+    bladeEcho: [[/\}\}/, 'delimiter.blade', '@pop'], { include: '@bladeExpression' }],
     bladeExpression,
+    bladePhp: [[/@@endphp\b/, 'keyword.blade', '@pop'], { include: '@bladeExpression' }],
+    bladeRaw: [[/!!\}/, 'delimiter.blade', '@pop'], { include: '@bladeExpression' }],
+    bladeVerbatim: [
+      [/@@endverbatim\b/, 'keyword.blade', '@pop'],
+      [/[^@@]+/, ''],
+      [/@@/, ''],
+    ],
   });
   return {
     conf: { ...html.conf, comments: { blockComment: ['{{--', '--}}'] } },

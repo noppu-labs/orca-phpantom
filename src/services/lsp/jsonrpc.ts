@@ -86,16 +86,17 @@ class RpcConnection {
         }
       };
       this.pending.set(id, {
-        resolve: (value) => {
-          signal?.removeEventListener('abort', onAbort);
-          resolve(value);
-        },
         reject: (error) => {
           signal?.removeEventListener('abort', onAbort);
           reject(error);
         },
+        resolve: (value) => {
+          signal?.removeEventListener('abort', onAbort);
+          resolve(value);
+        },
       });
       signal?.addEventListener('abort', onAbort, { once: true });
+      // oxlint-disable-next-line eslint/sort-keys -- order matters because this is the JSON-RPC envelope on the wire, pinned by jsonrpc.test.ts
       this.send({ jsonrpc: '2.0', id, method, params });
     });
   }
@@ -158,8 +159,10 @@ class RpcConnection {
   private async answer(id: number | string, method: string, params: unknown): Promise<void> {
     try {
       const result = await this.handlers.onRequest(method, params);
+      // oxlint-disable-next-line eslint/sort-keys -- order matters because this is the JSON-RPC envelope on the wire, pinned by jsonrpc.test.ts
       this.send({ jsonrpc: '2.0', id, result: result ?? null });
     } catch (error) {
+      // oxlint-disable-next-line eslint/sort-keys -- order matters because this is the JSON-RPC envelope on the wire, pinned by jsonrpc.test.ts
       this.send({
         jsonrpc: '2.0',
         id,

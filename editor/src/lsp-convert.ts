@@ -21,20 +21,20 @@ interface MonacoRange {
 
 // LSP positions count from 0 and Monaco's from 1; both measure columns in UTF-16 code units.
 const toLspPosition = (position: { lineNumber: number; column: number }): LspPosition => ({
-  line: position.lineNumber - 1,
   character: position.column - 1,
+  line: position.lineNumber - 1,
 });
 
 const fromLspRange = (range: LspRange): MonacoRange => ({
-  startLineNumber: range.start.line + 1,
-  startColumn: range.start.character + 1,
-  endLineNumber: range.end.line + 1,
   endColumn: range.end.character + 1,
+  endLineNumber: range.end.line + 1,
+  startColumn: range.start.character + 1,
+  startLineNumber: range.start.line + 1,
 });
 
 const toLspRange = (range: MonacoRange): LspRange => ({
-  start: { line: range.startLineNumber - 1, character: range.startColumn - 1 },
-  end: { line: range.endLineNumber - 1, character: range.endColumn - 1 },
+  end: { character: range.endColumn - 1, line: range.endLineNumber - 1 },
+  start: { character: range.startColumn - 1, line: range.startLineNumber - 1 },
 });
 
 /** One of Monaco's content changes as an LSP incremental change; Monaco's ranges are against the text before it. */
@@ -84,8 +84,8 @@ function toMarker(diagnostic: LspDiagnostic): MonacoRange & {
   const code = typeof diagnostic.code === 'object' ? diagnostic.code.value : diagnostic.code;
   return {
     ...fromLspRange(diagnostic.range),
-    severity: markerSeverity(diagnostic.severity),
     message: diagnostic.message,
+    severity: markerSeverity(diagnostic.severity),
     ...(code === undefined ? {} : { code: String(code) }),
     ...(diagnostic.source ? { source: diagnostic.source } : {}),
     ...(diagnostic.tags?.length ? { tags: diagnostic.tags } : {}),
@@ -172,8 +172,8 @@ function normalizeLocations(result: unknown): { uri: string; range: MonacoRange 
   const list = Array.isArray(result) ? result : result ? [result] : [];
   return (list as LspLocation[]).map((item) =>
     'targetUri' in item
-      ? { uri: item.targetUri, range: fromLspRange(item.targetSelectionRange ?? item.targetRange) }
-      : { uri: item.uri, range: fromLspRange(item.range) }
+      ? { range: fromLspRange(item.targetSelectionRange ?? item.targetRange), uri: item.targetUri }
+      : { range: fromLspRange(item.range), uri: item.uri }
   );
 }
 
@@ -214,7 +214,7 @@ function splitWorkspaceEdit(
   const own = (ownKey && byUri.get(ownKey)) || [];
   const otherFiles =
     [...byUri.keys()].filter((uri) => !sameUri(uri, documentUri)).length + fileOperations;
-  return { own: own.map(toMonacoEdit), otherFiles };
+  return { otherFiles, own: own.map(toMonacoEdit) };
 }
 
 interface MonacoWorkspaceEdit {
@@ -305,17 +305,17 @@ function toDocumentSymbols(symbols: LspSymbol[] | null | undefined): unknown[] {
     const range = fromLspRange(
       symbol.range ??
         symbol.location?.range ?? {
-          start: { line: 0, character: 0 },
-          end: { line: 0, character: 0 },
+          end: { character: 0, line: 0 },
+          start: { character: 0, line: 0 },
         }
     );
     return {
-      name: symbol.name,
       detail: symbol.detail ?? symbol.containerName ?? '',
       kind: Math.max(0, symbol.kind - 1),
-      tags: [],
+      name: symbol.name,
       range,
       selectionRange: symbol.selectionRange ? fromLspRange(symbol.selectionRange) : range,
+      tags: [],
       ...(symbol.children ? { children: toDocumentSymbols(symbol.children) } : {}),
     };
   });
@@ -399,7 +399,7 @@ function toInlayHint(hint: LspInlayHint): {
         }));
   return {
     label,
-    position: { lineNumber: hint.position.line + 1, column: hint.position.character + 1 },
+    position: { column: hint.position.character + 1, lineNumber: hint.position.line + 1 },
     ...(hint.kind === undefined ? {} : { kind: hint.kind }),
     ...(hint.tooltip === undefined
       ? {}

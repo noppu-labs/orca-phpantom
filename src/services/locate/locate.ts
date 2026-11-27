@@ -161,7 +161,7 @@ async function locateAlike(
   if (best.score - second < ALIKE_LEAD) {
     return { status: 'ambiguous' };
   }
-  return { status: 'found', path: best.file.path, root: best.file.root, approximate: true };
+  return { approximate: true, path: best.file.path, root: best.file.root, status: 'found' };
 }
 
 interface LocateInput {
@@ -207,7 +207,7 @@ async function locateCandidates(input: LocateInput, options: Options): Promise<L
     }
   }
   if (matches.length === 1) {
-    return { status: 'found', path: matches[0], root: rootOf(matches[0], input.tiers) };
+    return { path: matches[0], root: rootOf(matches[0], input.tiers), status: 'found' };
   }
   if (matches.length > 1) {
     return { status: 'ambiguous' };
@@ -298,7 +298,7 @@ async function locateInRoots(
   const others: Candidate[] = [];
 
   // Why breadth-first: the file being edited is nearly always close to the workspace root, so a huge tree (a home folder used as a workspace) must not use up the time before the shallow files are seen.
-  const queue = roots.map((root) => ({ root, directory: root }));
+  const queue = roots.map((root) => ({ directory: root, root }));
   for (let next = 0; next < queue.length; next += 1) {
     // Why here: a deadline or cap checked only inside the entry loop would still read every queued directory.
     if (Date.now() > deadline || visited >= (options.maxFiles ?? MAX_FILES_VISITED)) {
@@ -325,7 +325,7 @@ async function locateInRoots(
           !entry.name.startsWith('.') &&
           !(hasComposer && COMPOSER_SIBLING_SKIPPED.has(entry.name))
         ) {
-          queue.push({ root, directory: path });
+          queue.push({ directory: path, root });
         }
       } else if (entry.isFile() && nameMatches(entry.name, language)) {
         visited += 1;

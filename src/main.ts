@@ -30,14 +30,14 @@ export default async function activate(orca: OrcaWorkerApi): Promise<void> {
       if (options?.fresh || !workspaces || Date.now() - workspaces.at > WORKSPACE_LIST_TTL_MS) {
         const rows = orca.host.call('workspace.list').then(({ workspaces: list }) =>
           list.map((row): WorkspaceRow => ({
+            branch: row.branch,
+            hostId: row.hostId,
             id: row.id,
             name: row.name,
-            branch: row.branch,
             path: row.path,
-            hostId: row.hostId,
           }))
         );
-        const cached = { rows, at: Date.now() };
+        const cached = { at: Date.now(), rows };
         workspaces = cached;
         rows.catch(() => {
           if (workspaces === cached) {
@@ -47,24 +47,24 @@ export default async function activate(orca: OrcaWorkerApi): Promise<void> {
       }
       return workspaces.rows;
     },
+    log: (message) => {
+      orca.log(message);
+    },
     async openEditor(workspaceId, path) {
-      await orca.host.call('editor.open', { workspaceId, path });
+      await orca.host.call('editor.open', { path, workspaceId });
     },
     post(event, payload, options) {
       // Why the cast: the router posts the declared phpantom.* events, typed where they are built.
       orca.panels.post(event as 'phpantom.status', payload as never, options);
     },
-    status,
-    log: (message) => {
-      orca.log(message);
-    },
     async settings() {
       const values = await orca.settings.get();
       return {
-        phpantomPath: typeof values.phpantomPath === 'string' ? values.phpantomPath.trim() : '',
         allowDownload: values.allowDownload !== false,
+        phpantomPath: typeof values.phpantomPath === 'string' ? values.phpantomPath.trim() : '',
       };
     },
+    status,
   };
   const active = new Router(host);
   router = active;

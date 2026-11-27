@@ -45,7 +45,7 @@ function smallestEdit(before: string, after: string): Splice | null {
     endBefore += 1;
     endAfter += 1;
   }
-  return { start, end: endBefore, text: after.slice(start, endAfter) };
+  return { end: endBefore, start, text: after.slice(start, endAfter) };
 }
 
 export { smallestEdit };

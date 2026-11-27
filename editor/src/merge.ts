@@ -73,10 +73,10 @@ function mergeText(
   mine: string
 ): { text: string; conflicts: number } {
   if (mine === base || mine === outside) {
-    return { text: outside, conflicts: 0 };
+    return { conflicts: 0, text: outside };
   }
   if (outside === base) {
-    return { text: mine, conflicts: 0 };
+    return { conflicts: 0, text: mine };
   }
   const mineLines = lines(mine);
   const baseLines = lines(base);
@@ -127,7 +127,7 @@ function mergeText(
     baseLines.slice(fromBase),
     outsideLines.slice(fromOutside)
   );
-  return { text, conflicts };
+  return { conflicts, text };
 }
 
 export { mergeText };

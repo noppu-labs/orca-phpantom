@@ -57,7 +57,7 @@ class Outbox {
       return;
     }
     // Why set on the existing key: Map keeps its first position, so a busy key cannot starve the others.
-    this.queue.set(key, { panel, event, payload });
+    this.queue.set(key, { event, panel, payload });
     this.arm(this.delayMs);
   }
 

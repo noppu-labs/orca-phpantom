@@ -44,8 +44,11 @@ async function bindDocument(
     }
   });
   return {
-    readOnly: session.readOnly,
-    initial: session.value,
+    dispose() {
+      changes.dispose();
+      replaced.dispose();
+      session.dispose();
+    },
     /** Sends a pending edit now instead of after Orca's debounce. Fire and forget: it never throws or waits. */
     flush() {
       try {
@@ -54,11 +57,8 @@ async function bindDocument(
         // A session already gone has nothing to send.
       }
     },
-    dispose() {
-      changes.dispose();
-      replaced.dispose();
-      session.dispose();
-    },
+    initial: session.value,
+    readOnly: session.readOnly,
   };
 }
 

@@ -49,10 +49,10 @@ async function resolveBinary(options: ResolveOptions): Promise<Resolution> {
   if (options.settingPath) {
     const version = existsSync(options.settingPath) ? await read(options.settingPath) : null;
     return version
-      ? { ok: true, path: options.settingPath, version, source: 'setting' }
+      ? { ok: true, path: options.settingPath, source: 'setting', version }
       : {
-          ok: false,
           message: `phpantomPath is set to ${options.settingPath}, which is not a working phpantom_lsp.`,
+          ok: false,
         };
   }
 
@@ -72,13 +72,13 @@ async function resolveBinary(options: ResolveOptions): Promise<Resolution> {
     }
     const version = await read(candidate);
     if (version && atLeast(version, PHPANTOM_VERSION)) {
-      return { ok: true, path: candidate, version, source: 'path' };
+      return { ok: true, path: candidate, source: 'path', version };
     }
   }
 
   const asset = (options.assets ?? assetFor)(options.platform, options.arch);
   if (!asset) {
-    return { ok: false, message: `PHPantom has no build for ${options.platform}-${options.arch}.` };
+    return { message: `PHPantom has no build for ${options.platform}-${options.arch}.`, ok: false };
   }
   const directory = flavour.join(
     cacheDir(options.env, options.platform, options.home),
@@ -90,15 +90,15 @@ async function resolveBinary(options: ResolveOptions): Promise<Resolution> {
   if (existsSync(target) && existsSync(marker)) {
     const version = await read(target);
     if (version) {
-      return { ok: true, path: target, version, source: 'cache' };
+      return { ok: true, path: target, source: 'cache', version };
     }
   }
 
   if (!options.allowDownload) {
     return {
-      ok: false,
       message:
         'PHPantom 1.1.0 or newer was not found. Install it (brew install phpantom-lsp) or turn on "Download PHPantom when missing".',
+      ok: false,
     };
   }
   let pending = inFlight.get(target);
@@ -131,15 +131,15 @@ async function download(
     writeFileSync(marker, PHPANTOM_VERSION);
     const version = await read(target);
     if (!version) {
-      return { ok: false, message: `The downloaded ${asset.member} did not run.` };
+      return { message: `The downloaded ${asset.member} did not run.`, ok: false };
     }
     // Why only here: a PHPantom the user installed may serve other editors, so its config stays theirs.
     writeFullColourDefault(options.env, options.platform, options.home, options.log ?? (() => {}));
-    return { ok: true, path: target, version, source: 'download' };
+    return { ok: true, path: target, source: 'download', version };
   } catch (error) {
     return {
-      ok: false,
       message: `Could not download PHPantom: ${error instanceof Error ? error.message : String(error)}`,
+      ok: false,
     };
   }
 }

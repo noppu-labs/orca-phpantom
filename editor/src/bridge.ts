@@ -205,12 +205,12 @@ class LspBridge {
   private readonly pacer: Pacer;
   private readonly subscriptions: Disposable[] = [];
   private readonly listeners: { [K in keyof Events]: Set<(value: Events[K]) => void> } = {
-    ready: new Set(),
-    status: new Set(),
+    busy: new Set(),
     diagnostics: new Set(),
+    ready: new Set(),
     refresh: new Set(),
     reveal: new Set(),
-    busy: new Set(),
+    status: new Set(),
   };
 
   private current: AttachStatus | null = null;
@@ -276,9 +276,9 @@ class LspBridge {
     this.backgroundMinWaitMs = options.backgroundMinWaitMs ?? 250;
     this.userMaxWaitMs = options.userMaxWaitMs ?? 3000;
     this.pacer = new Pacer({
-      passiveCap: options.passiveCap,
       firstBackoffMs: options.firstBackoffMs,
       maxBackoffMs: options.maxBackoffMs,
+      passiveCap: options.passiveCap,
     });
 
     // Listen before the first open: PHPantom publishes diagnostics while the open is still answering.
@@ -405,7 +405,7 @@ class LspBridge {
       try {
         answer = await this.send(
           'phpantom.request',
-          { docId: this.docId, session, method, params },
+          { docId: this.docId, method, params, session },
           requestOptions
         );
       } catch (error) {
@@ -451,7 +451,7 @@ class LspBridge {
     const session = this.attachedTo?.session;
     if (!session) return null;
     return this.userCall(async () =>
-      this.send('phpantom.navigate', { docId: this.docId, session, uri, range })
+      this.send('phpantom.navigate', { docId: this.docId, range, session, uri })
     );
   }
 
@@ -535,7 +535,7 @@ class LspBridge {
       run = this.latest;
       status = await run;
     }
-    return status ?? this.current ?? { state: 'error', message: 'PHPantom: the editor closed' };
+    return status ?? this.current ?? { message: 'PHPantom: the editor closed', state: 'error' };
   }
 
   private async open(generation: number, resync: boolean): Promise<AttachStatus | null> {
@@ -558,14 +558,14 @@ class LspBridge {
       for (let index = 0; index < chunks.length; index++) {
         const last = index === chunks.length - 1;
         const input: PluginRequestInput<'phpantom.open'> = {
-          docId: this.docId,
-          language: this.source.language,
-          workspaceId: context?.workspaceId ?? null,
           branch: context?.branch ?? null,
-          displayName: context?.displayName ?? null,
-          index,
           chunk: chunks[index],
+          displayName: context?.displayName ?? null,
+          docId: this.docId,
+          index,
+          language: this.source.language,
           last,
+          workspaceId: context?.workspaceId ?? null,
           ...(resync ? { resync: true as const } : {}),
         };
         for (;;) {
@@ -594,7 +594,7 @@ class LspBridge {
       }
     } catch (error) {
       if (generation !== this.generation) return null;
-      answer = { state: 'error', message: `PHPantom did not answer: ${messageOf(error)}` };
+      answer = { message: `PHPantom did not answer: ${messageOf(error)}`, state: 'error' };
       cut = codeOf(error) === 'unavailable';
     }
     if (cut && this.broken === 0) {
@@ -629,7 +629,7 @@ class LspBridge {
     this.detach();
     const final: AttachStatus =
       answer.state === 'pending'
-        ? { state: 'error', message: 'PHPantom: the open never finished' }
+        ? { message: 'PHPantom: the open never finished', state: 'error' }
         : answer;
     this.settle(final);
     // Only a remote file stays as it is; the rest may attach once saved, after a fix, or once the worker is back.
@@ -873,11 +873,11 @@ class LspBridge {
         let answer: PluginRequestOutput<'phpantom.change'>;
         try {
           answer = await this.send('phpantom.change', {
+            changes: group.changes,
             docId: this.docId,
+            length: group.length,
             session,
             version: this.version + 1,
-            changes: group.changes,
-            length: group.length,
           });
         } catch (error) {
           if (generation !== this.generation) return;

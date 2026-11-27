@@ -63,7 +63,7 @@ function chunkText(text: string, budget: number = REQUEST_BUDGET_BYTES): string[
 
 const MAX = 4_294_967_295;
 const EMPTY_CHANGE = {
-  range: { start: { line: MAX, character: MAX }, end: { line: MAX, character: MAX } },
+  range: { end: { character: MAX, line: MAX }, start: { character: MAX, line: MAX } },
   text: '',
 };
 const ENVELOPE = encodedSize(EMPTY_CHANGE);
@@ -80,12 +80,12 @@ function splitOne(change: LspContentChange, budget: number): LspContentChange[] 
   const textBudget = Math.min(budget - 2 - ENVELOPE + 2, budget - ORCA_ENVELOPE + 2);
   const pieces = chunkText(change.text, Math.max(textBudget, 16));
   const last = pieces.at(-1)!;
-  const at = 'range' in change ? change.range.start : { line: 0, character: 0 };
+  const at = 'range' in change ? change.range.start : { character: 0, line: 0 };
   const out: LspContentChange[] = [
     'range' in change ? { range: change.range, text: last } : { text: last },
   ];
   for (let i = pieces.length - 2; i >= 0; i--) {
-    out.push({ range: { start: at, end: at }, text: pieces[i] });
+    out.push({ range: { end: at, start: at }, text: pieces[i] });
   }
   return out;
 }

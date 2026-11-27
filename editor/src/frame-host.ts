@@ -8,25 +8,16 @@ function context(
 ): WorkspaceContext | null {
   return value
     ? {
-        workspaceId: value.workspaceId ?? null,
         branch: value.branch,
         displayName: value.displayName,
+        workspaceId: value.workspaceId ?? null,
       }
     : null;
 }
 
 function frameHost(): BridgeHost {
   return {
-    request: async (name, input, options) =>
-      // Why the cast: the declared overload takes its arguments as a tuple.
-      orca.plugin.request(name, ...([input, options] as unknown as PluginRequestArgs<typeof name>)),
     on: (event, handler) => orca.plugin.on(event as 'phpantom.diagnostics', handler),
-    readContext: async () => context(await orca.host.call('workspace.readContext', {})),
-    // `orca.on` subscribes through `events.subscribe` itself, and a new subscriber hears the current context first.
-    onWorkspaceChanged: (listener) =>
-      orca.on('workspace.changed', (payload) => {
-        listener(context(payload.context));
-      }),
     onFirstInput(listener) {
       // Capture on window: Monaco stops some events, and editor.focus() at start is not input.
       const handler = (): void => {
@@ -62,6 +53,15 @@ function frameHost(): BridgeHost {
         },
       };
     },
+    // `orca.on` subscribes through `events.subscribe` itself, and a new subscriber hears the current context first.
+    onWorkspaceChanged: (listener) =>
+      orca.on('workspace.changed', (payload) => {
+        listener(context(payload.context));
+      }),
+    readContext: async () => context(await orca.host.call('workspace.readContext', {})),
+    request: async (name, input, options) =>
+      // Why the cast: the declared overload takes its arguments as a tuple.
+      orca.plugin.request(name, ...([input, options] as unknown as PluginRequestArgs<typeof name>)),
   };
 }
 

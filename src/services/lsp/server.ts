@@ -32,10 +32,10 @@ const KILL_WAIT_MS = 2000;
 const CLOSE_WAIT_MS = 1000;
 
 const REFRESH_KINDS: Record<string, RefreshKind> = {
-  'workspace/semanticTokens/refresh': 'semanticTokens',
-  'workspace/inlayHint/refresh': 'inlayHints',
   'workspace/codeLens/refresh': 'codeLens',
   'workspace/diagnostic/refresh': 'diagnostics',
+  'workspace/inlayHint/refresh': 'inlayHints',
+  'workspace/semanticTokens/refresh': 'semanticTokens',
 };
 
 interface ProgressValue {
@@ -78,8 +78,8 @@ class PhpantomServer {
     const launch = this.options.spawnImpl ?? spawn;
     const child = launch(executable, ['--stdio'], {
       cwd: root,
-      windowsHide: true,
       stdio: ['pipe', 'pipe', 'pipe'],
+      windowsHide: true,
     });
     this.child = child;
     const { stdin } = child;
@@ -90,13 +90,13 @@ class PhpantomServer {
       throw new Error('could not open the language server pipes');
     }
     const rpc = new RpcConnection((frame) => void stdin.write(frame), {
-      onRequest: (method, params) => this.onRequest(method, params),
-      onNotification: (method, params) => {
-        this.onNotification(method, params);
-      },
       onError: (message) => {
         events.log(`PHPantom sent something unexpected: ${message}`);
       },
+      onNotification: (method, params) => {
+        this.onNotification(method, params);
+      },
+      onRequest: (method, params) => this.onRequest(method, params),
     });
     this.rpc = rpc;
     stdout.on('data', (chunk: Buffer) => {
@@ -137,11 +137,13 @@ class PhpantomServer {
         timer.unref();
       });
       const result = (await Promise.race([
+        // oxlint-disable-next-line eslint/sort-keys -- order matters because the initialize request goes to PHPantom as written
         rpc.request('initialize', {
           processId: process.pid,
           clientInfo: { name: 'orca-phpantom', version: '0.2.1' },
           rootUri,
           workspaceFolders: [
+            // oxlint-disable-next-line eslint/sort-keys -- order matters because the initialize request goes to PHPantom as written
             { uri: rootUri, name: root.split(/[\\/]/).filter(Boolean).pop() ?? 'workspace' },
           ],
           capabilities: CLIENT_CAPABILITIES,
@@ -272,7 +274,7 @@ class PhpantomServer {
       events.progress(
         value.percentage === undefined
           ? { phase: 'indexing' }
-          : { phase: 'indexing', percent: value.percentage }
+          : { percent: value.percentage, phase: 'indexing' }
       );
     } else if (value?.kind === 'end') {
       this.openTokens.delete(token);

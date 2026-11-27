@@ -24,10 +24,10 @@ interface StatusBarUpdate {
 const URGENCY: ServerState['phase'][] = ['error', 'downloading', 'starting', 'indexing', 'ready'];
 
 const SOURCE_WORDS: Record<NonNullable<StatusState['source']>, string> = {
-  setting: 'from settings',
-  path: 'from PATH',
   cache: 'cached',
   download: 'downloaded',
+  path: 'from PATH',
+  setting: 'from settings',
 };
 
 /** Folds every running server into one state: the most urgent phase wins. */
@@ -59,36 +59,36 @@ function renderStatus(state: StatusState): StatusBarUpdate {
   switch (state.phase) {
     case 'idle': {
       return {
+        icon: 'code',
         id: 'phpantom',
         text: 'PHPantom',
-        icon: 'code',
         tone: 'neutral',
         tooltip: 'PHPantom: no PHP files open',
       };
     }
     case 'error': {
       return {
+        icon: 'error',
         id: 'phpantom',
         text: 'PHPantom: error',
-        icon: 'error',
         tone: 'danger',
         tooltip: `PHPantom: ${state.message ?? 'error'}`,
       };
     }
     case 'downloading': {
       return {
+        icon: 'download',
         id: 'phpantom',
         text: 'PHPantom: downloading',
-        icon: 'download',
         tone: 'accent',
         tooltip: 'PHPantom: downloading the language server',
       };
     }
     case 'starting': {
       return {
+        icon: 'refresh',
         id: 'phpantom',
         text: 'PHPantom: starting',
-        icon: 'refresh',
         tone: 'neutral',
         tooltip: 'PHPantom: starting the language server',
       };
@@ -96,9 +96,9 @@ function renderStatus(state: StatusState): StatusBarUpdate {
     case 'indexing': {
       const progress = state.percent === undefined ? '' : ` ${state.percent}%`;
       return {
+        icon: 'refresh',
         id: 'phpantom',
         text: `PHPantom: indexing${progress}`,
-        icon: 'refresh',
         tone: 'neutral',
         tooltip: `PHPantom: indexing the project${progress}`,
       };
@@ -107,9 +107,9 @@ function renderStatus(state: StatusState): StatusBarUpdate {
       const version = state.version === undefined ? '' : ` ${state.version}`;
       const source = state.source === undefined ? '' : ` (${SOURCE_WORDS[state.source]})`;
       return {
+        icon: 'check',
         id: 'phpantom',
         text: 'PHPantom',
-        icon: 'check',
         tone: 'neutral',
         tooltip: `PHPantom${version}${source}, ready`,
       };

@@ -133,10 +133,10 @@ const RESTART_WINDOW_MS = 5 * 60_000;
 const MAX_RESTARTS = 3;
 
 const SOURCE_WORDS: Record<string, string> = {
-  setting: 'from settings',
-  path: 'from PATH',
   cache: 'cached',
   download: 'downloaded',
+  path: 'from PATH',
+  setting: 'from settings',
 };
 
 const bytes = (value: unknown): number => Buffer.byteLength(JSON.stringify(value) ?? '', 'utf8');
@@ -187,7 +187,7 @@ class Router {
     this.resolve = options.resolve ?? resolveBinary;
     this.createServer =
       options.createServer ??
-      ((executable, root, events) => new PhpantomServer({ executable, root, events }));
+      ((executable, root, events) => new PhpantomServer({ events, executable, root }));
     this.idleMs = options.idleMs ?? IDLE_MS;
     this.leaseMs = options.leaseMs ?? LEASE_MS;
     this.now = options.now ?? Date.now;
@@ -212,8 +212,8 @@ class Router {
     if (!parts || parts.length !== input.index) {
       this.chunks.delete(input.docId);
       return {
-        state: 'error',
         message: `chunk ${input.index} of ${input.docId} arrived out of order`,
+        state: 'error',
       };
     }
     parts.push(input.chunk);
@@ -373,7 +373,7 @@ class Router {
         break;
       }
       total += size;
-      files.push({ uri, text });
+      files.push({ text, uri });
     }
     return { files, omitted: input.uris.length - files.length };
   }
@@ -467,10 +467,10 @@ class Router {
       known.lastSeen = this.now();
       this.sendFull(known.server, known.file, text);
       return {
-        state: 'ready',
-        session: this.session,
-        uri: known.uri,
         capabilities: known.server.capabilities,
+        session: this.session,
+        state: 'ready',
+        uri: known.uri,
       };
     }
     if (known) {
@@ -489,7 +489,7 @@ class Router {
         : undefined;
     const focused = resolveFocused(rows, input.workspaceId, context);
     if (focused && !isLocal(focused)) {
-      return { state: 'remote', host: focused.hostId ?? 'unknown' };
+      return { host: focused.hostId ?? 'unknown', state: 'remote' };
     }
     const others = rows.filter((row) => row !== focused && isLocal(row)).map((row) => row.path);
     const tiers = [focused ? [focused.path] : [], others].filter((tier) => tier.length > 0);
@@ -498,31 +498,31 @@ class Router {
       ...[...this.docs.values()].map((doc) => doc.path),
     ]);
     const located = await locateFile({
-      tiers,
       candidates: this.reveals.paths(),
+      content: text,
       known: [...remembered],
       language: input.language,
-      content: text,
+      tiers,
     });
     if (located.status === 'none') {
-      return { state: 'single-file', reason: 'no-file' };
+      return { reason: 'no-file', state: 'single-file' };
     }
     if (located.status === 'ambiguous') {
-      return { state: 'single-file', reason: 'ambiguous' };
+      return { reason: 'ambiguous', state: 'single-file' };
     }
     const { path } = located;
     // Why a lookup: a file found through a pending reveal comes back without its workspace.
     const workspace =
       rows.find((row) => row.path === located.root && isLocal(row)) ?? workspaceFor(path, rows);
     if (!workspace) {
-      return { state: 'single-file', reason: 'no-file' };
+      return { reason: 'no-file', state: 'single-file' };
     }
     const root = composerRoot(path, workspace.path);
     this.remember(path);
 
     const started = await this.serverFor(root);
     if ('error' in started) {
-      return { state: 'error', message: started.error };
+      return { message: started.error, state: 'error' };
     }
     const { entry, server } = started;
     const uri = pathToFileURL(path).href;
@@ -532,44 +532,44 @@ class Router {
       // Another document already holds this file: PHPantom gets this one's text, not a second didOpen.
       this.sendFull(server, file, text);
     } else {
-      file = { uri, holders: new Set(), text, version: 1, diagnostics: null };
+      file = { diagnostics: null, holders: new Set(), text, uri, version: 1 };
       entry.files.set(key, file);
       server.notify('textDocument/didOpen', {
-        textDocument: { uri, languageId: input.language, version: 1, text },
+        textDocument: { languageId: input.language, text, uri, version: 1 },
       });
     }
     file.holders.add(input.docId);
     this.docs.set(input.docId, {
+      diagnostics: file.diagnostics?.length ?? 0,
       docId: input.docId,
-      panel,
-      uri,
-      path,
-      root,
-      workspace,
       entry,
-      server,
       file,
-      version: 1,
+      lastSeen: this.now(),
       mirror: new DocumentMirror(text),
       needsResync: false,
-      diagnostics: file.diagnostics?.length ?? 0,
-      lastSeen: this.now(),
+      panel,
+      path,
+      root,
+      server,
+      uri,
+      version: 1,
+      workspace,
     });
     entry.docs.add(input.docId);
     this.cancelIdle(entry);
     if (file.diagnostics) {
       this.outbox.send(panel, `diag:${input.docId}`, 'phpantom.diagnostics', {
-        docId: input.docId,
         diagnostics: file.diagnostics,
+        docId: input.docId,
         truncated: 0,
       });
     }
     const reveal = this.reveals.take(path);
     return {
-      state: 'ready',
-      session: this.session,
-      uri,
       capabilities: server.capabilities,
+      session: this.session,
+      state: 'ready',
+      uri,
       ...(located.approximate ? { approximate: true as const } : {}),
       ...(reveal ? { reveal } : {}),
     };
@@ -690,8 +690,8 @@ class Router {
     file.text = after;
     file.version += 1;
     server.notify('textDocument/didChange', {
-      textDocument: { uri: file.uri, version: file.version },
       contentChanges,
+      textDocument: { uri: file.uri, version: file.version },
     });
   }
 
@@ -742,15 +742,15 @@ class Router {
       }
       if (!entry) {
         entry = {
+          crashed: false,
+          docs: new Set(),
+          files: new Map(),
+          idle: null,
+          restarts: [],
           root,
           server: null,
           starting: null,
           state: { phase: 'starting' },
-          docs: new Set(),
-          files: new Map(),
-          restarts: [],
-          crashed: false,
-          idle: null,
         };
         this.pool.set(root, entry);
       }
@@ -799,7 +799,7 @@ class Router {
       if (entry.server === server) {
         entry.server = null;
         entry.crashed = true;
-        entry.state = { phase: 'error', message: `PHPantom could not start: ${messageOf(error)}` };
+        entry.state = { message: `PHPantom could not start: ${messageOf(error)}`, phase: 'error' };
       }
       this.host.log(`PHPantom could not start for ${entry.root}: ${messageOf(error)}`);
       this.updateStatus();
@@ -838,12 +838,37 @@ class Router {
           if (doc && doc.server === entry.server && sameUri(doc.uri, uri)) {
             doc.diagnostics = diagnostics.length;
             this.outbox.send(doc.panel, `diag:${docId}`, 'phpantom.diagnostics', {
-              docId,
               diagnostics,
+              docId,
               truncated: 0,
             });
           }
         }
+      }),
+      exit: guard('exit', (reason: string) => {
+        const message = `PHPantom stopped: ${reason}`;
+        entry.server = null;
+        entry.crashed = true;
+        entry.state = { message, phase: 'error' };
+        this.cancelIdle(entry);
+        for (const docId of entry.docs) {
+          const doc = this.docs.get(docId);
+          if (doc) {
+            this.forget(docId);
+            this.outbox.send(doc.panel, `status:${docId}`, 'phpantom.status', {
+              docId,
+              message,
+              state: 'error',
+            });
+          }
+        }
+        entry.docs.clear();
+        entry.files.clear();
+        this.host.log(`${message} (${entry.root})`);
+        this.updateStatus();
+      }),
+      log: guard('log', (message: string) => {
+        this.host.log(`PHPantom (${entry.root}): ${message}`);
       }),
       progress: guard('progress', (state: ServerState) => {
         entry.state = state;
@@ -864,31 +889,6 @@ class Router {
           kinds.add(kind);
           this.outbox.send(panel, key, 'phpantom.refresh', { kinds: [...kinds] });
         }
-      }),
-      log: guard('log', (message: string) => {
-        this.host.log(`PHPantom (${entry.root}): ${message}`);
-      }),
-      exit: guard('exit', (reason: string) => {
-        const message = `PHPantom stopped: ${reason}`;
-        entry.server = null;
-        entry.crashed = true;
-        entry.state = { phase: 'error', message };
-        this.cancelIdle(entry);
-        for (const docId of entry.docs) {
-          const doc = this.docs.get(docId);
-          if (doc) {
-            this.forget(docId);
-            this.outbox.send(doc.panel, `status:${docId}`, 'phpantom.status', {
-              docId,
-              state: 'error',
-              message,
-            });
-          }
-        }
-        entry.docs.clear();
-        entry.files.clear();
-        this.host.log(`${message} (${entry.root})`);
-        this.updateStatus();
       }),
     };
   }
@@ -964,11 +964,9 @@ class Router {
     try {
       const settings = await this.host.settings();
       return await this.resolve({
-        settingPath: settings.phpantomPath,
         allowDownload: settings.allowDownload,
-        env: process.env,
-        platform: process.platform,
         arch: process.arch,
+        env: process.env,
         home: homedir(),
         log: (message) => {
           this.host.log(message);
@@ -977,9 +975,11 @@ class Router {
           this.downloading = true;
           this.updateStatus();
         },
+        platform: process.platform,
+        settingPath: settings.phpantomPath,
       });
     } catch (error) {
-      return { ok: false, message: messageOf(error) };
+      return { message: messageOf(error), ok: false };
     } finally {
       if (this.downloading) {
         this.downloading = false;
@@ -1057,7 +1057,7 @@ class Router {
       states.push({ phase: 'downloading' });
     }
     if (this.resolveError) {
-      states.push({ phase: 'error', message: this.resolveError });
+      states.push({ message: this.resolveError, phase: 'error' });
     }
     const state = aggregate(states);
     if (state.phase === 'ready' && this.resolved?.ok) {

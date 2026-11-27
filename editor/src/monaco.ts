@@ -15,7 +15,7 @@ globalThis.MonacoEnvironment = {
   getWorker: () => new Worker(new URL('./editor.worker.js', import.meta.url), { type: 'module' }),
 };
 
-monaco.languages.register({ id: 'blade', extensions: ['.blade.php'], aliases: ['Blade', 'blade'] });
+monaco.languages.register({ aliases: ['Blade', 'blade'], extensions: ['.blade.php'], id: 'blade' });
 const blade = bladeGrammar({ conf, language });
 monaco.languages.setLanguageConfiguration('blade', blade.conf);
 monaco.languages.setMonarchTokensProvider('blade', blade.language);

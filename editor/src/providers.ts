@@ -139,7 +139,6 @@ function registerReadingProviders(
     const serverItems = new WeakMap<object, Record<string, unknown>>();
     registered.push(
       monaco.languages.registerCompletionItemProvider(language, {
-        triggerCharacters: caps.completionProvider.triggerCharacters,
         async provideCompletionItems(m, position, context, token) {
           if (!ours(m)) return { suggestions: [] };
           const result = await ask(
@@ -174,25 +173,25 @@ function registerReadingProviders(
                   : { insert: fromLspRange(edit.insert), replace: fromLspRange(edit.replace) }
                 : fallback;
               const suggestion: monaco.languages.CompletionItem = {
-                label: toCompletionLabel(item),
-                kind: monaco.languages.CompletionItemKind[
-                  completionKindName(item.kind) as keyof typeof monaco.languages.CompletionItemKind
-                ],
+                additionalTextEdits: item.additionalTextEdits
+                  ? edits(item.additionalTextEdits)
+                  : undefined,
+                commitCharacters: item.commitCharacters,
                 detail: item.detail,
                 documentation: markdownValue(item.documentation),
+                filterText: item.filterText,
                 insertText: edit?.newText ?? item.insertText ?? item.label,
                 insertTextRules:
                   item.insertTextFormat === 2
                     ? monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet
                     : undefined,
+                kind: monaco.languages.CompletionItemKind[
+                  completionKindName(item.kind) as keyof typeof monaco.languages.CompletionItemKind
+                ],
+                label: toCompletionLabel(item),
+                preselect: item.preselect,
                 range,
                 sortText: item.sortText,
-                filterText: item.filterText,
-                preselect: item.preselect,
-                commitCharacters: item.commitCharacters,
-                additionalTextEdits: item.additionalTextEdits
-                  ? edits(item.additionalTextEdits)
-                  : undefined,
                 tags:
                   item.deprecated || item.tags?.includes(1)
                     ? [monaco.languages.CompletionItemTag.Deprecated]
@@ -216,6 +215,7 @@ function registerReadingProviders(
               return { ...suggestion, ...completionDetails(resolved) };
             }
           : undefined,
+        triggerCharacters: caps.completionProvider.triggerCharacters,
       })
     );
   }
@@ -238,8 +238,6 @@ function registerReadingProviders(
   if (caps.signatureHelpProvider) {
     registered.push(
       monaco.languages.registerSignatureHelpProvider(language, {
-        signatureHelpTriggerCharacters: caps.signatureHelpProvider.triggerCharacters,
-        signatureHelpRetriggerCharacters: caps.signatureHelpProvider.retriggerCharacters,
         async provideSignatureHelp(m, position, token, context) {
           if (!ours(m)) return null;
           const result = await ask(
@@ -248,8 +246,8 @@ function registerReadingProviders(
               ...atCursor(position),
               // Both number these trigger kinds the same way: 1 invoked, 2 character, 3 content change.
               context: {
-                triggerKind: context.triggerKind,
                 isRetrigger: context.isRetrigger,
+                triggerKind: context.triggerKind,
                 ...(context.triggerCharacter ? { triggerCharacter: context.triggerCharacter } : {}),
               },
             },
@@ -259,25 +257,27 @@ function registerReadingProviders(
           );
           if (!result?.signatures?.length) return null;
           return {
+            dispose() {},
             value: {
-              activeSignature: result.activeSignature ?? 0,
               activeParameter: result.activeParameter ?? 0,
+              activeSignature: result.activeSignature ?? 0,
               signatures: result.signatures.map((signature: any) => ({
-                label: signature.label,
                 documentation: markdownValue(signature.documentation),
+                label: signature.label,
                 // A label is either the text or [start, end] offsets into the signature's label, in both.
                 parameters: (signature.parameters ?? []).map((parameter: any) => ({
-                  label: parameter.label,
                   documentation: markdownValue(parameter.documentation),
+                  label: parameter.label,
                 })),
                 ...(typeof signature.activeParameter === 'number'
                   ? { activeParameter: signature.activeParameter }
                   : {}),
               })),
             },
-            dispose() {},
           };
         },
+        signatureHelpRetriggerCharacters: caps.signatureHelpProvider.retriggerCharacters,
+        signatureHelpTriggerCharacters: caps.signatureHelpProvider.triggerCharacters,
       })
     );
   }
@@ -292,8 +292,8 @@ function registerReadingProviders(
         if (kinds.includes('semanticTokens')) changed.fire();
       }),
       monaco.languages.registerDocumentSemanticTokensProvider(language, {
-        onDidChange: changed.event,
         getLegend: () => semantic.legend,
+        onDidChange: changed.event,
         async provideDocumentSemanticTokens(m, _lastResultId, token) {
           if (!ours(m)) return null;
           const tokens = toSemanticTokens(
@@ -329,7 +329,7 @@ function registerReadingProviders(
             'background'
           );
           if (!Array.isArray(result)) return null;
-          return { hints: (result as LspInlayHint[]).map(toInlayHint), dispose() {} };
+          return { dispose() {}, hints: (result as LspInlayHint[]).map(toInlayHint) };
         },
       })
     );
@@ -473,8 +473,8 @@ function registerEditingProviders(
       else clearNote(`${NAVIGATION_NOTE}-cut`);
     }
     return locations.map((location): monaco.languages.Location => ({
-      uri: location.uri === modelUri ? model.uri : monaco.Uri.parse(location.uri),
       range: location.range,
+      uri: location.uri === modelUri ? model.uri : monaco.Uri.parse(location.uri),
     }));
   };
 
@@ -525,7 +525,7 @@ function registerEditingProviders(
   const formatting = (
     options: monaco.languages.FormattingOptions
   ): { options: { tabSize: number; insertSpaces: boolean } } => ({
-    options: { tabSize: options.tabSize, insertSpaces: options.insertSpaces },
+    options: { insertSpaces: options.insertSpaces, tabSize: options.tabSize },
   });
   if (caps.documentFormattingProvider) {
     registered.push(
@@ -567,32 +567,6 @@ function registerEditingProviders(
       typeof caps.renameProvider === 'object' && Boolean(caps.renameProvider.prepareProvider);
     registered.push(
       monaco.languages.registerRenameProvider(language, {
-        resolveRenameLocation: prepares
-          ? async (m, position, token) => {
-              if (!ours(m)) return null;
-              const result = await ask('textDocument/prepareRename', atCursor(position), token);
-              if (token.isCancellationRequested) throw canceled();
-              // Why reject: with nothing returned Monaco would offer to rename the word under the cursor.
-              if (!result) {
-                return {
-                  range: new monaco.Range(
-                    position.lineNumber,
-                    position.column,
-                    position.lineNumber,
-                    position.column
-                  ),
-                  text: '',
-                  rejectReason: "This can't be renamed.",
-                };
-              }
-              // The server either leaves the range to the client ...
-              if (result.defaultBehavior) return null;
-              // ... or sends a range, alone or with a placeholder. Why not show the placeholder: for a class
-              // PHPantom 1.1.0 sends the fully qualified name while the range and the new name are the short one.
-              const range = fromLspRange(result.range ?? result);
-              return { range, text: m.getValueInRange(range) };
-            }
-          : undefined,
         async provideRenameEdits(m, position, newName, token) {
           if (!ours(m)) return null;
           // The bridge drops an answer the text moved under; the stamp makes Monaco refuse it if it moves later.
@@ -614,6 +588,32 @@ function registerEditingProviders(
             edits: split.own.map((textEdit) => ({ resource: model.uri, textEdit, versionId })),
           };
         },
+        resolveRenameLocation: prepares
+          ? async (m, position, token) => {
+              if (!ours(m)) return null;
+              const result = await ask('textDocument/prepareRename', atCursor(position), token);
+              if (token.isCancellationRequested) throw canceled();
+              // Why reject: with nothing returned Monaco would offer to rename the word under the cursor.
+              if (!result) {
+                return {
+                  range: new monaco.Range(
+                    position.lineNumber,
+                    position.column,
+                    position.lineNumber,
+                    position.column
+                  ),
+                  rejectReason: "This can't be renamed.",
+                  text: '',
+                };
+              }
+              // The server either leaves the range to the client ...
+              if (result.defaultBehavior) return null;
+              // ... or sends a range, alone or with a placeholder. Why not show the placeholder: for a class
+              // PHPantom 1.1.0 sends the fully qualified name while the range and the new name are the short one.
+              const range = fromLspRange(result.range ?? result);
+              return { range, text: m.getValueInRange(range) };
+            }
+          : undefined,
       })
     );
   }
@@ -647,7 +647,6 @@ function registerEditingProviders(
             const result = await ask(
               'textDocument/codeAction',
               {
-                range: lspRange,
                 context: {
                   // As PHPantom sent them: a fix finds its diagnostic by what Monaco's markers drop.
                   diagnostics: diagnosticsTouching(diagnosticsOf(model), lspRange),
@@ -655,6 +654,7 @@ function registerEditingProviders(
                   // Both number these the same way: 1 invoked, 2 automatic.
                   triggerKind: context.trigger,
                 },
+                range: lspRange,
               },
               token,
               // The lightbulb asks on every cursor move; only an invoked one (1) is someone asking. Silent: hovering a diagnostic asks as invoked too.

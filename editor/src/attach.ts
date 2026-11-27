@@ -21,11 +21,11 @@ const BUSY_NOTE_MS = 6000;
 function modelSource(ctx: EditorContext): DocumentSource {
   const { model, language } = ctx;
   return {
-    language,
+    getLength: () => model.getValueLength(),
     // The model's own text, not the BOM-keeping one Orca saves: Monaco's change positions are against it.
     getText: () => model.getValue(),
-    getLength: () => model.getValueLength(),
     getVersion: () => model.getVersionId(),
+    language,
     onChanges: (listener) =>
       model.onDidChangeContent((event) => {
         listener(
