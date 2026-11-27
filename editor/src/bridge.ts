@@ -618,7 +618,7 @@ class LspBridge {
             break;
           } catch (error) {
             // Orca refused the chunk before the worker saw it: the same chunk goes again after the hold.
-            // oxlint-disable-next-line eslint/max-depth -- the chunk retry sits in try, for, for and catch, and its return null leaves open() itself, so it stays inline
+            // oxlint-disable-next-line eslint/max-depth -- the rate-limit check sits in try, for, for and catch, and its throw must reach open()'s outer catch
             if (!isRateLimited(error) || generation !== this.generation || this.disposed) {
               throw error;
             }
