@@ -171,3 +171,9 @@ test('scans a 5,000-character bound attribute name in linear time', () => {
   const elapsed = performance.now() - started;
   assert.ok(elapsed < 50, `took ${elapsed} ms`);
 });
+test('the walker compiles `@@` to a literal `@`', () => {
+  const endphp = firstRuleRegex(bladeGrammar(fakeHtml()), 'bladePhp');
+  assert.equal(endphp.source, String.raw`^(?:@endphp\b)`);
+  assert.match('@endphp', endphp);
+  assert.doesNotMatch('@@endphp', endphp);
+});

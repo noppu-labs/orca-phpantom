@@ -22,7 +22,7 @@ function compile(grammar: Grammar, regex: RegExp): RegExp {
     );
   }
   const flags = grammar.language.ignoreCase ? 'i' : '';
-  return new RegExp(`^(?:${source.replace(/\x01/g, '@')})`, flags);
+  return new RegExp(`^(?:${source.replaceAll('\x01', '@')})`, flags);
 }
 
 function rulesOf(grammar: Grammar, state: string, seen: string[] = []): unknown[] {
