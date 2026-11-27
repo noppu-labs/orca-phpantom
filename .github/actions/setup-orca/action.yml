@@ -1,0 +1,17 @@
+name: Set up the Orca CLI
+description: Download the pinned Orca release, verify its checksum and put orca-ide on PATH.
+
+runs:
+  using: composite
+  steps:
+    - name: Install the Orca CLI
+      shell: bash
+      run: |
+        cd "$RUNNER_TEMP"
+        curl -fsSL --proto '=https' --tlsv1.2 --retry 3 -o orca.deb \
+          "https://github.com/stablyai/orca/releases/download/v1.4.277/orca-ide_1.4.277_amd64.deb"
+        echo "46fb018af43fa9e47b4a4c9f681a66ecc871d231be896298301cd0e2c2e8d952  orca.deb" | sha256sum -c -
+        dpkg-deb -x orca.deb orca
+        bin_dir="$(dirname "$(find "$RUNNER_TEMP/orca" -type f -name orca-ide -path '*resources/bin/*' | head -1)")"
+        echo "$bin_dir" >> "$GITHUB_PATH"
+        "$bin_dir/orca-ide" --version
