@@ -1,8 +1,8 @@
 import { assert, test } from 'orca/testing'
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
-import { locateFile } from './locate.ts'
+import { PHP_EXTENSIONS, locateFile } from './locate.ts'
 
 const made: string[] = []
 
@@ -249,4 +249,53 @@ test('a remembered file with an identical copy beside it is still ambiguous', as
   } finally {
     await cleanup()
   }
+})
+
+test('each Drupal extension is found as a php document', async () => {
+  for (const extension of ['.module', '.install', '.theme', '.profile', '.inc', '.engine']) {
+    const root = await tree({ [`web/modules/custom/acme/acme${extension}`]: SRC })
+    try {
+      assert.deepEqual(await locateFile({ tiers: [[root]], candidates: [], language: 'php', content: SRC }), {
+        status: 'found',
+        path: join(root, `web/modules/custom/acme/acme${extension}`),
+        root
+      })
+    } finally {
+      await cleanup()
+    }
+  }
+})
+
+test('an upper-case Drupal extension matches, as Orca ignores case', async () => {
+  const root = await tree({ 'ACME.MODULE': SRC })
+  try {
+    assert.equal((await locateFile({ tiers: [[root]], candidates: [], language: 'php', content: SRC })).status, 'found')
+  } finally {
+    await cleanup()
+  }
+})
+
+test('a file named only an extension is never a php document', async () => {
+  const root = await tree({ '.profile': SRC, '.inc': SRC })
+  try {
+    assert.deepEqual(await locateFile({ tiers: [[root]], candidates: [join(root, '.profile')], language: 'php', content: SRC }), { status: 'none' })
+  } finally {
+    await cleanup()
+  }
+})
+
+test('a blade document never matches a Drupal extension', async () => {
+  const root = await tree({ 'acme.module': SRC })
+  try {
+    assert.deepEqual(await locateFile({ tiers: [[root]], candidates: [], language: 'blade', content: SRC }), { status: 'none' })
+  } finally {
+    await cleanup()
+  }
+})
+
+test("the manifest's php editor opens exactly the extensions the locator accepts", async () => {
+  const manifest = JSON.parse(await readFile(new URL('../../orca-plugin.json', import.meta.url), 'utf8'))
+  const editors = manifest.contributes.customEditors as { id: string; extensions: string[] }[]
+  assert.deepEqual([...editors.find((editor) => editor.id === 'php')!.extensions].sort(), [...PHP_EXTENSIONS].sort())
+  assert.deepEqual(editors.find((editor) => editor.id === 'blade')!.extensions, ['.blade.php'])
 })

@@ -15,7 +15,7 @@
   "contributes": {
     "customEditors": [
       { "id": "blade", "title": "PHPantom", "extensions": [".blade.php"], "entry": "editor/pages/blade.html", "priority": "default", "frame": "isolated" },
-      { "id": "php", "title": "PHPantom", "extensions": [".php"], "entry": "editor/pages/php.html", "priority": "default", "frame": "isolated" }
+      { "id": "php", "title": "PHPantom", "extensions": [".php", ".module", ".install", ".theme", ".profile", ".inc", ".engine"], "entry": "editor/pages/php.html", "priority": "default", "frame": "isolated" }
     ],
     "settings": [
       { "key": "phpantomPath", "title": "PHPantom binary", "description": "Full path to phpantom_lsp. Leave empty to find it on PATH or download it.", "type": "string", "default": "", "placeholder": "/opt/homebrew/bin/phpantom_lsp" },
