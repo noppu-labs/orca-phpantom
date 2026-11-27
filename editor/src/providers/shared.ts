@@ -51,6 +51,11 @@ const isList = (value: unknown): value is string[] => Array.isArray(value);
 const listOrUndefined = (value: unknown): string[] | undefined =>
   isList(value) ? value : undefined;
 
+/** The dispose of a result that holds nothing, and the release of semantic tokens nothing keeps. */
+function noop(): void {
+  // Nothing to release.
+}
+
 function disposeAll(list: Disposable[]): Disposable {
   return {
     dispose() {
@@ -67,6 +72,7 @@ export {
   isRecord,
   isTruthy,
   listOrUndefined,
+  noop,
   withSignal,
 };
 export type { Disposable, Model };

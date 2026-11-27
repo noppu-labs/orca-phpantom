@@ -161,7 +161,6 @@
         "eslint/default-case": "off",
         "eslint/max-classes-per-file": "off",
         "eslint/no-duplicate-imports": "off",
-        "eslint/no-empty-function": "off",
         "eslint/no-inline-comments": "off",
         "eslint/no-nested-ternary": "off",
         "eslint/no-param-reassign": "off",

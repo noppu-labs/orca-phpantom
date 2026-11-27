@@ -206,11 +206,11 @@ test('stop escalates to SIGKILL when the child ignores shutdown and SIGTERM', as
 
 test('a missing executable rejects start', async () => {
   const events: ServerEvents = {
-    diagnostics() {},
-    progress() {},
-    refresh() {},
-    log() {},
-    exit() {},
+    diagnostics: () => {},
+    progress: () => {},
+    refresh: () => {},
+    log: () => {},
+    exit: () => {},
   };
   const server = new PhpantomServer({
     executable: '/nonexistent/phpantom_lsp',
@@ -224,11 +224,11 @@ test('a missing executable rejects start', async () => {
 
 test('a child without its pipes is killed and start rejects', async () => {
   const events: ServerEvents = {
-    diagnostics() {},
-    progress() {},
-    refresh() {},
-    log() {},
-    exit() {},
+    diagnostics: () => {},
+    progress: () => {},
+    refresh: () => {},
+    log: () => {},
+    exit: () => {},
   };
   for (const missing of [null, undefined]) {
     for (const pipe of ['stdin', 'stdout', 'stderr']) {

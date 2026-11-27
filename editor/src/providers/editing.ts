@@ -43,6 +43,7 @@ import {
   isRecord,
   isTruthy,
   listOrUndefined,
+  noop,
   withSignal,
   type Disposable,
   type Model,
@@ -90,7 +91,7 @@ function registerEditingProviders(
   const peekModels = new PeekModels((uri, text) => {
     const resource = monaco.Uri.parse(uri);
     // Why check: Monaco throws on a second model for one URI; one made elsewhere is not ours to dispose.
-    if (monaco.editor.getModel(resource)) return { dispose() {} };
+    if (monaco.editor.getModel(resource)) return { dispose: noop };
     return monaco.editor.createModel(text, languageOfUri(uri), resource);
   });
   registered.push(
@@ -328,7 +329,7 @@ function registerEditingProviders(
         language,
         {
           async provideCodeActions(textModel, range, context, token) {
-            if (!ours(textModel)) return { actions: [], dispose() {} };
+            if (!ours(textModel)) return { actions: [], dispose: noop };
             const lspRange = toLspRange(range);
             // Why: the lightbulb outlives typing, so an action must not carry an edit for older text.
             const versionId = model.getVersionId();
@@ -351,7 +352,7 @@ function registerEditingProviders(
               context.trigger === 1 ? { kind: 'user', silent: true } : { kind: 'background' }
             );
             const actions: monaco.languages.CodeAction[] = [];
-            if (model.getVersionId() !== versionId) return { actions, dispose() {} };
+            if (model.getVersionId() !== versionId) return { actions, dispose: noop };
             for (const raw of isCodeActionList(result) ? result : []) {
               const converted = toCodeAction(raw, documentUri(), modelUri, versionId);
               if (!converted) continue;
@@ -373,7 +374,7 @@ function registerEditingProviders(
               serverActions.set(action, { raw, versionId });
               actions.push(action);
             }
-            return { actions, dispose() {} };
+            return { actions, dispose: noop };
           },
           // Monaco calls this unbound, and only for an action that has no edit yet.
           async resolveCodeAction(action, token) {

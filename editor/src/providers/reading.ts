@@ -36,6 +36,7 @@ import {
   isRecord,
   isTruthy,
   listOrUndefined,
+  noop,
   withSignal,
   type Disposable,
   type Model,
@@ -195,7 +196,7 @@ function registerReadingProviders(
           const help = isSignatureHelp(result) ? result : undefined;
           if (help === undefined || !isTruthy(help.signatures?.length)) return null;
           return {
-            dispose() {},
+            dispose: noop,
             value: {
               activeParameter: help.activeParameter ?? 0,
               activeSignature: help.activeSignature ?? 0,
@@ -249,7 +250,7 @@ function registerReadingProviders(
           if (!tokens) throw new Error('PHPantom is busy');
           return tokens;
         },
-        releaseDocumentSemanticTokens() {},
+        releaseDocumentSemanticTokens: noop,
       })
     );
   }
@@ -275,7 +276,7 @@ function registerReadingProviders(
           );
           if (!isInlayHintList(result)) return null;
           // oxlint-disable-next-line typescript/no-unsafe-enum-assignment -- LSP and Monaco number inlay hint kinds the same way (1 type, 2 parameter)
-          return { dispose() {}, hints: result.map(toInlayHint) };
+          return { dispose: noop, hints: result.map(toInlayHint) };
         },
       })
     );

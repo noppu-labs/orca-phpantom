@@ -9,7 +9,7 @@ import { registerReadingProviders } from '../../../editor/src/providers/reading.
 // A Monaco that records each provider registered, and a bridge that answers each method from a table.
 // Pins which values of a capability or an answer each provider takes as "there", so the condition rewrite keeps it.
 
-const disposable = { dispose() {} };
+const disposable = { dispose: () => {} };
 
 function fakeContext() {
   const registrations: { name: string; provider: any }[] = [];
@@ -41,8 +41,12 @@ function fakeContext() {
   }
   class Emitter {
     public event = () => disposable;
-    public fire() {}
-    public dispose() {}
+    public fire() {
+      // The providers under test never listen to their own events.
+    }
+    public dispose() {
+      // Nothing to release.
+    }
   }
   const monaco = {
     languages,
