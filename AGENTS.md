@@ -64,7 +64,7 @@ editor/
 ├── src/
 │   ├── main.ts                # bundle entry: startEditor, then attachLanguageServer
 │   ├── editor.ts              # Monaco in the frame, bound to Orca's document session, theme and font
-│   ├── monaco.ts              # the one module that imports monaco-editor; registers PHP, HTML and Blade
+│   ├── monaco.ts              # imports monaco-editor for the editor (the worker entry imports its own); registers PHP, HTML and Blade
 │   ├── editor.worker.ts       # Monaco's editor worker entry
 │   ├── attach.ts              # connects the Monaco model to the bridge: markers, reveals, notes, providers
 │   ├── bridge.ts              # LspBridge: attach in chunks, stream changes, forward requests, re-attach, pings
