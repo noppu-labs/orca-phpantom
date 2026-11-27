@@ -3,6 +3,9 @@ import { assert, test } from 'orca/testing';
 
 import { RpcConnection } from '../../../../src/services/lsp/jsonrpc.ts';
 
+const bare = (body: string): Buffer =>
+  Buffer.from(`Content-Length: ${Buffer.byteLength(body)}\r\n\r\n${body}`);
+
 const frame = (message: object): Buffer => {
   const body = JSON.stringify(message);
   return Buffer.from(`Content-Length: ${Buffer.byteLength(body)}\r\n\r\n${body}`);
@@ -136,8 +139,6 @@ test('a notification handler that throws is reported, and the next message in th
 
 test('a batch or a bare value is skipped, and the next message still arrives', () => {
   const { connection, notifications } = connect();
-  const bare = (body: string): Buffer =>
-    Buffer.from(`Content-Length: ${Buffer.byteLength(body)}\r\n\r\n${body}`);
   connection.feed(
     Buffer.concat([
       bare('[{"jsonrpc":"2.0","method":"batched"}]'),
@@ -149,6 +150,12 @@ test('a batch or a bare value is skipped, and the next message still arrives', (
     notifications.map((notification) => notification.method),
     ['good']
   );
+});
+
+// Pins today's behaviour: a null body throws out of feed(). Making it skip is a separate fix.
+test('a null body throws out of feed', () => {
+  const { connection } = connect();
+  assert.throws(() => connection.feed(bare('null')), /body is null/);
 });
 
 test('frames keep the envelope key order on the wire', async () => {

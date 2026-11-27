@@ -127,10 +127,12 @@ test('a notification with null params is logged, and the connection keeps workin
   server.notify('textDocument/didOpen', open('<?php abc'));
   const hover = (await server.request('textDocument/hover', {})) as { contents: { value: string } };
   assert.equal(hover.contents.value, 'len=9');
-  assert.ok(
-    events.logs.some((line) => line.includes('textDocument/publishDiagnostics')),
-    events.logs.join('\n')
-  );
+  for (const method of ['textDocument/publishDiagnostics', '$/progress', 'window/logMessage']) {
+    assert.ok(
+      events.logs.some((line) => line.includes(method)),
+      `${method} not logged:\n${events.logs.join('\n')}`
+    );
+  }
   assert.equal(server.alive, true);
   await server.stop();
 });
