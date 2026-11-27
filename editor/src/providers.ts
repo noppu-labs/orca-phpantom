@@ -3,7 +3,7 @@
 // signature help, semantic colouring, inlay hints and the outline; then going to definitions and
 // references, formatting, rename and code actions. Only what the server says it supports is registered,
 // for the model's own language, and only this editor's model is answered.
-import type { LspBridge } from './bridge.ts'
+import type { AskOptions, LspBridge, RequestKind } from './bridge.ts'
 import type { EditorContext } from './editor.ts'
 import {
   completionDetails,
@@ -100,8 +100,8 @@ export function registerReadingProviders(ctx: EditorContext, bridge: LspBridge, 
   const language = model.getLanguageId()
   const registered: Disposable[] = []
   const ours = (candidate: Model): boolean => candidate === model
-  const ask = (method: string, params: Record<string, unknown>, token: monaco.CancellationToken): Promise<any> =>
-    withSignal(token, (signal) => bridge.ask(method, params, signal))
+  const ask = (method: string, params: Record<string, unknown>, token: monaco.CancellationToken, kind: RequestKind, silent = false): Promise<any> =>
+    withSignal(token, (signal) => bridge.ask(method, params, signal, { kind, silent }))
   const atCursor = (position: monaco.Position) => ({ position: toLspPosition(position) })
   const edits = (list: LspTextEdit[]): monaco.languages.TextEdit[] => list.map(toMonacoEdit)
 
@@ -121,7 +121,9 @@ export function registerReadingProviders(ctx: EditorContext, bridge: LspBridge, 
               // Monaco counts trigger kinds from 0, LSP from 1, in the same order.
               context: { triggerKind: context.triggerKind + 1, ...(context.triggerCharacter ? { triggerCharacter: context.triggerCharacter } : {}) }
             },
-            token
+            token,
+            // Why passive even for "invoked" (0): Monaco reports quick suggestions while typing that way too.
+            'passive'
           )
           const items: any[] = Array.isArray(result) ? result : (result?.items ?? [])
           const word = m.getWordUntilPosition(position)
@@ -160,9 +162,11 @@ export function registerReadingProviders(ctx: EditorContext, bridge: LspBridge, 
           ? async (suggestion, token) => {
               const raw = serverItems.get(suggestion)
               if (!raw) return suggestion
-              const resolved = await ask('completionItem/resolve', raw, token)
-              // Monaco resolves an item once; a cancelled one must say so to be resolved again later.
-              if (resolved === null && token.isCancellationRequested) throw canceled()
+              // Why user, not passive: Monaco also resolves here when the item is accepted, and a dropped
+              // answer would lose the import. Silent: it resolves every item that gets focus, too.
+              const resolved = await ask('completionItem/resolve', raw, token, 'user', true)
+              // Monaco resolves an item once; one with no answer must say so to be resolved again later.
+              if (resolved === null) throw canceled()
               return { ...suggestion, ...completionDetails(resolved) }
             }
           : undefined
@@ -176,7 +180,7 @@ export function registerReadingProviders(ctx: EditorContext, bridge: LspBridge, 
       monaco.languages.registerHoverProvider(language, {
         async provideHover(m, position, token) {
           if (!ours(m)) return null
-          const result = await ask('textDocument/hover', atCursor(position), token)
+          const result = await ask('textDocument/hover', atCursor(position), token, 'passive')
           const contents = toMarkdown(result?.contents).map((value) => ({ value }))
           return contents.length ? { contents, ...(result.range ? { range: fromLspRange(result.range) } : {}) } : null
         }
@@ -201,7 +205,9 @@ export function registerReadingProviders(ctx: EditorContext, bridge: LspBridge, 
                 ...(context.triggerCharacter ? { triggerCharacter: context.triggerCharacter } : {})
               }
             },
-            token
+            token,
+            // Why passive even for "invoked": Monaco invokes it itself, after a completion that adds parentheses.
+            'passive'
           )
           if (!result?.signatures?.length) return null
           return {
@@ -240,7 +246,7 @@ export function registerReadingProviders(ctx: EditorContext, bridge: LspBridge, 
         getLegend: () => semantic.legend,
         async provideDocumentSemanticTokens(m, _lastResultId, token) {
           if (!ours(m)) return null
-          const tokens = toSemanticTokens(await ask('textDocument/semanticTokens/full', {}, token))
+          const tokens = toSemanticTokens(await ask('textDocument/semanticTokens/full', {}, token, 'background'))
           // Why throw: Monaco wipes the colouring on an empty answer but keeps it on an error, and a
           // message with "busy" in it is not reported. No answer means not now, not "no tokens".
           if (!tokens) throw new Error('PHPantom is busy')
@@ -264,7 +270,7 @@ export function registerReadingProviders(ctx: EditorContext, bridge: LspBridge, 
         onDidChangeInlayHints: changed.event,
         async provideInlayHints(m, range, token) {
           if (!ours(m)) return null
-          const result = await ask('textDocument/inlayHint', { range: toLspRange(range) }, token)
+          const result = await ask('textDocument/inlayHint', { range: toLspRange(range) }, token, 'background')
           if (!Array.isArray(result)) return null
           return { hints: (result as LspInlayHint[]).map(toInlayHint), dispose() {} }
         }
@@ -279,7 +285,7 @@ export function registerReadingProviders(ctx: EditorContext, bridge: LspBridge, 
         displayName: SERVER_NAME,
         async provideDocumentSymbols(m, token) {
           if (!ours(m)) return null
-          const result = await ask('textDocument/documentSymbol', {}, token)
+          const result = await ask('textDocument/documentSymbol', {}, token, 'background')
           return Array.isArray(result) ? (toDocumentSymbols(result) as monaco.languages.DocumentSymbol[]) : null
         }
       })
@@ -309,8 +315,12 @@ export function registerEditingProviders(ctx: EditorContext, bridge: LspBridge, 
   const modelUri = model.uri.toString()
   // Read on each answer: a re-target to another worktree changes it, and providers are registered again then.
   const documentUri = (): string => (bridge.status?.state === 'ready' ? bridge.status.uri : '')
-  const ask = (method: string, params: Record<string, unknown>, token: monaco.CancellationToken, options?: { timeoutMs?: number }): Promise<any> =>
-    withSignal(token, (signal) => bridge.ask(method, params, signal, options))
+  const ask = (
+    method: string,
+    params: Record<string, unknown>,
+    token: monaco.CancellationToken,
+    options: AskOptions = {}
+  ): Promise<any> => withSignal(token, (signal) => bridge.ask(method, params, signal, { kind: 'user', ...options }))
   const atCursor = (position: monaco.Position) => ({ position: toLspPosition(position) })
   const edits = (list: LspTextEdit[] | null | undefined): monaco.languages.TextEdit[] | null => (Array.isArray(list) ? list.map(toMonacoEdit) : null)
 
@@ -370,7 +380,7 @@ export function registerEditingProviders(ctx: EditorContext, bridge: LspBridge, 
     extra: Record<string, unknown> = {}
   ) => {
     if (!ours(m)) return null
-    const answer = await withSignal(token, (signal) => bridge.askDetailed(method, { ...atCursor(position), ...extra }, signal))
+    const answer = await withSignal(token, (signal) => bridge.askDetailed(method, { ...atCursor(position), ...extra }, signal, { kind: 'user' }))
     const found = normalizeLocations(answer?.result)
     const locations = await withPreviews(mapLocations(found, documentUri(), modelUri), token, keepUnread)
     // Why after the previews: the note counts what is shown, and a query that was not cut clears the last one's.
@@ -519,7 +529,10 @@ export function registerEditingProviders(ctx: EditorContext, bridge: LspBridge, 
                   triggerKind: context.trigger
                 }
               },
-              token
+              token,
+              // The lightbulb asks on every cursor move; only an invoked one (1) is someone asking. Silent:
+              // hovering a diagnostic asks as invoked too.
+              context.trigger === 1 ? { kind: 'user', silent: true } : { kind: 'background' }
             )
             const actions: monaco.languages.CodeAction[] = []
             if (model.getVersionId() !== versionId) return { actions, dispose() {} }

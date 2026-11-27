@@ -45,6 +45,8 @@ type FakeHost = BridgeHost & {
   /** Broken router rules: chunks out of order, a version gap, a wrong length. Tests expect none. */
   violations: string[]
   maxInFlight: Record<string, number>
+  /** Orca's admission: an error returned here is thrown before the worker sees the call. */
+  refuse: (name: string, input: any) => Error | undefined
   ready(): AttachStatus
   restart(session: string): void
   post(event: string, payload: unknown): void
@@ -98,6 +100,7 @@ function fakeHost(handlers: Partial<FakeHost['handlers']> = {}, context: Workspa
     version: 0,
     violations: [],
     maxInFlight: inFlight,
+    refuse: () => undefined,
     calls: (name) => calls.filter((call) => call.name === name),
     ready() {
       host.mirror = new DocumentMirror(assembled)
@@ -111,6 +114,11 @@ function fakeHost(handlers: Partial<FakeHost['handlers']> = {}, context: Workspa
     },
     async request(name: string, input: any, options?: { timeoutMs?: number; signal?: AbortSignal }): Promise<any> {
       calls.push({ name, input, ...(options ? { options } : {}) })
+      const refusal = host.refuse(name, input)
+      if (refusal) {
+        await wait(1)
+        throw refusal
+      }
       const key = `${name}:now`
       inFlight[key] = (inFlight[key] ?? 0) + 1
       inFlight[name] = Math.max(inFlight[name] ?? 0, inFlight[key])
@@ -195,7 +203,8 @@ test('keeps edits typed while attach is in flight', async () => {
   release()
   assert.equal((await attached).state, 'ready')
   await until(() => host.mirror?.text === doc.text, 'the worker to catch up')
-  assert.deepEqual(versions(host), [2, 3])
+  // Both edits waited behind the open, so they go out together.
+  assert.deepEqual(versions(host), [2])
   assert.equal(host.mirror?.text, '<?php\necho 3;\n')
   assert.deepEqual(host.violations, [])
   bridge.dispose()
@@ -214,10 +223,12 @@ test('sends changes in order with consecutive versions', async () => {
   doc.edit(11, 12, '2')
   doc.edit(11, 12, '3')
   await wait(1)
+  await wait(20)
   doc.edit(12, 12, '4')
-  await until(() => host.calls('phpantom.change').length === 3, 'three changes')
   await until(() => host.mirror?.text === doc.text, 'the worker to catch up')
-  assert.deepEqual(versions(host), [2, 3, 4])
+  const sent = versions(host)
+  assert.ok(sent.length >= 2)
+  assert.deepEqual(sent, sent.map((_, index) => index + 2))
   assert.equal(host.maxInFlight['phpantom.change'], 1)
   assert.deepEqual(host.violations, [])
   bridge.dispose()
@@ -769,5 +780,311 @@ test('a ping that never answers does not stop the pings of the next attach', asy
   host.restart('s2')
   host.post('phpantom.status', { docId: bridge.docId, state: 'restarting' })
   await until(() => host.calls('phpantom.ping').some((call) => call.input.session === 's2'), 'a ping under the new session')
+  bridge.dispose()
+})
+
+// --- Orca's rate limit ---
+
+/** A refusal as Orca's frame shell builds it: an Error with `code`, `retryable` and, sometimes, `retryAfterMs`. */
+function hostError(code: string, message: string, retryAfterMs?: number): Error {
+  return Object.assign(new Error(message), { code, retryable: code === 'rate_limited', ...(retryAfterMs === undefined ? {} : { retryAfterMs }) })
+}
+
+const tooMany = () => hostError('rate_limited', 'too many panel requests')
+/** Refuses the first `count` calls named `name`. */
+const refuseFirst = (name: string, count: number) => (called: string) => (called === name && count-- > 0 ? tooMany() : undefined)
+const PACED = { ...FAST, firstBackoffMs: 20, maxBackoffMs: 40 }
+
+test('a change Orca refuses is sent again as it was, with no resync and no error', async () => {
+  const host = fakeHost()
+  const doc = source('<?php\n$a = 1;\n')
+  const bridge = new LspBridge(host, doc, PACED)
+  const states: string[] = []
+  bridge.onStatus((status) => states.push(status.state))
+  await bridge.attach()
+  host.refuse = refuseFirst('phpantom.change', 1)
+  doc.edit(11, 12, '2')
+  await until(() => host.mirror?.text === doc.text, 'the worker to catch up')
+  assert.equal(host.calls('phpantom.open').filter((call) => call.input.resync).length, 0)
+  assert.deepEqual(versions(host), [2, 2])
+  assert.deepEqual(states, ['ready'])
+  assert.deepEqual(host.violations, [])
+  bridge.dispose()
+})
+
+test('an open chunk Orca refuses is sent again, and the attach succeeds with no error', async () => {
+  const host = fakeHost()
+  host.refuse = refuseFirst('phpantom.open', 2)
+  const bridge = new LspBridge(host, source('x'.repeat(100_000)), PACED)
+  const states: string[] = []
+  bridge.onStatus((status) => states.push(status.state))
+  assert.equal((await bridge.attach()).state, 'ready')
+  assert.deepEqual(states, ['ready'])
+  assert.equal(host.mirror?.text, 'x'.repeat(100_000))
+  assert.deepEqual(host.violations, [])
+  bridge.dispose()
+})
+
+test('after a refusal, passive requests answer null without asking until the hold ends', async () => {
+  const host = fakeHost()
+  const bridge = new LspBridge(host, source('<?php\n'), PACED)
+  await bridge.attach()
+  host.refuse = refuseFirst('phpantom.request', 1)
+  assert.equal(await bridge.ask('textDocument/hover', {}, undefined, { kind: 'passive' }), null)
+  assert.equal(await bridge.ask('textDocument/hover', {}, undefined, { kind: 'passive' }), null)
+  assert.equal(host.calls('phpantom.request').length, 1)
+  await wait(PACED.firstBackoffMs + 10)
+  assert.equal(await bridge.ask('textDocument/hover', {}, undefined, { kind: 'passive' }), 'answer to textDocument/hover')
+  bridge.dispose()
+})
+
+test('a user request Orca refuses is asked again after the hold', async () => {
+  const host = fakeHost()
+  const bridge = new LspBridge(host, source('<?php\n'), PACED)
+  await bridge.attach()
+  host.refuse = refuseFirst('phpantom.request', 1)
+  const busy: number[] = []
+  bridge.onBusy(() => busy.push(1))
+  assert.equal(await bridge.ask('textDocument/definition', {}, undefined, { kind: 'user' }), 'answer to textDocument/definition')
+  assert.equal(host.calls('phpantom.request').length, 2)
+  assert.deepEqual(busy, [])
+  bridge.dispose()
+})
+
+test('a user request Orca keeps refusing says the editor is busy and answers null', async () => {
+  const host = fakeHost()
+  const bridge = new LspBridge(host, source('<?php\n'), PACED)
+  await bridge.attach()
+  host.refuse = (name) => (name === 'phpantom.request' ? tooMany() : undefined)
+  const busy: number[] = []
+  bridge.onBusy(() => busy.push(1))
+  assert.equal(await bridge.ask('textDocument/rename', {}, undefined, { kind: 'user' }), null)
+  assert.deepEqual(busy, [1])
+  bridge.dispose()
+})
+
+test('a user request does not wait out a long hold: it says the editor is busy at once', async () => {
+  const host = fakeHost()
+  const bridge = new LspBridge(host, source('<?php\n'), { ...PACED, firstBackoffMs: 5000, maxBackoffMs: 5000, userMaxWaitMs: 50 })
+  await bridge.attach()
+  host.refuse = refuseFirst('phpantom.request', 1)
+  const busy: number[] = []
+  bridge.onBusy(() => busy.push(1))
+  const started = Date.now()
+  assert.equal(await bridge.ask('textDocument/formatting', {}, undefined, { kind: 'user' }), null)
+  assert.ok(Date.now() - started < 1000)
+  assert.deepEqual(busy, [1])
+  bridge.dispose()
+})
+
+test('edits typed close together go out as one change', async () => {
+  const host = fakeHost()
+  const doc = source('<?php\n$a = 1;\n')
+  const bridge = new LspBridge(host, doc, { ...FAST, syncDelayMs: 150 })
+  await bridge.attach()
+  doc.edit(11, 12, '2')
+  await wait(5)
+  doc.edit(12, 12, '3')
+  await wait(5)
+  doc.edit(13, 13, '4')
+  await until(() => host.mirror?.text === doc.text, 'the worker to catch up')
+  assert.deepEqual(versions(host), [2])
+  assert.deepEqual(host.violations, [])
+  bridge.dispose()
+})
+
+test('steady typing still sends its changes every sync delay, not only when it stops', async () => {
+  const host = fakeHost()
+  const doc = source('<?php\n')
+  const bridge = new LspBridge(host, doc, { ...FAST, syncDelayMs: 30 })
+  await bridge.attach()
+  const started = Date.now()
+  for (let i = 0; i < 20; i++) {
+    doc.edit(doc.text.length, doc.text.length, 'a')
+    await wait(10)
+  }
+  const whileTyping = host.calls('phpantom.change').length
+  // Why against the time taken: a loaded machine stretches the 20 edits.
+  const most = Math.ceil((Date.now() - started) / 30) + 1
+  assert.ok(whileTyping >= 2, `${whileTyping} changes while typing`)
+  assert.ok(whileTyping <= most, `${whileTyping} changes while typing, at most ${most}`)
+  await until(() => host.mirror?.text === doc.text, 'the worker to catch up')
+  assert.deepEqual(host.violations, [])
+  bridge.dispose()
+})
+
+test('a background request waits for a pause in typing, then asks', async () => {
+  const host = fakeHost()
+  const doc = source('<?php\n')
+  const bridge = new LspBridge(host, doc, { ...FAST, backgroundQuietMs: 200 })
+  await bridge.attach()
+  doc.edit(6, 6, 'a')
+  const asked = bridge.ask('textDocument/semanticTokens/full', {}, undefined, { kind: 'background' })
+  await wait(50)
+  assert.equal(host.calls('phpantom.request').length, 0)
+  assert.equal(await asked, 'answer to textDocument/semanticTokens/full')
+  assert.equal(host.calls('phpantom.request').length, 1)
+  bridge.dispose()
+})
+
+test('a background request typing overtakes answers null without asking: Monaco asks again', async () => {
+  const host = fakeHost()
+  const doc = source('<?php\n')
+  const bridge = new LspBridge(host, doc, { ...FAST, backgroundQuietMs: 200 })
+  await bridge.attach()
+  doc.edit(6, 6, 'a')
+  const asked = bridge.ask('textDocument/inlayHint', {}, undefined, { kind: 'background' })
+  await wait(20)
+  doc.edit(7, 7, 'b')
+  assert.equal(await asked, null)
+  assert.equal(host.calls('phpantom.request').length, 0)
+  bridge.dispose()
+})
+
+test('an aborted background request answers null without asking', async () => {
+  const host = fakeHost()
+  const doc = source('<?php\n')
+  const bridge = new LspBridge(host, doc, { ...FAST, backgroundQuietMs: 200 })
+  await bridge.attach()
+  doc.edit(6, 6, 'a')
+  const controller = new AbortController()
+  const asked = bridge.ask('textDocument/inlayHint', {}, controller.signal, { kind: 'background' })
+  await wait(5)
+  controller.abort()
+  assert.equal(await asked, null)
+  await wait(250)
+  assert.equal(host.calls('phpantom.request').length, 0)
+  bridge.dispose()
+})
+
+test("passive requests past this editor's share answer null without asking", async () => {
+  const host = fakeHost()
+  const doc = source('<?php\n')
+  const bridge = new LspBridge(host, doc, { ...FAST, passiveCap: 3 })
+  await bridge.attach()
+  // Changes and the open are not part of the share: they never stop a passive request.
+  for (let i = 0; i < 4; i++) {
+    doc.edit(doc.text.length, doc.text.length, 'a')
+    await until(() => host.mirror?.text === doc.text, 'the change')
+  }
+  const answers = []
+  for (let i = 0; i < 5; i++) answers.push(await bridge.ask('textDocument/hover', {}, undefined, { kind: 'passive' }))
+  assert.equal(answers.filter((answer) => answer !== null).length, 3)
+  assert.equal(host.calls('phpantom.request').length, 3)
+  // A user request still goes out.
+  assert.equal(await bridge.ask('textDocument/definition', {}, undefined, { kind: 'user' }), 'answer to textDocument/definition')
+  bridge.dispose()
+})
+
+test('a background request superseded within its short wait never goes out, even with no typing', async () => {
+  const host = fakeHost()
+  const bridge = new LspBridge(host, source('<?php\n'), { ...FAST, backgroundMinWaitMs: 200 })
+  await bridge.attach()
+  // As Monaco does while scrolling: each new viewport cancels the request before it.
+  const controllers = [new AbortController(), new AbortController(), new AbortController()]
+  const asked = controllers.map((controller) => bridge.ask('textDocument/inlayHint', {}, controller.signal, { kind: 'background' }))
+  await wait(10)
+  controllers[0].abort()
+  controllers[1].abort()
+  const answers = await Promise.all(asked)
+  assert.deepEqual(answers, [null, null, 'answer to textDocument/inlayHint'])
+  assert.equal(host.calls('phpantom.request').length, 1)
+  bridge.dispose()
+})
+
+test('a background request answers null without asking when the text moved since Monaco asked', async () => {
+  // Why: Monaco shifts the answer by every edit made after it asked, so one that already holds them would be shifted twice.
+  const host = fakeHost()
+  const doc = source('<?php\n')
+  const bridge = new LspBridge(host, doc, { ...FAST, backgroundQuietMs: 30, backgroundMinWaitMs: 0 })
+  await bridge.attach()
+  const asked = bridge.ask('textDocument/semanticTokens/full', {}, undefined, { kind: 'background' })
+  doc.edit(6, 6, 'a')
+  assert.equal(await asked, null)
+  assert.equal(host.calls('phpantom.request').length, 0)
+  bridge.dispose()
+})
+
+test('background requests dropped during a hold ask Monaco for a refresh once the hold ends', async () => {
+  const host = fakeHost()
+  const bridge = new LspBridge(host, source('<?php\n'), { ...PACED, backgroundMinWaitMs: 0, backgroundQuietMs: 0 })
+  await bridge.attach()
+  const refreshes: string[][] = []
+  bridge.onRefresh((kinds) => refreshes.push(kinds))
+  host.refuse = refuseFirst('phpantom.request', 1)
+  assert.equal(await bridge.ask('textDocument/hover', {}, undefined, { kind: 'passive' }), null)
+  assert.equal(await bridge.ask('textDocument/semanticTokens/full', {}, undefined, { kind: 'background' }), null)
+  assert.equal(await bridge.ask('textDocument/inlayHint', {}, undefined, { kind: 'background' }), null)
+  assert.deepEqual(refreshes, [])
+  await until(() => refreshes.length > 0, 'the refresh')
+  await wait(PACED.maxBackoffMs + 20)
+  assert.deepEqual(refreshes, [['semanticTokens', 'inlayHints']])
+  bridge.dispose()
+})
+
+test('a request sends edits typed while an earlier change was still in flight', async () => {
+  let release: (() => void) | undefined
+  const host = fakeHost()
+  const base = host.handlers.change
+  host.handlers.change = async (input, self) => {
+    if (input.version === 2) await new Promise<void>((resolve) => (release = resolve))
+    return base(input, self)
+  }
+  const doc = source('<?php\n')
+  let seen: string | undefined
+  host.handlers.request = (input, self) => {
+    seen = self.mirror?.text
+    return { result: `answer to ${input.method}` }
+  }
+  const bridge = new LspBridge(host, doc, { ...FAST, syncDelayMs: 1000 })
+  await bridge.attach()
+  doc.edit(6, 6, 'a')
+  const asked = bridge.ask('textDocument/hover', {}, undefined, { kind: 'passive' })
+  await until(() => release !== undefined, 'the first change to reach the worker')
+  doc.edit(7, 7, 'b')
+  release?.()
+  assert.equal(await asked, 'answer to textDocument/hover')
+  assert.equal(seen, '<?php\nab')
+  bridge.dispose()
+})
+
+test("passive requests asked at once still stay within this editor's share", async () => {
+  const host = fakeHost()
+  const bridge = new LspBridge(host, source('<?php\n'), { ...FAST, passiveCap: 3 })
+  await bridge.attach()
+  const answers = await Promise.all([0, 1, 2, 3, 4].map(() => bridge.ask('textDocument/hover', {}, undefined, { kind: 'passive' })))
+  assert.equal(host.calls('phpantom.request').length, 3)
+  assert.equal(answers.filter((answer) => answer !== null).length, 3)
+  bridge.dispose()
+})
+
+test('a silent user request Orca keeps refusing answers null without saying the editor is busy', async () => {
+  const host = fakeHost()
+  const bridge = new LspBridge(host, source('<?php\n'), PACED)
+  await bridge.attach()
+  host.refuse = (name) => (name === 'phpantom.request' ? tooMany() : undefined)
+  const busy: number[] = []
+  bridge.onBusy(() => busy.push(1))
+  assert.equal(await bridge.ask('completionItem/resolve', {}, undefined, { kind: 'user', silent: true }), null)
+  assert.equal(host.calls('phpantom.request').length, 2)
+  assert.deepEqual(busy, [])
+  bridge.dispose()
+})
+
+test('a background request dropped while refused changes wait asks Monaco for a refresh later', async () => {
+  const host = fakeHost()
+  const doc = source('<?php\n')
+  const bridge = new LspBridge(host, doc, { ...PACED, backgroundMinWaitMs: 0, backgroundQuietMs: 0 })
+  await bridge.attach()
+  const refreshes: string[][] = []
+  bridge.onRefresh((kinds) => refreshes.push(kinds))
+  host.refuse = refuseFirst('phpantom.change', 1)
+  doc.edit(6, 6, 'a')
+  await until(() => host.calls('phpantom.change').length === 1, 'the refused change')
+  await wait(5)
+  // The hold is over by now only if the test is slow; either way the answer is null and a refresh follows.
+  assert.equal(await bridge.ask('textDocument/semanticTokens/full', {}, undefined, { kind: 'background' }), null)
+  await until(() => refreshes.length > 0, 'the refresh')
+  await until(() => host.mirror?.text === doc.text, 'the held change')
   bridge.dispose()
 })
