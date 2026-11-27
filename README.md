@@ -103,12 +103,12 @@ PHPantom runs PHPStan, PHPCS, PHPMD and Mago itself when it finds them, and show
 beside its own. PHPStan and PHPCS were tested through this plugin, with the gaps listed under Known
 gaps. PHPMD, Mago and the settings below are PHPantom's documented behaviour, not tested here.
 
-| Tool | Runs when | Keys in `.phpantom.toml` |
-| --- | --- | --- |
+| Tool    | Runs when                                                                                                                                                                                                                                                | Keys in `.phpantom.toml`                                                            |
+| ------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
 | PHPStan | `vendor/bin/phpstan` (then `PATH`) exists and the project has a PHPStan config file or requires `phpstan/phpstan` or a Laravel PHPStan extension such as Larastan directly. A Laravel app with neither such an extension nor a config file is left alone | `[phpstan]` `command`, `memory-limit` (default `"1G"`), `timeout` (default `60000`) |
-| PHPCS | `vendor/bin/phpcs` or `phpcs` on `PATH` exists | `[phpcs]` `command`, `standard` (such as `"PSR12"`), `timeout` (default `30000`) |
-| PHPMD | PHPMD 3 is installed and the project has a PHPMD config file, or `ruleset` is set | `[phpmd]` `command`, `ruleset`, `timeout` (default `30000`) |
-| Mago | `mago.toml` is at the project root: `lint` runs when it has a `[linter]` table, `analyze` when it has `[analyzer]` (on a Laravel project, only if `mago.toml` also wires up an extension) | `[mago]` `command`, `lint`, `analyze` |
+| PHPCS   | `vendor/bin/phpcs` or `phpcs` on `PATH` exists                                                                                                                                                                                                           | `[phpcs]` `command`, `standard` (such as `"PSR12"`), `timeout` (default `30000`)    |
+| PHPMD   | PHPMD 3 is installed and the project has a PHPMD config file, or `ruleset` is set                                                                                                                                                                        | `[phpmd]` `command`, `ruleset`, `timeout` (default `30000`)                         |
+| Mago    | `mago.toml` is at the project root: `lint` runs when it has a `[linter]` table, `analyze` when it has `[analyzer]` (on a Laravel project, only if `mago.toml` also wires up an extension)                                                                | `[mago]` `command`, `lint`, `analyze`                                               |
 
 PHPantom documents that `command = ""` switches a tool off and `command = "path/to/tool"` uses
 another binary, and that `[diagnostics]` `workspace = true` also checks unopened files in the
@@ -126,13 +126,13 @@ All the keys are in [PHPantom's configuration reference](https://phpantom-dev.gi
 
 ## File types
 
-| Files | Opens in | Notes |
-| --- | --- | --- |
-| `.php` | PHPantom's editor | Includes Tempest's `.view.php` views |
-| `.blade.php` | PHPantom's Blade editor | |
-| `.module`, `.install`, `.theme`, `.profile`, `.inc`, `.engine` | PHPantom's editor | Drupal's PHP files, opened here in every project. One that isn't PHP (a Debian `.install`, say) shows as plain text, and PHPCS, if present, reports `Internal.NoCodeFound` on it; pick Source in the view toggle to use Orca's editor |
-| `.twig` | Orca's editor | Not supported yet, see [issue #3](https://github.com/noppu-labs/orca-phpantom/issues/3) |
-| `.yaml`, `.yml`, `.xml`, `.env` | Orca's editor | This plugin doesn't open them |
+| Files                                                          | Opens in                | Notes                                                                                                                                                                                                                                 |
+| -------------------------------------------------------------- | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `.php`                                                         | PHPantom's editor       | Includes Tempest's `.view.php` views                                                                                                                                                                                                  |
+| `.blade.php`                                                   | PHPantom's Blade editor |                                                                                                                                                                                                                                       |
+| `.module`, `.install`, `.theme`, `.profile`, `.inc`, `.engine` | PHPantom's editor       | Drupal's PHP files, opened here in every project. One that isn't PHP (a Debian `.install`, say) shows as plain text, and PHPCS, if present, reports `Internal.NoCodeFound` on it; pick Source in the view toggle to use Orca's editor |
+| `.twig`                                                        | Orca's editor           | Not supported yet, see [issue #3](https://github.com/noppu-labs/orca-phpantom/issues/3)                                                                                                                                               |
+| `.yaml`, `.yml`, `.xml`, `.env`                                | Orca's editor           | This plugin doesn't open them                                                                                                                                                                                                         |
 
 Outside a Drupal site, list Drupal's extensions without the dot (`module`, `inc` and so on) under
 `[indexing]` `extensions` in `.phpantom.toml` so PHPantom also indexes the files you haven't opened.

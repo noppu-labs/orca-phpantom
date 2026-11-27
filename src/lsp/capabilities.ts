@@ -2,11 +2,32 @@
 // `textDocument.diagnostic` missing the server pushes `textDocument/publishDiagnostics` instead.
 
 export const SEMANTIC_TOKEN_TYPES = [
-  'namespace', 'class', 'interface', 'enum', 'type', 'typeParameter', 'parameter', 'variable',
-  'property', 'function', 'method', 'decorator', 'enumMember', 'keyword', 'comment'
-]
+  'namespace',
+  'class',
+  'interface',
+  'enum',
+  'type',
+  'typeParameter',
+  'parameter',
+  'variable',
+  'property',
+  'function',
+  'method',
+  'decorator',
+  'enumMember',
+  'keyword',
+  'comment',
+];
 
-export const SEMANTIC_TOKEN_MODIFIERS = ['declaration', 'static', 'readonly', 'deprecated', 'abstract', 'definition', 'defaultLibrary']
+export const SEMANTIC_TOKEN_MODIFIERS = [
+  'declaration',
+  'static',
+  'readonly',
+  'deprecated',
+  'abstract',
+  'definition',
+  'defaultLibrary',
+];
 
 export const CLIENT_CAPABILITIES = {
   general: { positionEncodings: ['utf-16'] },
@@ -17,7 +38,7 @@ export const CLIENT_CAPABILITIES = {
     applyEdit: false,
     workspaceEdit: { documentChanges: true },
     semanticTokens: { refreshSupport: true },
-    inlayHint: { refreshSupport: true }
+    inlayHint: { refreshSupport: true },
   },
   textDocument: {
     synchronization: { didSave: false, willSave: false },
@@ -26,13 +47,16 @@ export const CLIENT_CAPABILITIES = {
         snippetSupport: true,
         documentationFormat: ['markdown', 'plaintext'],
         deprecatedSupport: true,
-        resolveSupport: { properties: ['documentation', 'detail', 'additionalTextEdits'] }
+        resolveSupport: { properties: ['documentation', 'detail', 'additionalTextEdits'] },
       },
-      contextSupport: true
+      contextSupport: true,
     },
     hover: { contentFormat: ['markdown', 'plaintext'] },
     signatureHelp: {
-      signatureInformation: { documentationFormat: ['markdown', 'plaintext'], parameterInformation: { labelOffsetSupport: true } }
+      signatureInformation: {
+        documentationFormat: ['markdown', 'plaintext'],
+        parameterInformation: { labelOffsetSupport: true },
+      },
     },
     definition: { linkSupport: false },
     references: {},
@@ -42,18 +66,24 @@ export const CLIENT_CAPABILITIES = {
     rangeFormatting: {},
     rename: { prepareSupport: true },
     codeAction: {
-      codeActionLiteralSupport: { codeActionKind: { valueSet: ['quickfix', 'refactor', 'source'] } },
+      codeActionLiteralSupport: {
+        codeActionKind: { valueSet: ['quickfix', 'refactor', 'source'] },
+      },
       isPreferredSupport: true,
       dataSupport: true,
-      resolveSupport: { properties: ['edit'] }
+      resolveSupport: { properties: ['edit'] },
     },
     semanticTokens: {
       requests: { full: true },
       formats: ['relative'],
       tokenTypes: SEMANTIC_TOKEN_TYPES,
-      tokenModifiers: SEMANTIC_TOKEN_MODIFIERS
+      tokenModifiers: SEMANTIC_TOKEN_MODIFIERS,
     },
     inlayHint: { resolveSupport: { properties: ['tooltip'] } },
-    publishDiagnostics: { relatedInformation: false, versionSupport: false, tagSupport: { valueSet: [1, 2] } }
-  }
-}
+    publishDiagnostics: {
+      relatedInformation: false,
+      versionSupport: false,
+      tagSupport: { valueSet: [1, 2] },
+    },
+  },
+};

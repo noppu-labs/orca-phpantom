@@ -10,7 +10,7 @@ Date: 2026-11-26. Orca 1.4.277 (host API 1.10), macOS. Throwaway plugin `local.p
 `workspace.list` row (`matchedBy: "id"`), and the exact-content search rooted at that row's
 `path` returned exactly that worktree's `app/Example.php`.
 
-**Main caveat:** `readContext` names the workspace that is *focused*, not the workspace the
+**Main caveat:** `readContext` names the workspace that is _focused_, not the workspace the
 calling frame's tab belongs to. If a frame starts or re-queries while another workspace is
 focused, it gets that other workspace. With byte-identical files the content search then
 "succeeds" in the wrong worktree. The worker locates correctly only when the frame starts
@@ -113,10 +113,10 @@ have returned B's file for A's tab.
 The trial used `orca file open <rel> --worktree path:<A> --focus`, which opens a file with its
 default editor. Whether clicking in the file tree behaves the same is UNVERIFIED.
 
-| File | Editor that loaded (from `caller=<contributionId>` and `textHead`) |
-| --- | --- |
-| `app/Models/User.php` | `php` |
-| `resources/views/welcome.blade.php` | **`php`** (`caller=php/…`, `textHead="<!doctype html>…"`) |
+| File                                | Editor that loaded (from `caller=<contributionId>` and `textHead`) |
+| ----------------------------------- | ------------------------------------------------------------------ |
+| `app/Models/User.php`               | `php`                                                              |
+| `resources/views/welcome.blade.php` | **`php`** (`caller=php/…`, `textHead="<!doctype html>…"`)          |
 
 Follow-up: declaration order decides, contradicting the manifest reference's "a longer suffix
 wins". Moving `blade` to the first slot of `customEditors` needed no new approval. After that, a
@@ -128,19 +128,19 @@ plugin editor by default, not in Orca's Source.
 
 ### D: `editor.open` via `orca plugin dev request … spike.open`
 
-| `workspaceId` | `path` | Result |
-| --- | --- | --- |
-| A (`identity:wt2:local:87f5…`) | `app/Models/User.php` | `{"opened":true}` |
-| A | absolute path under `/private/var/…` (real path) | `invalid_params`: "path: path must be relative and inside the workspace" |
-| A | absolute path under `/var/…` (symlinked form) | `invalid_params`, same message |
-| A | B's absolute path | `invalid_params`, same message |
-| A | `/etc/hosts` | `invalid_params`, same message |
-| A | `../../etc/hosts` | `invalid_params`, same message |
-| A | `app/Nope.php` (missing file) | `{"opened":true}` (no existence check) |
-| A | `./app/Example.php` | `{"opened":true}` |
-| `<repoId>::<path>` (CLI worktree id form) | `app/Models/User.php` | `{"opened":true}` |
-| bare instance id `87f5…` | `app/Models/User.php` | `action_failed`: "This window does not list 87f5…" |
-| `wt2:local:87f5…` | `app/Models/User.php` | `action_failed`, same |
+| `workspaceId`                             | `path`                                           | Result                                                                   |
+| ----------------------------------------- | ------------------------------------------------ | ------------------------------------------------------------------------ |
+| A (`identity:wt2:local:87f5…`)            | `app/Models/User.php`                            | `{"opened":true}`                                                        |
+| A                                         | absolute path under `/private/var/…` (real path) | `invalid_params`: "path: path must be relative and inside the workspace" |
+| A                                         | absolute path under `/var/…` (symlinked form)    | `invalid_params`, same message                                           |
+| A                                         | B's absolute path                                | `invalid_params`, same message                                           |
+| A                                         | `/etc/hosts`                                     | `invalid_params`, same message                                           |
+| A                                         | `../../etc/hosts`                                | `invalid_params`, same message                                           |
+| A                                         | `app/Nope.php` (missing file)                    | `{"opened":true}` (no existence check)                                   |
+| A                                         | `./app/Example.php`                              | `{"opened":true}`                                                        |
+| `<repoId>::<path>` (CLI worktree id form) | `app/Models/User.php`                            | `{"opened":true}`                                                        |
+| bare instance id `87f5…`                  | `app/Models/User.php`                            | `action_failed`: "This window does not list 87f5…"                       |
+| `wt2:local:87f5…`                         | `app/Models/User.php`                            | `action_failed`, same                                                    |
 
 No folder workspace was created by the outside-path calls; the worktree list was unchanged.
 
@@ -182,7 +182,7 @@ open in A, focus was switched A → B → A, with the editor logging `visibility
   hidden workspace. No `hidden` was ever observed: a local history buffer in the frame recorded
   only `visible`, and no log request failed.
 - `visibilitychange` fires in frames of both worktrees on every switch, sometimes in bursts.
-- At `visibilitychange`, `readContext` still answers the *previous* workspace.
+- At `visibilitychange`, `readContext` still answers the _previous_ workspace.
   `workspace.changed` arrives 0.3 to 1.3 s later (another A→B→A run: `visibilitychange` at
   06:37:59.709, `workspace.changed` at 06:38:00.982).
 
@@ -232,61 +232,107 @@ open in A, focus was switched A → B → A, with the editor logging `visibility
 
 ```json
 {
-  "manifestVersion": 2, "id": "phpantom-spike", "name": "Phpantom Spike", "version": "0.1.0",
+  "manifestVersion": 2,
+  "id": "phpantom-spike",
+  "name": "Phpantom Spike",
+  "version": "0.1.0",
   "description": "Locator spike: can the editor tell the worker which workspace it is in.",
-  "engines": { "orca": ">=1.4.248" }, "execution": "trusted-worker", "pluginApi": 1, "main": "worker.ts",
+  "engines": { "orca": ">=1.4.248" },
+  "execution": "trusted-worker",
+  "pluginApi": 1,
+  "main": "worker.ts",
   "capabilities": [{ "kind": "workspace:read" }, { "kind": "workspace:write" }],
-  "contributes": { "customEditors": [
-    { "id": "php", "title": "PHP (spike)", "extensions": [".php"], "entry": "php.ts", "frame": "isolated" },
-    { "id": "blade", "title": "Blade (spike)", "extensions": [".blade.php"], "entry": "blade.ts", "frame": "isolated" }
-  ] }
+  "contributes": {
+    "customEditors": [
+      {
+        "id": "php",
+        "title": "PHP (spike)",
+        "extensions": [".php"],
+        "entry": "php.ts",
+        "frame": "isolated"
+      },
+      {
+        "id": "blade",
+        "title": "Blade (spike)",
+        "extensions": [".blade.php"],
+        "entry": "blade.ts",
+        "frame": "isolated"
+      }
+    ]
+  }
 }
 ```
 
 `php.ts` (`blade.ts` is identical with `'blade'`):
 
 ```ts
-import { run } from './editor'
-const LANGUAGE = 'php'
-await run(LANGUAGE)
+import { run } from './editor';
+const LANGUAGE = 'php';
+await run(LANGUAGE);
 ```
 
 `editor.ts`:
 
 ```ts
 export async function run(LANGUAGE: 'php' | 'blade') {
-  const frameId = Math.random().toString(36).slice(2, 8)
-  const hist: string[] = []
-  let failed = 0
+  const frameId = Math.random().toString(36).slice(2, 8);
+  const hist: string[] = [];
+  let failed = 0;
   const log = (msg: string) =>
-    orca.plugin.request('spike.log', { frameId, language: LANGUAGE, msg: `${msg} hist=${hist.join(',')} failedLogs=${failed}` }).catch(() => { failed++ })
+    orca.plugin
+      .request('spike.log', {
+        frameId,
+        language: LANGUAGE,
+        msg: `${msg} hist=${hist.join(',')} failedLogs=${failed}`,
+      })
+      .catch(() => {
+        failed++;
+      });
   const readCtx = async () => {
-    try { return await orca.host.call('workspace.readContext', {}) } catch (e: any) { return { error: e?.code ?? String(e) } }
-  }
-  const text = document.createElement('textarea')
-  text.style.cssText = 'box-sizing:border-box;width:100%;height:100vh;margin:0;border:0;font:13px monospace'
-  document.body.style.margin = '0'
-  document.body.append(text)
+    try {
+      return await orca.host.call('workspace.readContext', {});
+    } catch (e: any) {
+      return { error: e?.code ?? String(e) };
+    }
+  };
+  const text = document.createElement('textarea');
+  text.style.cssText =
+    'box-sizing:border-box;width:100%;height:100vh;margin:0;border:0;font:13px monospace';
+  document.body.style.margin = '0';
+  document.body.append(text);
 
-  const ctx = await readCtx()
-  log(`start vis=${document.visibilityState} ctx=${JSON.stringify(ctx)}`)
+  const ctx = await readCtx();
+  log(`start vis=${document.visibilityState} ctx=${JSON.stringify(ctx)}`);
   document.addEventListener('visibilitychange', async () => {
-    const vis = document.visibilityState
-    hist.push(`${new Date().toISOString().slice(14, 23)}:${vis}`)
-    log(`visibilitychange vis=${vis} ctx=${JSON.stringify(await readCtx())}`)
-    setTimeout(async () => log(`visibilitychange+1500ms vis=${document.visibilityState} (was ${vis}) ctx=${JSON.stringify(await readCtx())}`), 1500)
-  })
-  orca.on('workspace.changed', (p) => log(`workspace.changed vis=${document.visibilityState} ctx=${JSON.stringify(p.context)}`))
+    const vis = document.visibilityState;
+    hist.push(`${new Date().toISOString().slice(14, 23)}:${vis}`);
+    log(`visibilitychange vis=${vis} ctx=${JSON.stringify(await readCtx())}`);
+    setTimeout(
+      async () =>
+        log(
+          `visibilitychange+1500ms vis=${document.visibilityState} (was ${vis}) ctx=${JSON.stringify(await readCtx())}`
+        ),
+      1500
+    );
+  });
+  orca.on('workspace.changed', (p) =>
+    log(`workspace.changed vis=${document.visibilityState} ctx=${JSON.stringify(p.context)}`)
+  );
 
-  const doc = await orca.document!.session<string>()
-  text.value = doc.value
-  text.readOnly = true
+  const doc = await orca.document!.session<string>();
+  text.value = doc.value;
+  text.readOnly = true;
   try {
-    const answer = await orca.plugin.request('spike.locate', { language: LANGUAGE, frameId, ctx, text: doc.value })
-    text.title = JSON.stringify(answer)
+    const answer = await orca.plugin.request('spike.locate', {
+      language: LANGUAGE,
+      frameId,
+      ctx,
+      text: doc.value,
+    });
+    text.title = JSON.stringify(answer);
   } catch (e: any) {
-    text.title = `locate failed: ${e?.code ?? e}`
-    log(text.title)
+    text.title = `locate failed: ${e?.code ?? e}`;
+    log(text.title);
   }
 }
 ```
@@ -294,68 +340,95 @@ export async function run(LANGUAGE: 'php' | 'blade') {
 `worker.ts`:
 
 ```ts
-import type { OrcaWorkerApi } from 'orca/worker'
-import { readdir, readFile } from 'node:fs/promises'
-import { join, relative } from 'node:path'
-import { execFileSync } from 'node:child_process'
+import type { OrcaWorkerApi } from 'orca/worker';
+import { readdir, readFile } from 'node:fs/promises';
+import { join, relative } from 'node:path';
+import { execFileSync } from 'node:child_process';
 
-const SKIP = new Set(['.git', 'vendor', 'node_modules'])
-async function walk(root: string, suffix: string, exclude: string | null, out: string[] = [], dir = root) {
+const SKIP = new Set(['.git', 'vendor', 'node_modules']);
+async function walk(
+  root: string,
+  suffix: string,
+  exclude: string | null,
+  out: string[] = [],
+  dir = root
+) {
   for (const e of await readdir(dir, { withFileTypes: true })) {
-    const p = join(dir, e.name)
-    if (e.isDirectory()) { if (!SKIP.has(e.name)) await walk(root, suffix, exclude, out, p) }
-    else if (e.name.endsWith(suffix) && !(exclude && e.name.endsWith(exclude))) out.push(p)
+    const p = join(dir, e.name);
+    if (e.isDirectory()) {
+      if (!SKIP.has(e.name)) await walk(root, suffix, exclude, out, p);
+    } else if (e.name.endsWith(suffix) && !(exclude && e.name.endsWith(exclude))) out.push(p);
   }
-  return out
+  return out;
 }
 
 export default function activate(orca: OrcaWorkerApi) {
-  orca.log(`activate PATH=${process.env.PATH}`)
-  let which = 'not found'
-  try { which = execFileSync('/usr/bin/which', ['phpantom_lsp'], { encoding: 'utf8' }).trim() } catch {}
-  orca.log(`activate which phpantom_lsp=${which}`)
+  orca.log(`activate PATH=${process.env.PATH}`);
+  let which = 'not found';
+  try {
+    which = execFileSync('/usr/bin/which', ['phpantom_lsp'], { encoding: 'utf8' }).trim();
+  } catch {}
+  orca.log(`activate which phpantom_lsp=${which}`);
 
   orca.panels.handle('spike.log', (input: any, c) => {
-    orca.log(`[editor ${input.language} ${input.frameId} caller=${c.panel.contributionId}/${c.panel.id}] ${input.msg}`)
-    return null
-  })
+    orca.log(
+      `[editor ${input.language} ${input.frameId} caller=${c.panel.contributionId}/${c.panel.id}] ${input.msg}`
+    );
+    return null;
+  });
 
   orca.panels.handle('spike.locate', async (input: any, c) => {
-    const { language, frameId, ctx } = input
-    const text: string = input.text
-    const list = await orca.host.call('workspace.list', {})
-    const rows = list.workspaces
-    const spike = rows.filter((r) => r.path.includes('phpantom-spike-repo'))
-    orca.log(`locate[${language} ${frameId}] caller=${c.panel.contributionId}/${c.panel.id} textLen=${text.length} textHead=${JSON.stringify(text.slice(0, 40))} ctx=${JSON.stringify(ctx)}`)
-    orca.log(`locate[${frameId}] list total=${rows.length} truncated=${list.truncated} spikeRows=${JSON.stringify(spike.map((r) => ({ id: r.id, kind: r.kind, name: r.name, branch: r.branch, path: r.path, hostId: r.hostId })))}`)
-    const byId = rows.filter((r) => r.id === ctx?.workspaceId)
-    const byBranchName = rows.filter((r) => r.branch === ctx?.branch && r.name === ctx?.displayName)
-    orca.log(`locate[${frameId}] idMatches=${byId.length} branch+nameMatches=${byBranchName.length}`)
-    let matchedBy: 'id' | 'branch+name' | 'none' = 'none'
-    let row = byId[0]
-    if (row) matchedBy = 'id'
-    else if ((row = byBranchName[0])) matchedBy = 'branch+name'
-    if (!row) { const r = { matchedBy, path: null, matches: [] }; orca.log(`locate[${frameId}] => ${JSON.stringify(r)}`); return r }
-    const suffix = language === 'blade' ? '.blade.php' : '.php'
-    const files = await walk(row.path, suffix, language === 'blade' ? null : '.blade.php')
-    const matches: string[] = []
-    for (const f of files) if ((await readFile(f, 'utf8')) === text) matches.push(relative(row.path, f))
-    const r = { matchedBy, path: row.path, matches }
-    orca.log(`locate[${frameId}] => ${JSON.stringify(r)}`)
-    return r
-  })
+    const { language, frameId, ctx } = input;
+    const text: string = input.text;
+    const list = await orca.host.call('workspace.list', {});
+    const rows = list.workspaces;
+    const spike = rows.filter((r) => r.path.includes('phpantom-spike-repo'));
+    orca.log(
+      `locate[${language} ${frameId}] caller=${c.panel.contributionId}/${c.panel.id} textLen=${text.length} textHead=${JSON.stringify(text.slice(0, 40))} ctx=${JSON.stringify(ctx)}`
+    );
+    orca.log(
+      `locate[${frameId}] list total=${rows.length} truncated=${list.truncated} spikeRows=${JSON.stringify(spike.map((r) => ({ id: r.id, kind: r.kind, name: r.name, branch: r.branch, path: r.path, hostId: r.hostId })))}`
+    );
+    const byId = rows.filter((r) => r.id === ctx?.workspaceId);
+    const byBranchName = rows.filter(
+      (r) => r.branch === ctx?.branch && r.name === ctx?.displayName
+    );
+    orca.log(
+      `locate[${frameId}] idMatches=${byId.length} branch+nameMatches=${byBranchName.length}`
+    );
+    let matchedBy: 'id' | 'branch+name' | 'none' = 'none';
+    let row = byId[0];
+    if (row) matchedBy = 'id';
+    else if ((row = byBranchName[0])) matchedBy = 'branch+name';
+    if (!row) {
+      const r = { matchedBy, path: null, matches: [] };
+      orca.log(`locate[${frameId}] => ${JSON.stringify(r)}`);
+      return r;
+    }
+    const suffix = language === 'blade' ? '.blade.php' : '.php';
+    const files = await walk(row.path, suffix, language === 'blade' ? null : '.blade.php');
+    const matches: string[] = [];
+    for (const f of files)
+      if ((await readFile(f, 'utf8')) === text) matches.push(relative(row.path, f));
+    const r = { matchedBy, path: row.path, matches };
+    orca.log(`locate[${frameId}] => ${JSON.stringify(r)}`);
+    return r;
+  });
 
   orca.panels.handle('spike.open', async (input: any) => {
     try {
-      const res = await orca.host.call('editor.open', { workspaceId: input.workspaceId, path: input.path })
-      orca.log(`spike.open ${JSON.stringify(input)} => ${JSON.stringify(res)}`)
-      return { ok: res }
+      const res = await orca.host.call('editor.open', {
+        workspaceId: input.workspaceId,
+        path: input.path,
+      });
+      orca.log(`spike.open ${JSON.stringify(input)} => ${JSON.stringify(res)}`);
+      return { ok: res };
     } catch (e: any) {
-      const r = { error: e?.code ?? String(e), message: String(e?.message ?? e) }
-      orca.log(`spike.open ${JSON.stringify(input)} => ${JSON.stringify(r)}`)
-      return r
+      const r = { error: e?.code ?? String(e), message: String(e?.message ?? e) };
+      orca.log(`spike.open ${JSON.stringify(input)} => ${JSON.stringify(r)}`);
+      return r;
     }
-  })
+  });
 }
 ```
 

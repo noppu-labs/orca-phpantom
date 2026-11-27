@@ -5,10 +5,22 @@
 // lookbehind past it), `@name` in a regex expands a grammar attribute so a literal `@` is written
 // `@@`, and the first matching rule of a state wins.
 
-export type MonarchLanguage = { tokenizer: { [state: string]: unknown[] } }
-type Rule = unknown
+export type MonarchLanguage = { tokenizer: { [state: string]: unknown[] } };
+type Rule = unknown;
 
-const PHP_KEYWORDS = ['fn', 'function', 'new', 'return', 'true', 'false', 'null', 'and', 'or', 'not', 'instanceof']
+const PHP_KEYWORDS = [
+  'fn',
+  'function',
+  'new',
+  'return',
+  'true',
+  'false',
+  'null',
+  'and',
+  'or',
+  'not',
+  'instanceof',
+];
 
 /** PHP inside `{{ }}`, `{!! !!}`, directive arguments, `@php` blocks and bound component attributes. */
 const bladeExpression: Rule[] = [
@@ -22,8 +34,8 @@ const bladeExpression: Rule[] = [
   [/[[\]]/, 'delimiter.square'],
   [new RegExp(`(?:${PHP_KEYWORDS.join('|')})\\b`), 'keyword'],
   [/[a-zA-Z_\\][\w\\]*/, 'identifier'],
-  [/./, '']
-]
+  [/./, ''],
+];
 
 /**
  * Blade's own syntax, tried before any HTML rule of a state. `text` is the token for what Blade
@@ -39,10 +51,13 @@ function bladeRules(text: string): Rule[] {
     [/@@\{\{/, text],
     [/@@@@\w*/, text],
     [/@@verbatim\b/, 'keyword.blade', '@bladeVerbatim'],
-    [/(@@[a-zA-Z_]\w*)(\s*)(\()/, ['keyword.blade', '', { token: 'delimiter.parenthesis', next: '@bladeArguments' }]],
+    [
+      /(@@[a-zA-Z_]\w*)(\s*)(\()/,
+      ['keyword.blade', '', { token: 'delimiter.parenthesis', next: '@bladeArguments' }],
+    ],
     [/@@php\b/, 'keyword.blade', '@bladePhp'],
-    [/@@[a-zA-Z_]\w*/, 'keyword.blade']
-  ]
+    [/@@[a-zA-Z_]\w*/, 'keyword.blade'],
+  ];
 }
 
 /**
@@ -54,13 +69,17 @@ function textRules(text: string, stop: string): Rule[] {
   return [
     [new RegExp(`[^${stop}@@{\\w]+`), text],
     [/\w+(?:@@\w*)*/, text],
-    [/[@@{]/, text]
-  ]
+    [/[@@{]/, text],
+  ];
 }
 
 /** A quoted attribute value in a state of its own, so Blade inside it is found. */
 function attributeValue(quote: '"' | "'"): Rule[] {
-  return [...bladeRules('attribute.value'), [new RegExp(quote), 'attribute.value', '@pop'], ...textRules('attribute.value', quote)]
+  return [
+    ...bladeRules('attribute.value'),
+    [new RegExp(quote), 'attribute.value', '@pop'],
+    ...textRules('attribute.value', quote),
+  ];
 }
 
 /** HTML's attribute rules, for `<x-…>` components. */
@@ -70,76 +89,96 @@ const componentAttributes: Rule[] = [
   [/'/, 'attribute.value', '@bladeAttributeValueSingle'],
   [/[\w\-]+/, 'attribute.name'],
   [/=/, 'delimiter'],
-  [/[ \t\r\n]+/, '']
-]
+  [/[ \t\r\n]+/, ''],
+];
 
 // States that are not tags or text: HTML comments, the doctype, and script and style bodies, which
 // belong to the embedded JavaScript and CSS grammars.
-const NOT_BLADE = /comment|doctype|embedded/i
+const NOT_BLADE = /comment|doctype|embedded/i;
 
 /** HTML's one-regex quoted values (`/"([^"]*)"/`), which would swallow `{{ }}` inside a value. */
 function quotedValue(rule: Rule): '"' | "'" | null {
-  if (!Array.isArray(rule) || !(rule[0] instanceof RegExp) || rule[1] !== 'attribute.value' || rule.length !== 2) {
-    return null
+  if (
+    !Array.isArray(rule) ||
+    !(rule[0] instanceof RegExp) ||
+    rule[1] !== 'attribute.value' ||
+    rule.length !== 2
+  ) {
+    return null;
   }
-  if (rule[0].source === '"([^"]*)"') return '"'
-  if (rule[0].source === "'([^']*)'") return "'"
-  return null
+  if (rule[0].source === '"([^"]*)"') return '"';
+  if (rule[0].source === "'([^']*)'") return "'";
+  return null;
 }
 
-export function bladeGrammar<C extends object, L extends MonarchLanguage>(html: { conf: C; language: L }): { conf: C; language: L } {
-  const language = structuredClone(html.language)
-  const tokenizer = language.tokenizer
+export function bladeGrammar<C extends object, L extends MonarchLanguage>(html: {
+  conf: C;
+  language: L;
+}): { conf: C; language: L } {
+  const language = structuredClone(html.language);
+  const tokenizer = language.tokenizer;
   for (const [state, rules] of Object.entries(tokenizer)) {
     if (state === 'root' || NOT_BLADE.test(state)) {
-      continue
+      continue;
     }
     const opened = rules.map((rule) => {
-      const quote = quotedValue(rule)
-      return quote ? [new RegExp(quote), 'attribute.value', quote === '"' ? '@bladeAttributeValueDouble' : '@bladeAttributeValueSingle'] : rule
-    })
-    tokenizer[state] = [...bladeRules(''), ...opened]
+      const quote = quotedValue(rule);
+      return quote
+        ? [
+            new RegExp(quote),
+            'attribute.value',
+            quote === '"' ? '@bladeAttributeValueDouble' : '@bladeAttributeValueSingle',
+          ]
+        : rule;
+    });
+    tokenizer[state] = [...bladeRules(''), ...opened];
   }
   tokenizer.root = [
     ...bladeRules(''),
     [/(<\/?)(x-[\w\-.:]+)/, ['delimiter', { token: 'tag.blade', next: '@bladeComponent' }]],
     ...textRules('', '<'),
-    ...tokenizer.root
-  ]
+    ...tokenizer.root,
+  ];
   Object.assign(tokenizer, {
     bladeEcho: [[/\}\}/, 'delimiter.blade', '@pop'], { include: '@bladeExpression' }],
     bladeRaw: [[/!!\}/, 'delimiter.blade', '@pop'], { include: '@bladeExpression' }],
     bladeComment: [
       [/--\}\}/, 'comment.blade', '@pop'],
       [/[^-]+/, 'comment.blade'],
-      [/./, 'comment.blade']
+      [/./, 'comment.blade'],
     ],
     // Balanced parentheses, so `@if(count($a) > 1)` ends at the right one, across lines too.
     bladeArguments: [
       [/\(/, 'delimiter.parenthesis', '@push'],
       [/\)/, 'delimiter.parenthesis', '@pop'],
-      { include: '@bladeExpression' }
+      { include: '@bladeExpression' },
     ],
     bladePhp: [[/@@endphp\b/, 'keyword.blade', '@pop'], { include: '@bladeExpression' }],
     bladeVerbatim: [
       [/@@endverbatim\b/, 'keyword.blade', '@pop'],
       [/[^@@]+/, ''],
-      [/@@/, '']
+      [/@@/, ''],
     ],
     bladeComponent: [
       ...bladeRules(''),
-      [/(:[\w\-.:]+)(\s*)(=)(\s*)(")/, ['attribute.name', '', 'delimiter', '', { token: 'delimiter', next: '@bladeBoundDouble' }]],
-      [/(:[\w\-.:]+)(\s*)(=)(\s*)(')/, ['attribute.name', '', 'delimiter', '', { token: 'delimiter', next: '@bladeBoundSingle' }]],
-      ...componentAttributes
+      [
+        /(:[\w\-.:]+)(\s*)(=)(\s*)(")/,
+        ['attribute.name', '', 'delimiter', '', { token: 'delimiter', next: '@bladeBoundDouble' }],
+      ],
+      [
+        /(:[\w\-.:]+)(\s*)(=)(\s*)(')/,
+        ['attribute.name', '', 'delimiter', '', { token: 'delimiter', next: '@bladeBoundSingle' }],
+      ],
+      ...componentAttributes,
     ],
     bladeBoundDouble: [[/"/, 'delimiter', '@pop'], { include: '@bladeExpression' }],
     bladeBoundSingle: [[/'/, 'delimiter', '@pop'], { include: '@bladeExpression' }],
     bladeAttributeValueDouble: attributeValue('"'),
     bladeAttributeValueSingle: attributeValue("'"),
-    bladeExpression
-  })
+    bladeExpression,
+  });
   return {
     conf: { ...html.conf, comments: { blockComment: ['{{--', '--}}'] } },
-    language
-  }
+    language,
+  };
 }

@@ -1,19 +1,23 @@
-import { createHash } from 'node:crypto'
+import { createHash } from 'node:crypto';
 
 /** Downloads `url` and returns the body only when its SHA-256 is `sha256`. */
-export async function downloadVerified(url: string, sha256: string, fetchImpl: typeof fetch = fetch): Promise<Buffer> {
-  const response = await fetchImpl(url)
+export async function downloadVerified(
+  url: string,
+  sha256: string,
+  fetchImpl: typeof fetch = fetch
+): Promise<Buffer> {
+  const response = await fetchImpl(url);
   if (!response.ok || !response.body) {
-    throw new Error(`download failed: HTTP ${response.status}`)
+    throw new Error(`download failed: HTTP ${response.status}`);
   }
-  const hash = createHash('sha256')
-  const chunks: Buffer[] = []
+  const hash = createHash('sha256');
+  const chunks: Buffer[] = [];
   for await (const chunk of response.body as unknown as AsyncIterable<Uint8Array>) {
-    hash.update(chunk)
-    chunks.push(Buffer.from(chunk))
+    hash.update(chunk);
+    chunks.push(Buffer.from(chunk));
   }
   if (hash.digest('hex') !== sha256.toLowerCase()) {
-    throw new Error(`checksum mismatch for ${url}`)
+    throw new Error(`checksum mismatch for ${url}`);
   }
-  return Buffer.concat(chunks)
+  return Buffer.concat(chunks);
 }

@@ -2,7 +2,7 @@
 // A script file on purpose (no top-level import or export), so this is a module declaration.
 // Monaco ships no declarations for its language definitions; this one exports HTML's grammar.
 declare module 'monaco-editor/languages/definitions/html/html' {
-  import type { languages } from 'monaco-editor/editor'
-  export const conf: languages.LanguageConfiguration
-  export const language: languages.IMonarchLanguage
+  import type { languages } from 'monaco-editor/editor';
+  export const conf: languages.LanguageConfiguration;
+  export const language: languages.IMonarchLanguage;
 }

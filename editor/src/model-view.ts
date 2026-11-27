@@ -6,106 +6,106 @@
 // Orca's text can therefore cut a `\r\n` pair and leave an extra line. So an outside write is applied
 // as Orca's whole new text: switch the model to the line ending Monaco would pick for it, then apply
 // the smallest edit between texts that use that one line ending.
-import { smallestEdit, type Splice } from './edits.ts'
-import type { TextView } from './sync.ts'
+import { smallestEdit, type Splice } from './edits.ts';
+import type { TextView } from './sync.ts';
 
-export type Eol = '\n' | '\r\n'
-const BOM = '﻿'
+export type Eol = '\n' | '\r\n';
+const BOM = '﻿';
 
 /** The parts of a Monaco text model this needs; offsets never count the BOM. */
 export type ModelPort = {
   /** `model.getValue()`: the text without the BOM, in the model's line ending. */
-  getText(): string
-  getEol(): Eol
+  getText(): string;
+  getEol(): Eol;
   /** `model.setValue()`: a fresh text and a fresh undo history. */
-  setText(text: string): void
+  setText(text: string): void;
   /** `model.pushEOL()`: rewrites every line ending, as an undoable edit. */
-  setEol(eol: Eol): void
+  setEol(eol: Eol): void;
   /** `model.pushEditOperations()` over the range between two offsets. */
-  replace(start: number, end: number, text: string): void
-  pushStackElement(): void
-  onDidChangeContent(listener: () => void): { dispose(): void }
-}
+  replace(start: number, end: number, text: string): void;
+  pushStackElement(): void;
+  onDidChangeContent(listener: () => void): { dispose(): void };
+};
 
 export type ModelView = TextView & {
   /** Puts the first document in without sending it back and without an undo step to empty it. */
-  load(initial: string): void
-}
+  load(initial: string): void;
+};
 
 /** The line ending Monaco picks for a whole text: CRLF when more than half the line breaks have a `\r`. */
 export function monacoEol(text: string, fallback: Eol): Eol {
-  let breaks = 0
-  let withCr = 0
+  let breaks = 0;
+  let withCr = 0;
   for (let i = 0; i < text.length; i++) {
-    const code = text.charCodeAt(i)
+    const code = text.charCodeAt(i);
     if (code === 13) {
-      breaks += 1
-      withCr += 1
-      if (text.charCodeAt(i + 1) === 10) i += 1
+      breaks += 1;
+      withCr += 1;
+      if (text.charCodeAt(i + 1) === 10) i += 1;
     } else if (code === 10) {
-      breaks += 1
+      breaks += 1;
     }
   }
-  if (breaks === 0) return fallback
-  return withCr > breaks / 2 ? '\r\n' : '\n'
+  if (breaks === 0) return fallback;
+  return withCr > breaks / 2 ? '\r\n' : '\n';
 }
 
-export const normalizeEol = (text: string, eol: Eol): string => text.replace(/\r\n|\r|\n/g, eol)
+export const normalizeEol = (text: string, eol: Eol): string => text.replace(/\r\n|\r|\n/g, eol);
 
 export function modelView(port: ModelPort): ModelView {
-  let bom = ''
+  let bom = '';
   // True while text from Orca goes in, so it is not taken for typing and sent back.
-  let applying = false
+  let applying = false;
   const quietly = (apply: () => void): void => {
-    applying = true
+    applying = true;
     try {
-      apply()
+      apply();
     } finally {
-      applying = false
+      applying = false;
     }
-  }
+  };
   const view: ModelView = {
     getValue: () => bom + port.getText(),
     load(initial) {
-      bom = initial.startsWith(BOM) ? BOM : ''
-      quietly(() => port.setText(initial.slice(bom.length)))
+      bom = initial.startsWith(BOM) ? BOM : '';
+      quietly(() => port.setText(initial.slice(bom.length)));
     },
     applyOutside(splice: Splice) {
-      const current = view.getValue()
-      const next = current.slice(0, splice.start) + splice.text + current.slice(splice.end)
-      const nextBom = next.startsWith(BOM) ? BOM : ''
-      const body = next.slice(nextBom.length)
-      const eol = monacoEol(body, port.getEol())
-      const target = normalizeEol(body, eol)
+      const current = view.getValue();
+      const next = current.slice(0, splice.start) + splice.text + current.slice(splice.end);
+      const nextBom = next.startsWith(BOM) ? BOM : '';
+      const body = next.slice(nextBom.length);
+      const eol = monacoEol(body, port.getEol());
+      const target = normalizeEol(body, eol);
       quietly(() => {
         // Why: its own undo step, so Cmd+Z never takes the person's typing and the agent's write together.
-        port.pushStackElement()
+        port.pushStackElement();
         try {
           if (eol !== port.getEol()) {
-            port.setEol(eol)
+            port.setEol(eol);
             // Why: a step of its own. Monaco records the edit's offsets against the new line endings
             // but redoes a step's edits before its line-ending change, so sharing one corrupts redo.
-            port.pushStackElement()
+            port.pushStackElement();
           }
-          const edit = smallestEdit(port.getText(), target)
+          const edit = smallestEdit(port.getText(), target);
           if (edit) {
-            port.replace(edit.start, edit.end, edit.text)
+            port.replace(edit.start, edit.end, edit.text);
           }
           if (port.getText() !== target) {
-            port.replace(0, port.getText().length, target)
+            port.replace(0, port.getText().length, target);
           }
         } finally {
-          port.pushStackElement()
+          port.pushStackElement();
         }
-      })
-      bom = nextBom
+      });
+      bom = nextBom;
     },
     onUserChange: (listener) =>
       port.onDidChangeContent(() => {
         if (!applying) {
-          listener()
+          listener();
         }
-      })
-  }
-  return view
+      }),
+  };
+  return view;
 }

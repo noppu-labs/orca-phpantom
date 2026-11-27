@@ -1,72 +1,73 @@
-import type { LspContentChange, LspPosition } from '../../src/protocol.ts'
-import { orcaSize } from '../../src/size.ts'
+import type { LspContentChange, LspPosition } from '../../src/protocol.ts';
+import { orcaSize } from '../../src/size.ts';
 
 // Orca refuses a panel request ("panel message exceeds the size limit") whose whole message is over 64 KiB or
 // 10,000 arrays and objects by its own measure (see src/size.ts), not by its JSON. A group of changes is held
 // to both budgets below, in JSON bytes and in Orca's measure, which leaves room for the message around it:
 // the session token (up to 128 bytes), the action and request names, and the document id, session and length.
-export const REQUEST_BUDGET_BYTES = 56 * 1024
-export const REQUEST_BUDGET_OBJECTS = 9000
+export const REQUEST_BUDGET_BYTES = 56 * 1024;
+export const REQUEST_BUDGET_OBJECTS = 9000;
 
-const encoder = new TextEncoder()
+const encoder = new TextEncoder();
 
 export function encodedSize(value: unknown): number {
-  return encoder.encode(JSON.stringify(value)).length
+  return encoder.encode(JSON.stringify(value)).length;
 }
 
 /** UTF-8 bytes one UTF-16 unit (or a surrogate pair, when `next` completes it) adds to a JSON string. */
 function jsonCost(unit: number, pairedWith: number | null): number {
-  if (unit === 0x22 || unit === 0x5c) return 2
-  if (unit < 0x20) return unit === 8 || unit === 9 || unit === 10 || unit === 12 || unit === 13 ? 2 : 6
-  if (unit < 0x80) return 1
-  if (unit < 0x800) return 2
-  if (unit >= 0xd800 && unit <= 0xdfff) return pairedWith !== null ? 4 : 6
-  return 3
+  if (unit === 0x22 || unit === 0x5c) return 2;
+  if (unit < 0x20)
+    return unit === 8 || unit === 9 || unit === 10 || unit === 12 || unit === 13 ? 2 : 6;
+  if (unit < 0x80) return 1;
+  if (unit < 0x800) return 2;
+  if (unit >= 0xd800 && unit <= 0xdfff) return pairedWith !== null ? 4 : 6;
+  return 3;
 }
 
 export function chunkText(text: string, budget: number = REQUEST_BUDGET_BYTES): string[] {
-  if (text === '') return ['']
-  const pieces: string[] = []
-  let start = 0
-  let size = 2
-  let i = 0
+  if (text === '') return [''];
+  const pieces: string[] = [];
+  let start = 0;
+  let size = 2;
+  let i = 0;
   while (i < text.length) {
-    const unit = text.charCodeAt(i)
-    const next = i + 1 < text.length ? text.charCodeAt(i + 1) : 0
-    const paired = unit >= 0xd800 && unit <= 0xdbff && next >= 0xdc00 && next <= 0xdfff
-    const width = paired ? 2 : 1
-    const cost = jsonCost(unit, paired ? next : null)
+    const unit = text.charCodeAt(i);
+    const next = i + 1 < text.length ? text.charCodeAt(i + 1) : 0;
+    const paired = unit >= 0xd800 && unit <= 0xdbff && next >= 0xdc00 && next <= 0xdfff;
+    const width = paired ? 2 : 1;
+    const cost = jsonCost(unit, paired ? next : null);
     if (size + cost > budget && i > start) {
       // A piece starting with LF would fuse with a lone CR before the insertion point and move that point.
-      let cut = i
+      let cut = i;
       const unsafe = (c: number) => {
-        const u = text.charCodeAt(c)
-        const midPair = u >= 0xdc00 && u <= 0xdfff && (text.charCodeAt(c - 1) & 0xfc00) === 0xd800
-        return u === 0x0a || midPair
-      }
-      while (cut > start + 1 && unsafe(cut)) cut -= 1
-      if (unsafe(cut)) cut = i
-      pieces.push(text.slice(start, cut))
-      start = cut
-      i = cut
-      size = 2
-      continue
+        const u = text.charCodeAt(c);
+        const midPair = u >= 0xdc00 && u <= 0xdfff && (text.charCodeAt(c - 1) & 0xfc00) === 0xd800;
+        return u === 0x0a || midPair;
+      };
+      while (cut > start + 1 && unsafe(cut)) cut -= 1;
+      if (unsafe(cut)) cut = i;
+      pieces.push(text.slice(start, cut));
+      start = cut;
+      i = cut;
+      size = 2;
+      continue;
     }
-    size += cost
-    i += width
+    size += cost;
+    i += width;
   }
-  pieces.push(text.slice(start))
-  return pieces
+  pieces.push(text.slice(start));
+  return pieces;
 }
 
-const MAX = 4294967295
+const MAX = 4294967295;
 const EMPTY_CHANGE = {
   range: { start: { line: MAX, character: MAX }, end: { line: MAX, character: MAX } },
   text: '',
-}
-const ENVELOPE = encodedSize(EMPTY_CHANGE)
+};
+const ENVELOPE = encodedSize(EMPTY_CHANGE);
 // A one-change group in Orca's measure, without the text: the array, its element, and the change's own fields.
-const ORCA_ENVELOPE = orcaSize([EMPTY_CHANGE]).bytes
+const ORCA_ENVELOPE = orcaSize([EMPTY_CHANGE]).bytes;
 
 /**
  * The last piece replaces the range and the earlier ones are inserted, last to first, at the range start, so no
@@ -76,13 +77,16 @@ const ORCA_ENVELOPE = orcaSize([EMPTY_CHANGE]).bytes
 function splitOne(change: LspContentChange, budget: number): LspContentChange[] {
   // Why the smaller: a piece's raw UTF-8 bytes never exceed its JSON size, so JSON-bounding it bounds Orca's
   // measure of the text too; this adds what Orca counts around it.
-  const textBudget = Math.min(budget - 2 - ENVELOPE + 2, budget - ORCA_ENVELOPE + 2)
-  const pieces = chunkText(change.text, Math.max(textBudget, 16))
-  const last = pieces[pieces.length - 1]
-  const at = 'range' in change ? change.range.start : { line: 0, character: 0 }
-  const out: LspContentChange[] = ['range' in change ? { range: change.range, text: last } : { text: last }]
-  for (let i = pieces.length - 2; i >= 0; i--) out.push({ range: { start: at, end: at }, text: pieces[i] })
-  return out
+  const textBudget = Math.min(budget - 2 - ENVELOPE + 2, budget - ORCA_ENVELOPE + 2);
+  const pieces = chunkText(change.text, Math.max(textBudget, 16));
+  const last = pieces[pieces.length - 1];
+  const at = 'range' in change ? change.range.start : { line: 0, character: 0 };
+  const out: LspContentChange[] = [
+    'range' in change ? { range: change.range, text: last } : { text: last },
+  ];
+  for (let i = pieces.length - 2; i >= 0; i--)
+    out.push({ range: { start: at, end: at }, text: pieces[i] });
+  return out;
 }
 
 export function splitChanges(
@@ -90,34 +94,39 @@ export function splitChanges(
   budget: number = REQUEST_BUDGET_BYTES,
   maxObjects: number = REQUEST_BUDGET_OBJECTS
 ): LspContentChange[][] {
-  const groups: LspContentChange[][] = []
-  let current: LspContentChange[] = []
+  const groups: LspContentChange[][] = [];
+  let current: LspContentChange[] = [];
   // A group is an array: 2 JSON bytes of brackets, 8 Orca bytes and one object.
-  let size = 2
-  let orcaBytes = 8
-  let objects = 1
+  let size = 2;
+  let orcaBytes = 8;
+  let objects = 1;
   const flush = () => {
-    if (current.length > 0) groups.push(current)
-    current = []
-    size = 2
-    orcaBytes = 8
-    objects = 1
-  }
+    if (current.length > 0) groups.push(current);
+    current = [];
+    size = 2;
+    orcaBytes = 8;
+    objects = 1;
+  };
   for (const change of changes) {
-    const own = encodedSize(change)
-    const ownOrca = orcaSize(change)
+    const own = encodedSize(change);
+    const ownOrca = orcaSize(change);
     if (own + 2 > budget || ownOrca.bytes + 12 > budget || ownOrca.objects + 1 > maxObjects) {
-      flush()
-      for (const piece of splitOne(change, budget)) groups.push([piece])
-      continue
+      flush();
+      for (const piece of splitOne(change, budget)) groups.push([piece]);
+      continue;
     }
-    const added = own + (current.length > 0 ? 1 : 0)
-    if (size + added > budget || orcaBytes + 4 + ownOrca.bytes > budget || objects + ownOrca.objects > maxObjects) flush()
-    size += own + (current.length > 0 ? 1 : 0)
-    orcaBytes += 4 + ownOrca.bytes
-    objects += ownOrca.objects
-    current.push(change)
+    const added = own + (current.length > 0 ? 1 : 0);
+    if (
+      size + added > budget ||
+      orcaBytes + 4 + ownOrca.bytes > budget ||
+      objects + ownOrca.objects > maxObjects
+    )
+      flush();
+    size += own + (current.length > 0 ? 1 : 0);
+    orcaBytes += 4 + ownOrca.bytes;
+    objects += ownOrca.objects;
+    current.push(change);
   }
-  flush()
-  return groups
+  flush();
+  return groups;
 }

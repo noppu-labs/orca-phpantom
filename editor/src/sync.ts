@@ -1,90 +1,94 @@
-import { mergeText } from './merge.ts'
-import { smallestEdit, type Splice } from './edits.ts'
+import { mergeText } from './merge.ts';
+import { smallestEdit, type Splice } from './edits.ts';
 
 export type TextView = {
-  getValue(): string
-  applyOutside(splice: Splice): void
-  onUserChange(listener: () => void): { dispose(): void }
-}
+  getValue(): string;
+  applyOutside(splice: Splice): void;
+  onUserChange(listener: () => void): { dispose(): void };
+};
 
 /** Keeps `view` and the Orca document in sync; resolves once the first document is in. */
 export async function bindDocument(
   view: TextView,
   options: { onConflicts?(count: number): void } = {}
 ): Promise<{ readOnly: boolean; initial: string; flush(): void; dispose(): void }> {
-  const api = globalThis.orca.document
+  const api = globalThis.orca.document;
   if (!api) {
-    throw new Error('orca.document is only available in custom editors')
+    throw new Error('orca.document is only available in custom editors');
   }
   const session = await api.session<string>({
     merge: (base, outside, mine) => {
-      const merged = mergeText(base, outside, mine)
+      const merged = mergeText(base, outside, mine);
       if (merged.conflicts > 0) {
-        options.onConflicts?.(merged.conflicts)
+        options.onConflicts?.(merged.conflicts);
       }
-      return merged.text
-    }
-  })
-  let applying = false
+      return merged.text;
+    },
+  });
+  let applying = false;
   const replaced = session.onReplace((value) => {
-    const splice = smallestEdit(view.getValue(), value)
+    const splice = smallestEdit(view.getValue(), value);
     if (!splice) {
-      return
+      return;
     }
-    applying = true
+    applying = true;
     try {
-      view.applyOutside(splice)
+      view.applyOutside(splice);
     } finally {
-      applying = false
+      applying = false;
     }
-  })
+  });
   const changes = view.onUserChange(() => {
     if (!applying) {
-      session.change(view.getValue())
+      session.change(view.getValue());
     }
-  })
+  });
   return {
     readOnly: session.readOnly,
     initial: session.value,
     /** Sends a pending edit now instead of after Orca's debounce. Fire and forget: it never throws or waits. */
     flush() {
       try {
-        session.flush().catch(() => undefined)
+        session.flush().catch(() => undefined);
       } catch {
         // A session already gone has nothing to send.
       }
     },
     dispose() {
-      changes.dispose()
-      replaced.dispose()
-      session.dispose()
-    }
-  }
+      changes.dispose();
+      replaced.dispose();
+      session.dispose();
+    },
+  };
 }
 
-type VisibilityTarget = EventTarget & { readonly visibilityState: DocumentVisibilityState }
+type VisibilityTarget = EventTarget & { readonly visibilityState: DocumentVisibilityState };
 
 /**
  * Calls `flush` when the page hides or goes away. Why: Orca may tear the frame down on a tab switch, and an
  * edit still inside the session's debounce (250 ms) would never reach Orca.
  */
-export function flushWhenHidden(flush: () => void, win: EventTarget, page: VisibilityTarget): { dispose(): void } {
+export function flushWhenHidden(
+  flush: () => void,
+  win: EventTarget,
+  page: VisibilityTarget
+): { dispose(): void } {
   const run = (): void => {
     try {
-      flush()
+      flush();
     } catch {
       // Never in the way of the page going away.
     }
-  }
+  };
   const onVisibility = (): void => {
-    if (page.visibilityState === 'hidden') run()
-  }
-  win.addEventListener('pagehide', run)
-  page.addEventListener('visibilitychange', onVisibility)
+    if (page.visibilityState === 'hidden') run();
+  };
+  win.addEventListener('pagehide', run);
+  page.addEventListener('visibilitychange', onVisibility);
   return {
     dispose() {
-      win.removeEventListener('pagehide', run)
-      page.removeEventListener('visibilitychange', onVisibility)
-    }
-  }
+      win.removeEventListener('pagehide', run);
+      page.removeEventListener('visibilitychange', onVisibility);
+    },
+  };
 }
