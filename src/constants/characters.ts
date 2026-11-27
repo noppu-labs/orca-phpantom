@@ -1,4 +1,5 @@
-// UTF-16 code units the editor and the worker both look for. No imports: the editor bundle reads this too.
+// UTF-16 code units the editor and the worker both look for.
+// No imports: the editor bundle reads this too.
 
 const LINE_FEED = 0x0a;
 const CARRIAGE_RETURN = 0x0d;

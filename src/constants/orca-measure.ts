@@ -1,4 +1,5 @@
-// What Orca adds when it measures a value (see src/utils/size.ts). No imports: the editor bundle reads this too.
+// What Orca adds when it measures a value (see src/utils/size.ts).
+// No imports: the editor bundle reads this too.
 
 /** A number, whatever its value. */
 const ORCA_NUMBER_BYTES = 8;

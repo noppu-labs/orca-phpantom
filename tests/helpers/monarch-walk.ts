@@ -96,7 +96,9 @@ function tokenizeLine(grammar: Grammar, line: string, stack: string[] = ['root']
       }
       stack.pop();
     } else if (next === '@push') {
-      stack.push(stack.at(-1)!);
+      // Destructured, not asserted: an empty stack pushes undefined.
+      const [top] = stack.slice(-1);
+      stack.push(top);
     } else if (next === '@popall') {
       stack.splice(1);
     } else {
@@ -121,7 +123,7 @@ function tokenizeLine(grammar: Grammar, line: string, stack: string[] = ['root']
 
   let pos = 0;
   while (pos < line.length) {
-    const state = stack.at(-1)!;
+    const [state] = stack.slice(-1);
     const rest = line.slice(pos);
     let matched: { rule: ReturnType<typeof asRule>; match: RegExpMatchArray } | null = null;
     for (const raw of rulesOf(grammar, state)) {

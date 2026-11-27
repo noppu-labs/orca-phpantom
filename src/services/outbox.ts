@@ -14,8 +14,8 @@ const DEFAULT_MAX_OBJECTS = 9000;
 const DEFAULT_WINDOW_MS = 10_000;
 const DEFAULT_MAX_POSTS = 180;
 const DEFAULT_DELAY_MS = 150;
-// The most UTF-8 bytes one UTF-16 unit of a message can take.
-const MAX_BYTES_PER_UNIT = 4;
+// The most UTF-8 bytes one character takes.
+const MAX_BYTES_PER_CHARACTER = 4;
 
 interface OutboxOptions {
   windowMs?: number;
@@ -149,7 +149,10 @@ class Outbox {
       const room = this.limit.bytes - shell.bytes;
       if (room > 0 && shell.objects <= this.limit.objects) {
         // Why chars before bytes: a character is at most 4 bytes, so this many always fit.
-        return { ...payload, message: message.slice(0, Math.floor(room / MAX_BYTES_PER_UNIT)) };
+        return {
+          ...payload,
+          message: message.slice(0, Math.floor(room / MAX_BYTES_PER_CHARACTER)),
+        };
       }
     }
     return payload;
