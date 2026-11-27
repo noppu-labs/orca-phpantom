@@ -116,7 +116,7 @@ export class PhpantomServer {
       const result = (await Promise.race([
         rpc.request('initialize', {
           processId: process.pid,
-          clientInfo: { name: 'orca-phpantom', version: '0.1.0' },
+          clientInfo: { name: 'orca-phpantom', version: '0.2.0' },
           rootUri,
           workspaceFolders: [{ uri: rootUri, name: root.split(/[\\/]/).filter(Boolean).pop() ?? 'workspace' }],
           capabilities: CLIENT_CAPABILITIES
