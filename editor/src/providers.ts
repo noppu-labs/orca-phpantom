@@ -225,7 +225,7 @@ export function registerReadingProviders(
           if (!ours(m)) return null;
           const result = await ask('textDocument/hover', atCursor(position), token, 'passive');
           const contents = toMarkdown(result?.contents).map((value) => ({ value }));
-          return contents.length
+          return contents.length > 0
             ? { contents, ...(result.range ? { range: fromLspRange(result.range) } : {}) }
             : null;
         },

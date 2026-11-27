@@ -914,7 +914,7 @@ test('a ping carries a timeout no longer than the ping interval', async () => {
   const host = fakeHost();
   const bridge = new LspBridge(host, source('<?php\n'), { ...FAST, pingMs: 15 });
   await bridge.attach();
-  await until(() => host.calls('phpantom.ping').length >= 1, 'a ping');
+  await until(() => host.calls('phpantom.ping').length > 0, 'a ping');
   assert.deepEqual(host.calls('phpantom.ping')[0].options, { timeoutMs: 15 });
   bridge.dispose();
 });
@@ -925,7 +925,7 @@ test('a ping that never answers does not stop the pings of the next attach', asy
   await bridge.attach();
   const answers = host.handlers.ping;
   host.handlers.ping = () => new Promise(() => undefined);
-  await until(() => host.calls('phpantom.ping').length >= 1, 'a hung ping');
+  await until(() => host.calls('phpantom.ping').length > 0, 'a hung ping');
   host.handlers.ping = answers;
   // The worker restarts: the bridge opens the document again and must ping under the new session.
   host.restart('s2');

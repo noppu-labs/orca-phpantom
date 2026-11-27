@@ -59,7 +59,7 @@ test('registers every handler and sets the status bar', async () => {
       detached: true,
     });
     assert.deepEqual(await worker.request('phpantom.close', { docId: 'd1' }), { ok: true });
-    assert.ok(worker.host.callsOf('statusBar.update').length >= 1);
+    assert.ok(worker.host.callsOf('statusBar.update').length > 0);
     assert.equal(typeof (await worker.command('phpantom.status')), 'string');
     assert.deepEqual(worker.refusals, []);
   } finally {

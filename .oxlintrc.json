@@ -218,7 +218,6 @@
         "typescript/switch-exhaustiveness-check": "off",
         "typescript/unbound-method": "off",
         "unicorn/consistent-function-scoping": "off",
-        "unicorn/explicit-length-check": "off",
         "unicorn/no-array-callback-reference": "off",
         "unicorn/no-array-for-each": "off",
         "unicorn/no-array-reverse": "off",

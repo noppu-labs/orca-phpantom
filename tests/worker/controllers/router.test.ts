@@ -956,7 +956,7 @@ test('reports the status bar at most once a second, ending on the latest state',
     text: '<?php // ok\n',
   });
   await sleep(1200);
-  assert.ok(statuses.length >= 1 && statuses.length <= 3, `saw ${statuses.length} updates`);
+  assert.ok(statuses.length > 0 && statuses.length <= 3, `saw ${statuses.length} updates`);
   assert.equal(statuses.at(-1)?.icon, 'check');
   assert.match(statuses.at(-1)!.tooltip, /1\.1\.0/);
 });
