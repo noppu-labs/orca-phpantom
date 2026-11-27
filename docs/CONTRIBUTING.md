@@ -6,7 +6,7 @@ orca-phpantom is an Orca plugin. The worker code is under `src/`, the editor tha
 
 Report bugs and request features in the [issue tracker](https://github.com/noppu-labs/orca-phpantom/issues). For a bug, include the plugin version, the Orca version, the PHPantom version (hover the status bar item), your operating system, and what you expected to happen. The lines from `orca plugin logs noppu-labs.phpantom` help. Security problems go through private reporting instead, as [SECURITY.md](../SECURITY.md) describes.
 
-Changes come in as pull requests against `main`. Each one needs a review and a passing CI run before it merges.
+Changes come in as pull requests against `main`. CI runs on each one, and `.github/CODEOWNERS` requests the maintainer's review.
 
 Contributions are licensed under the repository's [MIT license](../LICENSE). By opening a pull request you state that you have the right to submit the change under that license, as GitHub's Terms of Service require of every contribution to a repository with a license ([section D.6](https://docs.github.com/en/site-policy/github-terms/github-terms-of-service#6-contributions-under-repository-license)).
 
@@ -58,7 +58,7 @@ A failure prints a seed, a path and the smallest failing input. Reproduce it by 
 
 ## Dependencies
 
-The plugin has no runtime dependencies. Orca loads it without a bundler, so worker and editor code import only `orca` modules, Node builtins and relative files. `editor/src/vendor/diff3.mjs` is a copied file for that reason (see `THIRD_PARTY_NOTICES.md`). Everything in `package.json` is under `devDependencies`. `monaco-editor` and `esbuild` are build inputs that end up in `editor/dist`; the rest is tooling.
+The plugin has no runtime dependencies. Orca loads the worker without a bundler, so worker code imports only `orca` modules, Node builtins and relative files. Editor code follows the same rule, except for `monaco-editor`, which esbuild bundles into `editor/dist`. `editor/src/vendor/diff3.mjs` is a copied file for that reason (see `THIRD_PARTY_NOTICES.md`). Everything in `package.json` is under `devDependencies`: `monaco-editor` ends up in `editor/dist`, `esbuild` builds it, and the rest is tooling.
 
 A dependency is added or changed only in a pull request, where it is reviewed like any other change. `package-lock.json` pins the whole tree and is committed. CI installs with `npm ci --ignore-scripts`, so it uses the locked versions and runs no install script. GitHub Actions are pinned to a commit SHA.
 
@@ -98,7 +98,7 @@ Where things go:
 - `src/main.ts` only wires the router to Orca. Logic belongs in `controllers/` or `services/`.
 - `controllers/` handle the panel requests and commands and delegate to services. `services/` hold the logic and stay testable without Orca.
 - `utils/` and `constants/` are pure and take no imports outside themselves, because the editor bundle reads them too.
-- A source file with logic gets a test at the matching path under `tests/worker/` or `tests/editor/`. A rule that holds for every input gets a property in `tests/property/`.
+- A new source file with logic gets a test at the matching path under `tests/worker/` or `tests/editor/`; the binary services share `tests/worker/services/binary/binary.test.ts`. A rule that holds for every input gets a property in `tests/property/`.
 - Don't commit archives, files with the executable bit, native modules, bytecode, symlinks or TTF/OTF fonts. Orca's plugin indexer refuses a commit that holds one, and `tests/ship-set.test.ts` fails on any of them. The archive tests build their archives in memory (`tests/helpers/archives.ts`).
 
 ## The editor build

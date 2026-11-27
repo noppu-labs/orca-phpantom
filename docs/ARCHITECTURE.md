@@ -22,7 +22,7 @@ The file-by-file layout is in [CONTRIBUTING.md](CONTRIBUTING.md#layout).
 A custom editor never learns its file's path. The frame reads the document from Orca's document session and sends its text to the worker in `phpantom.open` chunks of up to 56 KiB, under Orca's 64 KiB request limit, with the workspace context Orca gave the frame. The router (`src/controllers/router.ts`) then:
 
 1. Finds the workspace. A remote workspace or a WSL share gets the answer `remote`, and the tab keeps highlighting only.
-2. Finds the file (`src/services/locate/locate.ts`). It tries files the user is navigating to, then files attached before, then walks the focused workspace and the other local ones breadth first, for up to 3 seconds and 80,000 entries, looking for a file of the right type with exactly this text. Without an exact match, the file sharing most of its lines wins, if it is clearly ahead. No match or a tie answers `single-file`.
+2. Finds the file (`src/services/locate/locate.ts`). It tries files the user is navigating to, then files attached before, then walks the focused workspace and then the other local ones breadth first, each for up to 3 seconds and 80,000 directories and matching files combined, looking for a file of the right type with exactly this text. Without an exact match, the file sharing most of its lines wins, if it is clearly ahead. No match or a tie answers `single-file`.
 3. Picks the nearest folder with a `composer.json` between the file and the workspace root (`src/services/locate/workspaces.ts`). A file under a project's `vendor/` belongs to that project.
 4. Starts PHPantom for that root if none runs, and sends `textDocument/didOpen`. Two tabs on one file share one open.
 5. Answers `ready` with PHPantom's capabilities, and the frame registers only the Monaco features PHPantom offers.
@@ -33,7 +33,7 @@ The frame batches Monaco's changes and sends them in `phpantom.change` at most 4
 
 ### A request
 
-Completion, hover, formatting and the other features go out as `phpantom.request` with an LSP method and params. The worker first makes sure PHPantom holds this tab's text, sets the document URI, and forwards the request. An answer over 900 KiB by Orca's measure (`src/utils/size.ts`) is cut: completion and location lists keep their leading items, semantic tokens keep whole tokens, and anything else answers `too_large`. The frame drops an answer that edits the text (formatting, rename, a resolved code action) if the text moved while it waited, and refuses a rename or fix whose edits reach other files.
+Completion, hover, formatting and the other features go out as `phpantom.request` with an LSP method and params. The worker first makes sure PHPantom holds this tab's text, sets the document URI, and forwards the request. An answer over 900 KiB or 9,000 objects by Orca's measure (`src/utils/size.ts`) is cut. Completion keeps its leading items and is marked `isIncomplete`; list answers (locations, highlights, symbols, inlay hints, code actions) keep their leading items; semantic tokens keep whole tokens; anything else answers `too_large`. The frame drops an answer that edits the text (formatting, rename, a resolved code action) if the text moved while it waited, and refuses a rename or fix whose edits reach other files.
 
 ### Navigation and peek
 
@@ -47,7 +47,7 @@ Each frame sends `phpantom.ping` every 20 seconds. Every 15 seconds the worker r
 
 ### Restart
 
-`PHPantom: Restart language servers` stops every PHPantom, forgets the binary, and posts `restarting` to each open tab, which then attaches again. When a PHPantom exits on its own, its tabs get an `error` status and attach again later. After a root's fourth crash within 5 minutes, opening a file there answers an error until the oldest of those crashes is 5 minutes old or the command runs.
+`PHPantom: Restart language servers` stops every PHPantom, forgets the binary, and posts `restarting` to each open tab, which then attaches again. When a PHPantom exits on its own, its tabs get an `error` status and attach again later. A root is started again after a crash at most 3 times in 5 minutes. After that, opening a file there answers an error until the oldest of those restarts is 5 minutes old or the command runs.
 
 ### Binary lookup and download
 
@@ -70,22 +70,22 @@ After a download the plugin writes a global `.phpantom.toml` that turns on full 
 
 Declared in `src/protocol.ts`. Every request but `open` and `close` carries the worker's `session`. For a stale session or a document the worker no longer holds, `change`, `request` and `ping` answer `detached`, `navigate` answers `failed`, and `peek` returns no files.
 
-| Request             | Input                                     | Output                                                              |
-| ------------------- | ----------------------------------------- | ------------------------------------------------------------------- |
-| `phpantom.open`     | Document id, language, workspace, a chunk | `ready`, `pending`, `single-file`, `remote` or `error`              |
-| `phpantom.change`   | Document id, version, LSP changes, length | `ok`, `detached` or `resync`                                        |
-| `phpantom.request`  | Document id, LSP method and params        | The result (with `truncated` when cut), `detached` or `error`       |
-| `phpantom.close`    | Document id                               | `ok`                                                                |
-| `phpantom.navigate` | Document id, a URI and a range            | `opened`, or not with `outside-workspace`, `not-a-file` or `failed` |
-| `phpantom.peek`     | Document id, URIs                         | The files read, and how many were left out                          |
-| `phpantom.ping`     | Document id                               | `ok` or `detached`                                                  |
+| Request             | Input                                     | Output                                                                  |
+| ------------------- | ----------------------------------------- | ----------------------------------------------------------------------- |
+| `phpantom.open`     | Document id, language, workspace, a chunk | `ready`, `pending`, `single-file`, `remote` or `error`                  |
+| `phpantom.change`   | Document id, version, LSP changes, length | `ok`, `detached` or `resync`                                            |
+| `phpantom.request`  | Document id, LSP method and params        | The result (with `truncated` when a list is cut), `detached` or `error` |
+| `phpantom.close`    | Document id                               | `ok`                                                                    |
+| `phpantom.navigate` | Document id, a URI and a range            | `opened`, or not with `outside-workspace`, `not-a-file` or `failed`     |
+| `phpantom.peek`     | Document id, URIs                         | The files read, and how many were left out                              |
+| `phpantom.ping`     | Document id                               | `ok` or `detached`                                                      |
 
-| Event                  | Payload                                                            |
-| ---------------------- | ------------------------------------------------------------------ |
-| `phpantom.diagnostics` | A document's diagnostics, and how many were left out (`truncated`) |
-| `phpantom.status`      | A document's state: `restarting`, `stopped` or `error`             |
-| `phpantom.refresh`     | Which features to ask for again, when PHPantom asks for that       |
-| `phpantom.reveal`      | A range to show in a document                                      |
+| Event                  | Payload                                                                          |
+| ---------------------- | -------------------------------------------------------------------------------- |
+| `phpantom.diagnostics` | A document's diagnostics, and how many were left out (`truncated`)               |
+| `phpantom.status`      | A document's state: `restarting` or `error` (`stopped` is declared but not sent) |
+| `phpantom.refresh`     | Which features to ask for again, when PHPantom asks for that                     |
+| `phpantom.reveal`      | A range to show in a document                                                    |
 
 Posts go through `src/services/outbox.ts`, which keeps them under Orca's 200 posts per 10 seconds and 256 KiB each. A newer post of the same kind for the same document replaces a queued one. A diagnostics list too big for one post keeps its most severe entries, and a long status message is shortened.
 

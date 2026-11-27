@@ -85,7 +85,7 @@ editor/
 │   │   ├── diagnostics.ts     # PHPantom's diagnostics as Monaco markers
 │   │   ├── reading.ts         # completion, hover, signature help, semantic tokens, inlay hints, outline
 │   │   └── editing.ts         # definitions, references, formatting, rename, code actions
-│   ├── vendor/diff3.mjs       # copy of node-diff3 3.2.1 (see THIRD_PARTY_NOTICES.md)
+│   ├── vendor/diff3.mjs       # copy of node-diff3 3.2.1, typed by diff3.d.mts (see THIRD_PARTY_NOTICES.md)
 │   ├── env.d.ts               # the __PHPANTOM_LANGUAGE__ global the pages set
 │   └── monaco-modules.d.ts    # types for Monaco's HTML language definition
 └── dist/                      # build output, committed
@@ -108,12 +108,12 @@ Where new code goes:
 - `controllers/` handle panel requests and commands and delegate to services. `services/` hold the logic and stay testable without Orca.
 - `utils/` and `constants/` are pure and shared with the editor; keep them free of Node-only imports.
 - A type shared by the editor and the worker goes in `src/protocol.ts`. Fixed values go in `constants/` or a named constant, not inline.
-- Editor code that can run without Monaco stays free of it (`bridge.ts`, `lsp-convert.ts`, `split.ts` and others), so Node tests it. Only `editor/src/monaco.ts` imports `monaco-editor`.
-- A source file with logic gets a test at the matching path under `tests/worker/` or `tests/editor/`. A rule that holds for every input gets a property in `tests/property/`.
+- Editor code that can run without Monaco stays free of it (`bridge.ts`, `lsp-convert.ts`, `split.ts` and others), so Node tests it. Only `editor/src/monaco.ts` and `editor/src/editor.worker.ts` import `monaco-editor`.
+- A new source file with logic gets a test at the matching path under `tests/worker/` or `tests/editor/`; the binary services share `tests/worker/services/binary/binary.test.ts`. A rule that holds for every input gets a property in `tests/property/`.
 
 ## Rules
 
-- Worker and editor code import only `orca` modules, Node builtins and relative files. Orca loads plugins without a bundler, and `orca plugin test` refuses any other bare import.
+- Worker code imports only `orca` modules, Node builtins and relative files: Orca loads it without a bundler, and `orca plugin test` refuses any other bare import. Editor code follows the same rule, except for `monaco-editor`, which esbuild bundles into `editor/dist`.
 - `editor/dist` is committed and must match a fresh `npm run build`; CI fails on any difference. Rebuild and commit it after changing `editor/src` or bumping `monaco-editor` or `esbuild`.
 - No symlinks, archives, files with the executable bit, native modules, bytecode or TTF/OTF fonts in the repo. Orca refuses a plugin that holds one; `tests/ship-set.test.ts` checks every tracked file. That is why `AGENTS.md` and `CLAUDE.md` are two files.
 - Orca's limits: 2,000 files and 50 MiB for the folder, 10 MiB per editor file, 1 MiB per `.ts` file. Requests from a frame are at most 64 KiB, answers 1 MiB, worker posts 256 KiB, all by Orca's measure (`src/utils/size.ts`).
