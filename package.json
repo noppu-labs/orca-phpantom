@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "node editor/build.mjs",
+    "build": "node scripts/build-editor.mjs",
     "test": "orca plugin test .",
     "typecheck": "tsc -p .",
     "lint": "oxlint",

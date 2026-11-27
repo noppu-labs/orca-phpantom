@@ -1,8 +1,8 @@
 import type { LspContentChange, LspPosition } from '../../src/protocol.ts';
-import { orcaSize } from '../../src/size.ts';
+import { orcaSize } from '../../src/utils/size.ts';
 
 // Orca refuses a panel request ("panel message exceeds the size limit") whose whole message is over 64 KiB or
-// 10,000 arrays and objects by its own measure (see src/size.ts), not by its JSON. A group of changes is held
+// 10,000 arrays and objects by its own measure (see src/utils/size.ts), not by its JSON. A group of changes is held
 // to both budgets below, in JSON bytes and in Orca's measure, which leaves room for the message around it:
 // the session token (up to 128 bytes), the action and request names, and the document id, session and length.
 export const REQUEST_BUDGET_BYTES = 56 * 1024;

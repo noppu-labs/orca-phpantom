@@ -1,9 +1,9 @@
 import type { OrcaWorkerApi } from 'orca/worker';
 
-import type { WorkspaceRow } from './locate/workspaces.ts';
+import { Router, type RouterHost } from './controllers/router.ts';
 import './protocol.ts';
-import { Router, type RouterHost } from './router.ts';
-import { aggregate, renderStatus, type StatusBarUpdate } from './status.ts';
+import type { WorkspaceRow } from './services/locate/workspaces.ts';
+import { aggregate, renderStatus, type StatusBarUpdate } from './services/status.ts';
 
 // Why a short cache: every open lists the workspaces, and a few seconds old is fresh enough.
 const WORKSPACE_LIST_TTL_MS = 10_000;

@@ -125,7 +125,7 @@
   },
   "overrides": [
     {
-      "files": ["**/*.test.ts", "**/*.test-helper.ts", "**/fixtures/**"],
+      "files": ["tests/**"],
       "rules": {
         "typescript/no-floating-promises": "off",
         "import/no-named-as-default-member": "off",
