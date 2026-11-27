@@ -13,21 +13,21 @@ const BOM = '﻿';
 /** The parts of a Monaco text model this needs; offsets never count the BOM. */
 interface ModelPort {
   /** `model.getValue()`: the text without the BOM, in the model's line ending. */
-  getText(): string;
-  getEol(): Eol;
+  getText: () => string;
+  getEol: () => Eol;
   /** `model.setValue()`: a fresh text and a fresh undo history. */
-  setText(text: string): void;
+  setText: (text: string) => void;
   /** `model.pushEOL()`: rewrites every line ending, as an undoable edit. */
-  setEol(eol: Eol): void;
+  setEol: (eol: Eol) => void;
   /** `model.pushEditOperations()` over the range between two offsets. */
-  replace(start: number, end: number, text: string): void;
-  pushStackElement(): void;
-  onDidChangeContent(listener: () => void): { dispose(): void };
+  replace: (start: number, end: number, text: string) => void;
+  pushStackElement: () => void;
+  onDidChangeContent: (listener: () => void) => { dispose: () => void };
 }
 
 type ModelView = TextView & {
   /** Puts the first document in without sending it back and without an undo step to empty it. */
-  load(initial: string): void;
+  load: (initial: string) => void;
 };
 
 /** The line ending Monaco picks for a whole text: CRLF when more than half the line breaks have a `\r`. */

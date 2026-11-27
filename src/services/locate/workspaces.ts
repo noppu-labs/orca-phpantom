@@ -59,7 +59,7 @@ function composerRoot(
   workspacePath: string,
   exists: (path: string) => boolean = existsSync
 ): string {
-  const hasComposer = (directory: string) =>
+  const hasComposer = (directory: string): boolean =>
     exists(`${directory.endsWith(sep) ? directory : directory + sep}composer.json`);
   const chain: string[] = [];
   let directory = dirname(filePath);

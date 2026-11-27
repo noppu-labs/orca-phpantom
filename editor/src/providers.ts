@@ -25,6 +25,7 @@ import {
   type LspCodeAction,
   type LspDiagnostic,
   type LspInlayHint,
+  type LspPosition,
   type LspTextEdit,
   type LspWorkspaceEdit,
   type MonacoRange,
@@ -43,7 +44,7 @@ import {
 import { clearNote, showNote } from './notes.ts';
 
 interface Disposable {
-  dispose(): void;
+  dispose: () => void;
 }
 type Capabilities = Record<string, any>; // The server's own JSON
 type Model = monaco.editor.ITextModel;
@@ -127,7 +128,9 @@ function registerReadingProviders(
     silent = false
   ): Promise<any> =>
     withSignal(token, async (signal) => bridge.ask(method, params, signal, { kind, silent }));
-  const atCursor = (position: monaco.Position) => ({ position: toLspPosition(position) });
+  const atCursor = (position: monaco.Position): { position: LspPosition } => ({
+    position: toLspPosition(position),
+  });
   const edits = (list: LspTextEdit[]): monaco.languages.TextEdit[] => list.map(toMonacoEdit);
 
   // --- completion ---
@@ -384,7 +387,9 @@ function registerEditingProviders(
     withSignal(token, async (signal) =>
       bridge.ask(method, params, signal, { kind: 'user', ...options })
     );
-  const atCursor = (position: monaco.Position) => ({ position: toLspPosition(position) });
+  const atCursor = (position: monaco.Position): { position: LspPosition } => ({
+    position: toLspPosition(position),
+  });
   const edits = (list: LspTextEdit[] | null | undefined): monaco.languages.TextEdit[] | null =>
     Array.isArray(list) ? list.map(toMonacoEdit) : null;
 
@@ -420,7 +425,7 @@ function registerEditingProviders(
     locations: { uri: string; range: MonacoRange }[],
     token: monaco.CancellationToken,
     keepUnread: boolean
-  ) => {
+  ): Promise<{ uri: string; range: MonacoRange }[]> => {
     const files = [...new Set(locations.map((location) => location.uri))].filter((uri) =>
       /^file:/i.test(uri)
     );
@@ -450,7 +455,7 @@ function registerEditingProviders(
     token: monaco.CancellationToken,
     keepUnread: boolean,
     extra: Record<string, unknown> = {}
-  ) => {
+  ): Promise<monaco.languages.Location[] | null> => {
     if (!ours(m)) return null;
     const answer = await withSignal(token, async (signal) =>
       bridge.askDetailed(method, { ...atCursor(position), ...extra }, signal, { kind: 'user' })
@@ -517,7 +522,9 @@ function registerEditingProviders(
   }
 
   // --- formatting ---
-  const formatting = (options: monaco.languages.FormattingOptions) => ({
+  const formatting = (
+    options: monaco.languages.FormattingOptions
+  ): { options: { tabSize: number; insertSpaces: boolean } } => ({
     options: { tabSize: options.tabSize, insertSpaces: options.insertSpaces },
   });
   if (caps.documentFormattingProvider) {

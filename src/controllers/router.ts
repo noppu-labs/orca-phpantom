@@ -32,13 +32,13 @@ import { sameUri, uriKey } from '../utils/uri.ts';
 
 interface RouterHost {
   /** May answer from a short cache; `fresh` asks Orca again. */
-  listWorkspaces(options?: { fresh?: boolean }): Promise<WorkspaceRow[]>;
+  listWorkspaces: (options?: { fresh?: boolean }) => Promise<WorkspaceRow[]>;
   /** `path` is relative to the workspace, with forward slashes: `editor.open` refuses absolute paths. */
-  openEditor(workspaceId: string, path: string): Promise<void>;
-  post(event: string, payload: unknown, options: { panel: string }): void;
-  status(update: StatusBarUpdate): void;
-  log(message: string): void;
-  settings(): Promise<{ phpantomPath: string; allowDownload: boolean }>;
+  openEditor: (workspaceId: string, path: string) => Promise<void>;
+  post: (event: string, payload: unknown, options: { panel: string }) => void;
+  status: (update: StatusBarUpdate) => void;
+  log: (message: string) => void;
+  settings: () => Promise<{ phpantomPath: string; allowDownload: boolean }>;
 }
 
 interface RouterOptions {

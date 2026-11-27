@@ -40,7 +40,7 @@ function chunkText(text: string, budget: number = REQUEST_BUDGET_BYTES): string[
     if (size + cost > budget && i > start) {
       // A piece starting with LF would fuse with a lone CR before the insertion point and move that point.
       let cut = i;
-      const unsafe = (c: number) => {
+      const unsafe = (c: number): boolean => {
         const u = text.charCodeAt(c);
         const midPair =
           u >= 0xdc_00 && u <= 0xdf_ff && (text.charCodeAt(c - 1) & 0xfc_00) === 0xd8_00;
@@ -101,7 +101,7 @@ function splitChanges(
   let size = 2;
   let orcaBytes = 8;
   let objects = 1;
-  const flush = () => {
+  const flush = (): void => {
     if (current.length > 0) groups.push(current);
     current = [];
     size = 2;

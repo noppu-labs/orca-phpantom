@@ -7,7 +7,7 @@ import { toLspRange, type MonacoRange } from './lsp-convert.ts';
 import { showNote } from './notes.ts';
 
 interface Disposable {
-  dispose(): void;
+  dispose: () => void;
 }
 interface Location {
   uri: string;

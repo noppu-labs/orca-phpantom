@@ -9,11 +9,11 @@ import { RpcConnection } from './jsonrpc.ts';
 type RefreshKind = 'semanticTokens' | 'inlayHints' | 'codeLens' | 'diagnostics';
 
 interface ServerEvents {
-  diagnostics(uri: string, diagnostics: unknown[]): void;
-  progress(state: ServerState): void;
-  refresh(kind: RefreshKind): void;
-  log(message: string): void;
-  exit(reason: string): void;
+  diagnostics: (uri: string, diagnostics: unknown[]) => void;
+  progress: (state: ServerState) => void;
+  refresh: (kind: RefreshKind) => void;
+  log: (message: string) => void;
+  exit: (reason: string) => void;
 }
 
 interface PhpantomServerOptions {

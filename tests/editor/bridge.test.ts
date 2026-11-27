@@ -46,7 +46,7 @@ function readyOn(_when: 'last'): OpenHandler {
 }
 
 type FakeHost = BridgeHost & {
-  calls(name: string): Call[];
+  calls: (name: string) => Call[];
   /** What the router would do with each request; replace to script answers. */
   handlers: {
     open: OpenHandler;
@@ -64,14 +64,14 @@ type FakeHost = BridgeHost & {
   maxInFlight: Record<string, number>;
   /** Orca's admission: an error returned here is thrown before the worker sees the call. */
   refuse: (name: string, input: any) => Error | undefined;
-  ready(): AttachStatus;
-  restart(session: string): void;
-  post(event: string, payload: unknown): void;
-  workspaceChanged(context: WorkspaceContext | null): void;
-  firstInput(): void;
-  visible(): void;
-  saved(): void;
-  settingsChanged(): void;
+  ready: () => AttachStatus;
+  restart: (session: string) => void;
+  post: (event: string, payload: unknown) => void;
+  workspaceChanged: (context: WorkspaceContext | null) => void;
+  firstInput: () => void;
+  visible: () => void;
+  saved: () => void;
+  settingsChanged: () => void;
 };
 
 function fakeHost(

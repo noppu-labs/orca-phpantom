@@ -77,14 +77,14 @@ function attachLanguageServer(ctx: EditorContext): LspBridge {
   const bridge = new LspBridge(frameHost(), modelSource(ctx), { docId });
   showDiagnostics(ctx, bridge);
   // Registered anew on each attach: a new server can say it supports something else.
-  const providers: { dispose(): void }[] = [];
+  const providers: { dispose: () => void }[] = [];
   const unregister = (): void => {
     for (const registered of providers.splice(0)) registered.dispose();
   };
   bridge.onReady((status) => {
     unregister();
     // Each on its own: a failure in one set leaves the others working.
-    const register = (what: string, run: () => { dispose(): void }): void => {
+    const register = (what: string, run: () => { dispose: () => void }): void => {
       try {
         providers.push(run());
       } catch (error) {

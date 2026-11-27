@@ -2,7 +2,7 @@ import { assert, test, mockEditorHost } from 'orca/testing';
 
 import { bindDocument, flushWhenHidden, type TextView } from '../../editor/src/sync.ts';
 
-function fakeView(initial = ''): TextView & { type(text: string): void } {
+function fakeView(initial = ''): TextView & { type: (text: string) => void } {
   let value = initial;
   const listeners = new Set<() => void>();
   return {

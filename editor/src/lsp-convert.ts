@@ -74,7 +74,13 @@ interface LspDiagnostic {
 }
 
 /** A diagnostic as a Monaco marker. Tags (unnecessary code, deprecated) use the same numbers in both. */
-function toMarker(diagnostic: LspDiagnostic) {
+function toMarker(diagnostic: LspDiagnostic): MonacoRange & {
+  severity: number;
+  message: string;
+  code?: string;
+  source?: string;
+  tags?: number[];
+} {
   const code = typeof diagnostic.code === 'object' ? diagnostic.code.value : diagnostic.code;
   return {
     ...fromLspRange(diagnostic.range),
@@ -152,7 +158,7 @@ interface LspTextEdit {
   newText: string;
 }
 
-const toMonacoEdit = (edit: LspTextEdit) => ({
+const toMonacoEdit = (edit: LspTextEdit): { range: MonacoRange; text: string } => ({
   range: fromLspRange(edit.range),
   text: edit.newText,
 });
@@ -184,7 +190,10 @@ interface LspWorkspaceEdit {
 }
 
 /** Splits a workspace edit into edits for the open document and the number of other files it touches. */
-function splitWorkspaceEdit(edit: LspWorkspaceEdit | null | undefined, documentUri: string) {
+function splitWorkspaceEdit(
+  edit: LspWorkspaceEdit | null | undefined,
+  documentUri: string
+): { own: { range: MonacoRange; text: string }[]; otherFiles: number } {
   const byUri = new Map<string, LspTextEdit[]>();
   let fileOperations = 0;
   for (const [uri, edits] of Object.entries(edit?.changes ?? {})) {
@@ -238,7 +247,15 @@ function toCodeAction(
   documentUri: string,
   modelUri: string,
   versionId?: number
-) {
+): {
+  title: string;
+  kind?: string;
+  isPreferred?: boolean;
+  disabled?: string;
+  edit?: MonacoWorkspaceEdit;
+  needsResolve: boolean;
+  otherFiles: number;
+} | null {
   if (!action.edit && action.data === undefined) {
     return null;
   }
@@ -321,7 +338,11 @@ interface LspCompletionDetails {
  * above all, the edits that go with picking it (the import that makes a symbol from another file usable).
  * Only what the server gave is returned, so nothing already known is overwritten with nothing.
  */
-function completionDetails(resolved: LspCompletionDetails | null | undefined) {
+function completionDetails(resolved: LspCompletionDetails | null | undefined): {
+  detail?: string;
+  documentation?: { value: string };
+  additionalTextEdits?: { range: MonacoRange; text: string }[];
+} {
   if (!resolved) {
     return {};
   }

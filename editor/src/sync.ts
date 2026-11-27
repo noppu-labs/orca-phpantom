@@ -2,16 +2,16 @@ import { smallestEdit, type Splice } from './edits.ts';
 import { mergeText } from './merge.ts';
 
 interface TextView {
-  getValue(): string;
-  applyOutside(splice: Splice): void;
-  onUserChange(listener: () => void): { dispose(): void };
+  getValue: () => string;
+  applyOutside: (splice: Splice) => void;
+  onUserChange: (listener: () => void) => { dispose: () => void };
 }
 
 /** Keeps `view` and the Orca document in sync; resolves once the first document is in. */
 async function bindDocument(
   view: TextView,
-  options: { onConflicts?(count: number): void } = {}
-): Promise<{ readOnly: boolean; initial: string; flush(): void; dispose(): void }> {
+  options: { onConflicts?: (count: number) => void } = {}
+): Promise<{ readOnly: boolean; initial: string; flush: () => void; dispose: () => void }> {
   const api = globalThis.orca.document;
   if (!api) {
     throw new Error('orca.document is only available in custom editors');
@@ -72,7 +72,7 @@ function flushWhenHidden(
   flush: () => void,
   win: EventTarget,
   page: VisibilityTarget
-): { dispose(): void } {
+): { dispose: () => void } {
   const run = (): void => {
     try {
       flush();

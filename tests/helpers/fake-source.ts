@@ -5,10 +5,10 @@ import type { Language, LspPosition } from '../../src/protocol.ts';
 type FakeSource = DocumentSource & {
   readonly text: string;
   /** One edit, in offsets of the current text. */
-  edit(start: number, end: number, insert: string): void;
+  edit: (start: number, end: number, insert: string) => void;
   /** One event with several edits (multi-cursor), each in offsets of the text before the event. */
-  editMany(edits: [number, number, string][]): void;
-  replaceAll(text: string): void;
+  editMany: (edits: [number, number, string][]) => void;
+  replaceAll: (text: string) => void;
 };
 
 function source(initial: string, language: Language = 'php'): FakeSource {

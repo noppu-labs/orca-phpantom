@@ -6,7 +6,7 @@ import { isRateLimited, Pacer } from './pacer.ts';
 import { chunkText, splitChanges } from './split.ts';
 
 interface Disposable {
-  dispose(): void;
+  dispose: () => void;
 }
 type Ready = AttachStatus & { state: 'ready' };
 
@@ -17,25 +17,25 @@ interface WorkspaceContext {
 }
 
 interface BridgeHost {
-  request<K extends keyof PluginRequests>(
+  request: <K extends keyof PluginRequests>(
     name: K,
     input: PluginRequestInput<K>,
     options?: { timeoutMs?: number; signal?: AbortSignal }
-  ): Promise<PluginRequestOutput<K>>;
+  ) => Promise<PluginRequestOutput<K>>;
   /** What the worker posts to this editor's panel; every frame of the editor hears every post. */
-  on(event: string, handler: (payload: any) => void): Disposable;
+  on: (event: string, handler: (payload: any) => void) => Disposable;
   /** The focused workspace, which is not always this frame's: see the R2 notes on LspBridge. */
-  readContext(): Promise<WorkspaceContext | null>;
+  readContext: () => Promise<WorkspaceContext | null>;
   /** Orca's `workspace.changed`, the current context first. Background frames hear it too. */
-  onWorkspaceChanged(listener: (context: WorkspaceContext | null) => void): Disposable;
+  onWorkspaceChanged: (listener: (context: WorkspaceContext | null) => void) => Disposable;
   /** The first pointer or key press inside this frame; only the frame on screen can get one. */
-  onFirstInput(listener: () => void): Disposable;
+  onFirstInput: (listener: () => void) => Disposable;
   /** The tab was shown. Only a moment to retry a failed attach, never a reason to re-attach. */
-  onVisible(listener: () => void): Disposable;
+  onVisible: (listener: () => void) => Disposable;
   /** Orca is about to save the file. The listener must not delay the save. */
-  onSaved(listener: () => void): Disposable;
+  onSaved: (listener: () => void) => Disposable;
   /** The plugin's settings changed (say, the PHPantom path), which can fix a failed attach. */
-  onSettingsChanged(listener: () => void): Disposable;
+  onSettingsChanged: (listener: () => void) => Disposable;
 }
 
 /** A content change with the length of the text it replaced, as Monaco reports it. */
@@ -47,12 +47,12 @@ interface SourceChange {
 
 interface DocumentSource {
   language: Language;
-  getText(): string;
-  getLength(): number;
+  getText: () => string;
+  getLength: () => number;
   /** Rises with every change. */
-  getVersion(): number;
+  getVersion: () => number;
   /** `isFlush`: the whole text was replaced (or its line endings changed), so send it whole. */
-  onChanges(listener: (changes: SourceChange[], isFlush: boolean) => void): Disposable;
+  onChanges: (listener: (changes: SourceChange[], isFlush: boolean) => void) => Disposable;
 }
 
 /**

@@ -4,15 +4,15 @@
 
 interface RpcHandlers {
   /** A request the server makes of us (configuration, registering capabilities ...); its result is the answer. */
-  onRequest(method: string, params: unknown): Promise<unknown> | unknown;
-  onNotification(method: string, params: unknown): void;
+  onRequest: (method: string, params: unknown) => Promise<unknown> | unknown;
+  onNotification: (method: string, params: unknown) => void;
   /** A handler threw on a message; the connection carries on with the next one. */
-  onError?(message: string): void;
+  onError?: (message: string) => void;
 }
 
 interface Pending {
-  resolve(value: unknown): void;
-  reject(error: Error): void;
+  resolve: (value: unknown) => void;
+  reject: (error: Error) => void;
 }
 
 const HEADER_END = Buffer.from('\r\n\r\n');

@@ -32,8 +32,8 @@ interface ResolveOptions {
   platform: string;
   arch: string;
   home: string;
-  onDownload?(): void;
-  log?(message: string): void;
+  onDownload?: () => void;
+  log?: (message: string) => void;
   fetchImpl?: typeof fetch;
   readVersionImpl?: typeof readVersion;
   /** Test seam: where the release assets come from. */

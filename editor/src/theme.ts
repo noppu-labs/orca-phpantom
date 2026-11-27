@@ -141,7 +141,15 @@ function themeColors(vars: Record<string, string>): Record<string, string> {
 }
 
 /** Orca's file editor typography as Monaco options. */
-function typographyOptions(t: EditorTypography) {
+function typographyOptions(t: EditorTypography): {
+  fontFamily: string;
+  fontSize: number;
+  fontWeight: string;
+  lineHeight: number;
+  fontLigatures: boolean;
+  wordWrap: 'on' | 'off';
+  minimap: { enabled: boolean };
+} {
   return {
     fontFamily: t.cssFontFamily,
     fontSize: t.fontSize,
@@ -191,7 +199,7 @@ function readOrcaVars(): Record<string, string> {
 /** The structural slice of Monaco this file needs. */
 interface ThemeHost {
   editor: {
-    defineTheme(
+    defineTheme: (
       name: string,
       data: {
         base: 'vs' | 'vs-dark';
@@ -199,7 +207,7 @@ interface ThemeHost {
         rules: ThemeRule[];
         colors: Record<string, string>;
       }
-    ): void;
+    ) => void;
   };
 }
 
