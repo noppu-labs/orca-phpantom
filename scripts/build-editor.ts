@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 // Adapted from actus7/orca-autocomplete editor/build.mjs @ da5a680 (MIT). See THIRD_PARTY_NOTICES.md.
 // Builds the editor into editor/dist: Orca installs a plugin as files and runs it with no network and no node_modules, so Monaco and our code ship prebuilt.
 // Run `npm run build` after changing editor/src and commit the result; CI rebuilds and fails when editor/dist differs.
-import { build } from 'esbuild';
+import { build, type BuildOptions } from 'esbuild';
 
 const MAX_FILE_BYTES = 10 * 1024 * 1024;
 const MAX_FILES = 200;
@@ -15,7 +15,7 @@ const pluginDir = fileURLToPath(new URL('..', import.meta.url));
 const dist = join(pluginDir, 'editor/dist');
 
 rmSync(dist, { force: true, recursive: true });
-const shared = {
+const shared: BuildOptions = {
   absWorkingDir: pluginDir,
   bundle: true,
   format: 'esm',
@@ -34,7 +34,7 @@ await build({
 // Why a second build: the worker is loaded on its own and must not depend on the page's chunks.
 await build({ ...shared, entryPoints: { 'editor.worker': 'editor/src/editor.worker.ts' } });
 
-function files(dir) {
+function files(dir: string): { bytes: number; path: string }[] {
   return readdirSync(dir).flatMap((entry) => {
     const full = join(dir, entry);
     return statSync(full).isDirectory()
