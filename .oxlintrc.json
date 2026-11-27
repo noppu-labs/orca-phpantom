@@ -178,7 +178,6 @@
         "typescript/no-unsafe-enum-comparison": "off",
         "typescript/prefer-for-of": "off",
         "unicorn/consistent-function-scoping": "off",
-        "unicorn/no-array-callback-reference": "off",
         "unicorn/no-array-for-each": "off",
         "unicorn/no-await-expression-member": "off",
         "unicorn/no-immediate-mutation": "off",

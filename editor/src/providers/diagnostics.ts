@@ -21,8 +21,9 @@ function diagnosticsOf(model: Model): LspDiagnostic[] {
 function showDiagnostics(ctx: EditorContext, bridge: LspBridge): Disposable {
   const set = (diagnostics: LspDiagnostic[]): void => {
     diagnosticsByModel.set(ctx.model, diagnostics);
+    const markers = diagnostics.map((diagnostic) => toMarker(diagnostic));
     // oxlint-disable-next-line typescript/no-unsafe-enum-assignment -- toMarker has already turned LSP's severities into Monaco's numbers, and both number tags the same way
-    ctx.monaco.editor.setModelMarkers(ctx.model, MARKER_OWNER, diagnostics.map(toMarker));
+    ctx.monaco.editor.setModelMarkers(ctx.model, MARKER_OWNER, markers);
   };
   return disposeAll([
     bridge.onDiagnostics((diagnostics) => {

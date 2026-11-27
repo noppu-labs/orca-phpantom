@@ -62,7 +62,8 @@ function registerReadingProviders(
   const atCursor = (position: monaco.Position): { position: LspPosition } => ({
     position: toLspPosition(position),
   });
-  const edits = (list: LspTextEdit[]): monaco.languages.TextEdit[] => list.map(toMonacoEdit);
+  const edits = (list: LspTextEdit[]): monaco.languages.TextEdit[] =>
+    list.map((edit) => toMonacoEdit(edit));
 
   // --- completion ---
   if (isTruthy(capabilities.completionProvider)) {
@@ -277,7 +278,7 @@ function registerReadingProviders(
           );
           if (!isInlayHintList(result)) return null;
           // oxlint-disable-next-line typescript/no-unsafe-enum-assignment -- LSP and Monaco number inlay hint kinds the same way (1 type, 2 parameter)
-          return { dispose: noop, hints: result.map(toInlayHint) };
+          return { dispose: noop, hints: result.map((hint) => toInlayHint(hint)) };
         },
       })
     );

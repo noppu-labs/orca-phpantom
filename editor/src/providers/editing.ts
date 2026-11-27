@@ -85,7 +85,7 @@ function registerEditingProviders(
     position: toLspPosition(position),
   });
   const edits = (list: unknown): monaco.languages.TextEdit[] | null =>
-    isTextEditList(list) ? list.map(toMonacoEdit) : null;
+    isTextEditList(list) ? list.map((edit) => toMonacoEdit(edit)) : null;
 
   // --- definitions and references ---
   const peekModels = new PeekModels((uri, text) => {

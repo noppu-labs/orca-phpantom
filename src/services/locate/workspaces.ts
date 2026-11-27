@@ -83,7 +83,7 @@ function composerRoot(
       return parent;
     }
   }
-  return chain.find(hasComposer) ?? workspacePath;
+  return chain.find((folder) => hasComposer(folder)) ?? workspacePath;
 }
 
 /** The local row with the longest path that contains the file. */

@@ -45,7 +45,10 @@ test('positions and ranges convert between 0-based LSP and 1-based Monaco, and b
 });
 
 test('severity maps to Monaco markers and defaults to error', () => {
-  assert.deepEqual([1, 2, 3, 4, undefined].map(markerSeverity), [8, 4, 2, 1, 8]);
+  assert.deepEqual(
+    [1, 2, 3, 4, undefined].map((severity) => markerSeverity(severity)),
+    [8, 4, 2, 1, 8]
+  );
 });
 
 test('toMarker keeps the message, code, source and tags', () => {

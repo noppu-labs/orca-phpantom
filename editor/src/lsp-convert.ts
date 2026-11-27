@@ -86,7 +86,8 @@ interface LspDiagnostic {
 }
 
 /** Whether every diagnostic in `list` is an object; the list itself is kept as sent, never copied. */
-const isDiagnosticList = (list: unknown[]): list is LspDiagnostic[] => list.every(isRecord);
+const isDiagnosticList = (list: unknown[]): list is LspDiagnostic[] =>
+  list.every((item) => isRecord(item));
 
 /** A diagnostic as a Monaco marker. Tags (unnecessary code, deprecated) use the same numbers in both. */
 function toMarker(diagnostic: LspDiagnostic): MonacoRange & {
@@ -279,7 +280,7 @@ function splitWorkspaceEdit(
   const own = ownKey === undefined || ownKey === '' ? [] : (byUri.get(ownKey) ?? []);
   const otherFiles =
     [...byUri.keys()].filter((uri) => !sameUri(uri, documentUri)).length + fileOperations;
-  return { otherFiles, own: own.map(toMonacoEdit) };
+  return { otherFiles, own: own.map((edit) => toMonacoEdit(edit)) };
 }
 
 interface MonacoWorkspaceEdit {
