@@ -633,7 +633,7 @@ export class LspBridge {
 
   /** One re-attach at a time, at most one per gap; resolves whether it attached. */
   private reattachNow(): Promise<boolean> {
-    if (this.reattaching) return this.reattaching;
+    if (this.reattaching !== null) return this.reattaching;
     const delay = Math.max(0, this.lastReattachAt + this.reattachGapMs - Date.now());
     this.reattaching = new Promise<boolean>((resolve) => {
       this.reattachTimer = setTimeout(() => {

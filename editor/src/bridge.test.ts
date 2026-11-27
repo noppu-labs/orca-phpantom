@@ -342,6 +342,24 @@ test('re-opens after the worker reports a new session', async () => {
   bridge.dispose();
 });
 
+test('asks that overlap a re-attach share one open; a later loss opens again', async () => {
+  const host = fakeHost();
+  const bridge = new LspBridge(host, source('<?php\n'), FAST);
+  await bridge.attach();
+  const hover = { position: { line: 0, character: 1 } };
+  host.restart('s2');
+  const answers = await Promise.all([
+    bridge.ask('textDocument/hover', hover),
+    bridge.ask('textDocument/hover', hover),
+  ]);
+  assert.deepEqual(answers, ['answer to textDocument/hover', 'answer to textDocument/hover']);
+  assert.equal(fullOpens(host).length, 2);
+  host.restart('s3');
+  assert.equal(await bridge.ask('textDocument/hover', hover), 'answer to textDocument/hover');
+  assert.equal(fullOpens(host).length, 3);
+  bridge.dispose();
+});
+
 test('an unavailable worker is re-attached', async () => {
   const host = fakeHost();
   const doc = source('<?php\n');
