@@ -31,7 +31,7 @@ class Pacer {
   private blockedUntil = 0;
   private backoff = 0;
 
-  constructor(options: PacerOptions = {}) {
+  public constructor(options: PacerOptions = {}) {
     this.windowMs = options.windowMs ?? 10_000;
     this.passiveCap = options.passiveCap ?? 50;
     this.firstBackoffMs = options.firstBackoffMs ?? 1000;
@@ -40,12 +40,12 @@ class Pacer {
   }
 
   /** Milliseconds until Orca should take calls again. */
-  wait(): number {
+  public wait(): number {
     return Math.max(0, this.blockedUntil - this.now());
   }
 
   /** Whether a passive call may go out now; a yes counts it, so calls asked at once cannot overshoot the cap. */
-  takePassive(): boolean {
+  public takePassive(): boolean {
     this.prune();
     if (this.wait() > 0 || this.sent.length >= this.passiveCap) return false;
     this.sent.push(this.now());
@@ -53,7 +53,7 @@ class Pacer {
   }
 
   /** Orca refused a call: holds calls back and answers for how long. */
-  refused(error: unknown): number {
+  public refused(error: unknown): number {
     const now = this.now();
     // Why not escalate during a hold: calls already in flight when it began come back refused too.
     if (now < this.blockedUntil) return this.blockedUntil - now;
@@ -71,7 +71,7 @@ class Pacer {
     return hold;
   }
 
-  succeeded(): void {
+  public succeeded(): void {
     this.backoff = 0;
   }
 

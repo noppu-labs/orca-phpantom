@@ -52,7 +52,7 @@ async function delay(ms: number): Promise<'timeout'> {
 }
 
 class PhpantomServer {
-  capabilities: Record<string, unknown> = {};
+  public capabilities: Record<string, unknown> = {};
   private readonly options: PhpantomServerOptions;
   private readonly stderrTail: string[] = [];
   private readonly openTokens = new Set<string>();
@@ -65,15 +65,15 @@ class PhpantomServer {
   private resolveExited: () => void = () => {};
   private exited: Promise<void> = Promise.resolve();
 
-  constructor(options: PhpantomServerOptions) {
+  public constructor(options: PhpantomServerOptions) {
     this.options = options;
   }
 
-  get alive(): boolean {
+  public get alive(): boolean {
     return this.started && !this.finished;
   }
 
-  async start(): Promise<void> {
+  public async start(): Promise<void> {
     const { executable, root, events } = this.options;
     const launch = this.options.spawnImpl ?? spawn;
     const child = launch(executable, ['--stdio'], {
@@ -167,13 +167,13 @@ class PhpantomServer {
     }
   }
 
-  notify(method: string, params: unknown): void {
+  public notify(method: string, params: unknown): void {
     if (this.alive) {
       this.rpc?.notify(method, params);
     }
   }
 
-  async request(method: string, params: unknown, signal?: AbortSignal): Promise<unknown> {
+  public async request(method: string, params: unknown, signal?: AbortSignal): Promise<unknown> {
     if (!this.alive || !this.rpc) {
       throw new Error('the language server is not running');
     }
@@ -181,7 +181,7 @@ class PhpantomServer {
   }
 
   /** `shutdown` (2 s cap), `exit`, close stdin, kill if it is still there 2 s later. Does not report an exit event. */
-  async stop(): Promise<void> {
+  public async stop(): Promise<void> {
     const { child, rpc } = this;
     if (!child || !rpc) {
       return;

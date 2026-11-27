@@ -19,9 +19,9 @@ const HEADER_END = Buffer.from('\r\n\r\n');
 const LENGTH_HEADER = /content-length:\s*(\d+)/i;
 
 class RpcError extends Error {
-  readonly code: number;
+  public readonly code: number;
 
-  constructor(code: number, message: string) {
+  public constructor(code: number, message: string) {
     super(message);
     this.name = 'RpcError';
     this.code = code;
@@ -36,13 +36,13 @@ class RpcConnection {
   private readonly write: (frame: string) => void;
   private readonly handlers: RpcHandlers;
 
-  constructor(write: (frame: string) => void, handlers: RpcHandlers) {
+  public constructor(write: (frame: string) => void, handlers: RpcHandlers) {
     this.write = write;
     this.handlers = handlers;
   }
 
   /** Feed bytes as they arrive from the server's stdout; whole messages are dispatched. */
-  feed(chunk: Buffer): void {
+  public feed(chunk: Buffer): void {
     this.buffer = Buffer.concat([this.buffer, chunk]);
     for (;;) {
       const headerEnd = this.buffer.indexOf(HEADER_END);
@@ -70,7 +70,7 @@ class RpcConnection {
    * On abort the server is told to stop (`$/cancelRequest`), the promise rejects with `cancelled`, and
    * whatever answer still arrives for that id is ignored.
    */
-  async request(method: string, params: unknown, signal?: AbortSignal): Promise<unknown> {
+  public async request(method: string, params: unknown, signal?: AbortSignal): Promise<unknown> {
     if (this.closed) {
       throw new Error('the language server is not running');
     }
@@ -100,14 +100,14 @@ class RpcConnection {
     });
   }
 
-  notify(method: string, params: unknown): void {
+  public notify(method: string, params: unknown): void {
     if (!this.closed) {
       this.send({ jsonrpc: '2.0', method, params });
     }
   }
 
   /** The server went away: everything still waiting fails instead of hanging. */
-  close(reason = 'the language server stopped'): void {
+  public close(reason = 'the language server stopped'): void {
     this.closed = true;
     for (const waiting of this.pending.values()) {
       waiting.reject(new Error(reason));

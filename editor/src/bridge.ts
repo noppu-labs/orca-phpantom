@@ -187,7 +187,7 @@ function groupsOf(event: QueuedEvent): { groups: Group[]; lengthBefore: number }
  * input in this frame (and `settleMs` after the last switch) differs. Nothing else re-targets it.
  */
 class LspBridge {
-  readonly docId: string;
+  public readonly docId: string;
   private readonly host: BridgeHost;
   private readonly source: DocumentSource;
   private readonly syncDelayMs: number;
@@ -259,7 +259,7 @@ class LspBridge {
   /** The ping in flight, if any: one at a time, and one from before a re-attach does not hold up the next. */
   private pinging: object | null = null;
 
-  constructor(host: BridgeHost, source: DocumentSource, options: BridgeOptions = {}) {
+  public constructor(host: BridgeHost, source: DocumentSource, options: BridgeOptions = {}) {
     this.host = host;
     this.source = source;
     this.docId = options.docId ?? crypto.randomUUID();
@@ -331,12 +331,12 @@ class LspBridge {
     this.subscriptions.push(firstInput);
   }
 
-  get status(): AttachStatus | null {
+  public get status(): AttachStatus | null {
     return this.current;
   }
 
   /** Attaches the document; resolves with the answer of the latest attempt (a re-target may replace this one). */
-  async attach(): Promise<AttachStatus> {
+  public async attach(): Promise<AttachStatus> {
     if (this.targetWorkspace === undefined && !this.contextFromEvent) {
       const read = await this.host.readContext().catch(() => null);
       // Why the check: a workspace.changed that arrived meanwhile is at least as new.
@@ -346,7 +346,7 @@ class LspBridge {
   }
 
   /** Sends `method` once queued changes are in; null when aborted, failed, held back, or (for edits) outdated. */
-  async ask(
+  public async ask(
     method: string,
     params: Record<string, unknown>,
     signal?: AbortSignal,
@@ -356,7 +356,7 @@ class LspBridge {
   }
 
   /** As `ask`, with how many items the worker cut from a list too large for Orca to carry. */
-  async askDetailed(
+  public async askDetailed(
     method: string,
     params: Record<string, unknown>,
     signal?: AbortSignal,
@@ -444,7 +444,7 @@ class LspBridge {
   }
 
   /** Opens `uri` in an Orca tab, revealing `range` there; null when not attached or the worker failed. */
-  async navigate(
+  public async navigate(
     uri: string,
     range: LspRange
   ): Promise<PluginRequestOutput<'phpantom.navigate'> | null> {
@@ -456,7 +456,7 @@ class LspBridge {
   }
 
   /** The text of files on disk, for Monaco's previews; null when not attached, aborted or failed. */
-  async peek(
+  public async peek(
     uris: string[],
     signal?: AbortSignal
   ): Promise<PluginRequestOutput<'phpantom.peek'> | null> {
@@ -473,33 +473,33 @@ class LspBridge {
     );
   }
 
-  onReady(listener: (status: Ready) => void): Disposable {
+  public onReady(listener: (status: Ready) => void): Disposable {
     return this.listen('ready', listener);
   }
 
   /** Every final attach answer, failed ones included (as `error`). */
-  onStatus(listener: (status: AttachStatus) => void): Disposable {
+  public onStatus(listener: (status: AttachStatus) => void): Disposable {
     return this.listen('status', listener);
   }
 
-  onDiagnostics(listener: (diagnostics: unknown[]) => void): Disposable {
+  public onDiagnostics(listener: (diagnostics: unknown[]) => void): Disposable {
     return this.listen('diagnostics', listener);
   }
 
-  onRefresh(listener: (kinds: string[]) => void): Disposable {
+  public onRefresh(listener: (kinds: string[]) => void): Disposable {
     return this.listen('refresh', listener);
   }
 
-  onReveal(listener: (range: LspRange) => void): Disposable {
+  public onReveal(listener: (range: LspRange) => void): Disposable {
     return this.listen('reveal', listener);
   }
 
   /** A user request could not be served because Orca is holding this plugin's calls back. */
-  onBusy(listener: () => void): Disposable {
+  public onBusy(listener: () => void): Disposable {
     return this.listen('busy', listener);
   }
 
-  dispose(): void {
+  public dispose(): void {
     if (this.disposed) return;
     this.disposed = true;
     this.generation += 1;

@@ -65,12 +65,12 @@ class PeekModels {
   /** In use order, oldest first. */
   private readonly models = new Map<string, Disposable>();
 
-  constructor(create: (uri: string, text: string) => Disposable, limit = 30) {
+  public constructor(create: (uri: string, text: string) => Disposable, limit = 30) {
     this.create = create;
     this.limit = limit;
   }
 
-  ensure(files: { uri: string; text: string }[]): void {
+  public ensure(files: { uri: string; text: string }[]): void {
     for (const file of files) {
       if (this.models.has(file.uri)) {
         this.touch([file.uri]);
@@ -86,7 +86,7 @@ class PeekModels {
   }
 
   /** Marks models an answer uses again as recent, so making the others does not drop them. */
-  touch(uris: string[]): void {
+  public touch(uris: string[]): void {
     for (const uri of uris) {
       const model = this.models.get(uri);
       if (!model) continue;
@@ -95,11 +95,11 @@ class PeekModels {
     }
   }
 
-  has(uri: string): boolean {
+  public has(uri: string): boolean {
     return this.models.has(uri);
   }
 
-  dispose(): void {
+  public dispose(): void {
     const models = [...this.models.values()];
     this.models.clear();
     for (const model of models) model.dispose();

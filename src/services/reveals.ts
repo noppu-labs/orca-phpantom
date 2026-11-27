@@ -9,12 +9,12 @@ class PendingReveals {
   private readonly ttlMs: number;
   private readonly now: () => number;
 
-  constructor(ttlMs = 30_000, now: () => number = Date.now) {
+  public constructor(ttlMs = 30_000, now: () => number = Date.now) {
     this.ttlMs = ttlMs;
     this.now = now;
   }
 
-  add(path: string, range: LspRange): void {
+  public add(path: string, range: LspRange): void {
     // Why delete first: a re-added path becomes the newest, so it is the last to be dropped.
     this.entries.delete(path);
     this.entries.set(path, { range, at: this.now() });
@@ -26,19 +26,19 @@ class PendingReveals {
     }
   }
 
-  paths(): string[] {
+  public paths(): string[] {
     this.prune();
     return [...this.entries.keys()];
   }
 
-  take(path: string): LspRange | null {
+  public take(path: string): LspRange | null {
     this.prune();
     const entry = this.entries.get(path);
     this.entries.delete(path);
     return entry?.range ?? null;
   }
 
-  clear(): void {
+  public clear(): void {
     this.entries.clear();
   }
 

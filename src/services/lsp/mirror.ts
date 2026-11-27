@@ -7,21 +7,21 @@ import type { LspContentChange, LspPosition } from '../../protocol.ts';
  */
 class DocumentMirror {
   private content: string;
-  version = 0;
+  public version = 0;
 
-  constructor(text: string) {
+  public constructor(text: string) {
     this.content = text;
   }
 
-  get text(): string {
+  public get text(): string {
     return this.content;
   }
 
-  get length(): number {
+  public get length(): number {
     return this.content.length;
   }
 
-  apply(changes: LspContentChange[]): void {
+  public apply(changes: LspContentChange[]): void {
     for (const change of changes) {
       if (!('range' in change)) {
         this.content = change.text;

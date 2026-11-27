@@ -17,9 +17,9 @@ import { ORCA_MAX_OBJECTS, orcaSize } from '../../../src/utils/size.ts';
 const FAKE = fileURLToPath(new URL('../../fixtures/fake-server.mjs', import.meta.url));
 
 class RecordingServer extends PhpantomServer {
-  readonly notified: { method: string; params: any }[] = [];
+  public readonly notified: { method: string; params: any }[] = [];
 
-  override notify(method: string, params: unknown): void {
+  public override notify(method: string, params: unknown): void {
     this.notified.push({ method, params });
     super.notify(method, params);
   }

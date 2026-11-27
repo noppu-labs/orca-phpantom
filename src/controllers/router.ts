@@ -149,7 +149,7 @@ function inside(root: string, path: string): boolean {
 }
 
 class Router {
-  readonly session: string;
+  public readonly session: string;
   private readonly host: RouterHost;
   private readonly resolve: typeof resolveBinary;
   private readonly createServer: (
@@ -182,7 +182,7 @@ class Router {
   private lastStatus = '';
   private disposed = false;
 
-  constructor(host: RouterHost, options: RouterOptions = {}) {
+  public constructor(host: RouterHost, options: RouterOptions = {}) {
     this.host = host;
     this.resolve = options.resolve ?? resolveBinary;
     this.createServer =
@@ -201,7 +201,10 @@ class Router {
     this.sweepTimer.unref?.();
   }
 
-  async open(input: Input<'phpantom.open'>, caller: { panel: string }): Promise<AttachStatus> {
+  public async open(
+    input: Input<'phpantom.open'>,
+    caller: { panel: string }
+  ): Promise<AttachStatus> {
     if (input.index === 0) {
       this.chunks.set(input.docId, []);
     }
@@ -224,7 +227,7 @@ class Router {
     return this.inLane(input.docId, async () => this.attach(input, text, caller.panel));
   }
 
-  async change(input: Input<'phpantom.change'>): Promise<Output<'phpantom.change'>> {
+  public async change(input: Input<'phpantom.change'>): Promise<Output<'phpantom.change'>> {
     const doc = this.attached(input.docId, input.session);
     if (!doc) {
       return { detached: true };
@@ -253,7 +256,7 @@ class Router {
     return { ok: true };
   }
 
-  async request(
+  public async request(
     input: Input<'phpantom.request'>,
     signal: AbortSignal
   ): Promise<Output<'phpantom.request'>> {
@@ -281,7 +284,7 @@ class Router {
     return this.fitAnswer(input.method, result);
   }
 
-  async close(input: Input<'phpantom.close'>): Promise<Output<'phpantom.close'>> {
+  public async close(input: Input<'phpantom.close'>): Promise<Output<'phpantom.close'>> {
     this.chunks.delete(input.docId);
     return this.inLane(input.docId, async () => {
       const doc = this.docs.get(input.docId);
@@ -292,7 +295,7 @@ class Router {
     });
   }
 
-  async navigate(input: Input<'phpantom.navigate'>): Promise<Output<'phpantom.navigate'>> {
+  public async navigate(input: Input<'phpantom.navigate'>): Promise<Output<'phpantom.navigate'>> {
     const doc = this.attached(input.docId, input.session);
     if (!doc) {
       return { opened: false, reason: 'failed' };
@@ -341,11 +344,11 @@ class Router {
     return { opened: true };
   }
 
-  async ping(input: Input<'phpantom.ping'>): Promise<Output<'phpantom.ping'>> {
+  public async ping(input: Input<'phpantom.ping'>): Promise<Output<'phpantom.ping'>> {
     return this.attached(input.docId, input.session) ? { ok: true } : { detached: true };
   }
 
-  async peek(input: Input<'phpantom.peek'>): Promise<Output<'phpantom.peek'>> {
+  public async peek(input: Input<'phpantom.peek'>): Promise<Output<'phpantom.peek'>> {
     if (!this.attached(input.docId, input.session)) {
       return { files: [], omitted: input.uris.length };
     }
@@ -376,7 +379,7 @@ class Router {
   }
 
   /** Stops every server; open editors are told `restarting` and re-attach, which starts them again. */
-  async restartAll(): Promise<string> {
+  public async restartAll(): Promise<string> {
     const entries = [...this.pool.values()];
     for (const doc of [...this.docs.values()]) {
       this.forget(doc.docId);
@@ -399,7 +402,7 @@ class Router {
   }
 
   /** Settings changed: find the binary again before the next server starts. */
-  forgetBinary(): void {
+  public forgetBinary(): void {
     this.resolution = null;
     this.failedAt = null;
     this.resolved = null;
@@ -410,7 +413,7 @@ class Router {
     }
   }
 
-  describe(): string {
+  public describe(): string {
     const lines: string[] = [];
     const { resolved } = this;
     if (resolved?.ok) {
@@ -435,7 +438,7 @@ class Router {
     return lines.length === 0 ? 'PHPantom: no PHP files open.' : lines.join('\n');
   }
 
-  async dispose(): Promise<void> {
+  public async dispose(): Promise<void> {
     this.disposed = true;
     clearInterval(this.sweepTimer);
     if (this.statusTimer) {
@@ -601,7 +604,7 @@ class Router {
   }
 
   /** Releases documents whose editor went quiet, as `close` would. The timer calls it; resolves once they are released. */
-  async sweep(): Promise<void> {
+  public async sweep(): Promise<void> {
     if (this.disposed) {
       return;
     }

@@ -43,7 +43,7 @@ class Outbox {
   private timer: ReturnType<typeof setTimeout> | null = null;
   private disposed = false;
 
-  constructor(post: PostFn, options: OutboxOptions = {}) {
+  public constructor(post: PostFn, options: OutboxOptions = {}) {
     this.post = post;
     this.windowMs = options.windowMs ?? 10_000;
     this.maxPosts = options.maxPosts ?? 180;
@@ -52,7 +52,7 @@ class Outbox {
     this.now = options.now ?? Date.now;
   }
 
-  send(panel: string, key: string, event: string, payload: unknown): void {
+  public send(panel: string, key: string, event: string, payload: unknown): void {
     if (this.disposed) {
       return;
     }
@@ -62,16 +62,16 @@ class Outbox {
   }
 
   /** The payload waiting under `key`, so a caller can merge into it. */
-  queued(key: string): unknown {
+  public queued(key: string): unknown {
     return this.queue.get(key)?.payload;
   }
 
   /** Forgets what waits under `key`, so it is never sent. */
-  drop(key: string): void {
+  public drop(key: string): void {
     this.queue.delete(key);
   }
 
-  dispose(): void {
+  public dispose(): void {
     this.disposed = true;
     if (this.timer) {
       clearTimeout(this.timer);
