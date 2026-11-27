@@ -855,7 +855,7 @@ export class LspBridge {
         const events = this.queue.splice(0);
         const split = groupsOf({
           changes: events.flatMap((event) => event.changes),
-          lengthAfter: events[events.length - 1].lengthAfter,
+          lengthAfter: events.at(-1)!.lengthAfter,
         });
         // Why check the start: a length that does not chain on from the last one means the queue missed something.
         if (!split || split.lengthBefore !== this.sentLength) {

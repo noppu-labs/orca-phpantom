@@ -97,7 +97,7 @@ test('an outside write is its own undo step', () => {
   const { fake } = outsideWrite('a\nb\n', 'a\nB\n');
   const after = fake.calls.slice(fake.calls.indexOf('setText') + 1);
   assert.equal(after[0], 'stack');
-  assert.equal(after[after.length - 1], 'stack');
+  assert.equal(after.at(-1), 'stack');
   assert.ok(after.includes('replace'));
 });
 test('a line-ending switch is an undo step of its own, before the text edit', () => {

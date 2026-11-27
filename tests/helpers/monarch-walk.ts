@@ -76,7 +76,7 @@ export function tokenizeLine(grammar: Grammar, line: string, stack: string[] = [
     if (text === '') {
       return;
     }
-    const last = tokens[tokens.length - 1];
+    const last = tokens.at(-1);
     // Monaco's token collector drops a token of the same type as the one before it.
     if (last && last.type === type) {
       last.text += text;
@@ -98,7 +98,7 @@ export function tokenizeLine(grammar: Grammar, line: string, stack: string[] = [
       }
       stack.pop();
     } else if (next === '@push') {
-      stack.push(stack[stack.length - 1]);
+      stack.push(stack.at(-1)!);
     } else if (next === '@popall') {
       stack.splice(1);
     } else {
@@ -123,7 +123,7 @@ export function tokenizeLine(grammar: Grammar, line: string, stack: string[] = [
 
   let pos = 0;
   while (pos < line.length) {
-    const state = stack[stack.length - 1];
+    const state = stack.at(-1)!;
     const rest = line.slice(pos);
     let matched: { rule: ReturnType<typeof asRule>; match: RegExpMatchArray } | null = null;
     for (const raw of rulesOf(grammar, state)) {
@@ -156,7 +156,7 @@ export function tokenizeLine(grammar: Grammar, line: string, stack: string[] = [
       apply(rule.action, match[0]);
     }
     move(rule.next, undefined);
-    if (match[0].length === 0 && stack.length === depth && stack[stack.length - 1] === state) {
+    if (match[0].length === 0 && stack.length === depth && stack.at(-1) === state) {
       throw new Error(`no progress in tokenizer in rule: /${rule.regex.source}/`);
     }
     pos += match[0].length;

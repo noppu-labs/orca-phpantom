@@ -30,7 +30,7 @@ function longestIncreasing(values: number[]): number[] {
     tails[low] = i;
   }
   const run: number[] = [];
-  for (let at = tails.length > 0 ? tails[tails.length - 1] : -1; at !== -1; at = previous[at]) {
+  for (let at = tails.length > 0 ? tails.at(-1)! : -1; at !== -1; at = previous[at]) {
     run.push(at);
   }
   return run.reverse();

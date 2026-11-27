@@ -81,7 +81,7 @@ function splitOne(change: LspContentChange, budget: number): LspContentChange[] 
   // Measure of the text too; this adds what Orca counts around it.
   const textBudget = Math.min(budget - 2 - ENVELOPE + 2, budget - ORCA_ENVELOPE + 2);
   const pieces = chunkText(change.text, Math.max(textBudget, 16));
-  const last = pieces[pieces.length - 1];
+  const last = pieces.at(-1)!;
   const at = 'range' in change ? change.range.start : { line: 0, character: 0 };
   const out: LspContentChange[] = [
     'range' in change ? { range: change.range, text: last } : { text: last },
