@@ -1620,3 +1620,25 @@ test('a departing holder sends nothing when every other holder waits for its res
   assert.deepEqual(await worker.request('phpantom.close', { docId: 'f1' }), { ok: true });
   assert.equal(changes(), before);
 });
+
+test('with no workspace id, the branch and name together pick the focused copy', async () => {
+  const text = '<?php // same in both\n';
+  const { worker, docs } = await setup({ files: { 'a/A.php': text, 'b/A.php': text } });
+  const open = (docId: string, branch: string | null, displayName: string | null) =>
+    worker.request('phpantom.open', {
+      docId,
+      language: 'php',
+      workspaceId: null,
+      branch,
+      displayName,
+      index: 0,
+      chunk: text,
+      last: true,
+    });
+  const status = await open('d1', 'feat', 'b');
+  assert.equal(status.state, 'ready');
+  assert.equal(status.uri, pathToFileURL(docs['b/A.php']).href);
+  // A branch without a name is no context: both copies sit in one tier.
+  assert.deepEqual(await open('d2', 'feat', null), { reason: 'ambiguous', state: 'single-file' });
+  assert.deepEqual(await open('d3', null, null), { reason: 'ambiguous', state: 'single-file' });
+});

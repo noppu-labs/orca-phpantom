@@ -1470,3 +1470,22 @@ test('a null session from the worker is no session: nothing goes out under it', 
   );
   bridge.dispose();
 });
+
+test('a change that fails for another reason sends the whole text again', async () => {
+  const host = fakeHost();
+  const doc = source('<?php\n$a = 1;\n');
+  const bridge = new LspBridge(host, doc, FAST);
+  await bridge.attach();
+  const accept = host.handlers.change;
+  host.handlers.change = () => {
+    host.handlers.change = accept;
+    throw Object.assign(new Error('timed out'), { code: 'timeout' });
+  };
+  doc.edit(11, 12, '2');
+  await until(() => host.mirror?.text === doc.text, 'the worker to hold the whole text again');
+  const resync = host.calls('phpantom.open').find((c) => c.input.resync === true);
+  assert.equal(resync?.input.chunk, '<?php\n$a = 2;\n');
+  assert.equal(fullOpens(host).length, 1);
+  assert.equal(bridge.status?.state, 'ready');
+  bridge.dispose();
+});

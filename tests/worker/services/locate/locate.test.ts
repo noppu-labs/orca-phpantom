@@ -504,3 +504,35 @@ test('a candidate that is missing or a folder is skipped, and the walk still fin
     await cleanup();
   }
 });
+
+test('hidden and skipped folders are never walked, and vendor is walked with no composer.json beside it', async () => {
+  const skipped = await tree({ '.hidden/x.php': SRC, 'node_modules/p/x.php': SRC });
+  const plain = await tree({ 'vendor/v/y.php': SRC });
+  try {
+    assert.deepEqual(
+      await locateFile({ tiers: [[skipped]], candidates: [], language: 'php', content: SRC }),
+      { status: 'none' }
+    );
+    assert.deepEqual(
+      await locateFile({ tiers: [[plain]], candidates: [], language: 'php', content: SRC }),
+      { status: 'found', path: join(plain, 'vendor/v/y.php'), root: plain }
+    );
+  } finally {
+    await cleanup();
+  }
+});
+
+test('a file of the same size with other text is found by likeness', async () => {
+  const lines = Array.from({ length: 20 }, (_, i) => `$line${i} = ${i};`);
+  const original = `${['<?php', ...lines].join('\n')}\n`;
+  const edited = original.replace('$line3 = 3;', '$line3 = 4;');
+  const a = await tree({ 'a.php': original });
+  try {
+    assert.deepEqual(
+      await locateFile({ tiers: [[a]], candidates: [], language: 'php', content: edited }),
+      { status: 'found', path: join(a, 'a.php'), root: a, approximate: true }
+    );
+  } finally {
+    await cleanup();
+  }
+});
