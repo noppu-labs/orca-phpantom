@@ -1,8 +1,10 @@
 // Adapted from actus7/orca-autocomplete editor/src/lsp-convert.ts @ da5a680 (MIT). See THIRD_PARTY_NOTICES.md.
 import type { LspContentChange } from '../../src/protocol.ts';
+import { isRecord } from '../../src/utils/json.ts';
 import { sameUri } from '../../src/utils/uri.ts';
 
 // Conversions between the Language Server Protocol and Monaco. Pure data in, pure data out, so Node can test them: the Monaco-aware code only wraps these.
+// The guards check only what the code branches on; the fields are taken as LSP types them.
 
 interface LspPosition {
   line: number;
@@ -73,6 +75,9 @@ interface LspDiagnostic {
   tags?: number[];
 }
 
+/** Whether every diagnostic in `list` is an object; the list itself is kept as sent, never copied. */
+const isDiagnosticList = (list: unknown[]): list is LspDiagnostic[] => list.every(isRecord);
+
 /** A diagnostic as a Monaco marker. Tags (unnecessary code, deprecated) use the same numbers in both. */
 function toMarker(diagnostic: LspDiagnostic): MonacoRange & {
   severity: number;
@@ -92,7 +97,7 @@ function toMarker(diagnostic: LspDiagnostic): MonacoRange & {
   };
 }
 
-const COMPLETION_KIND_NAMES: Record<number, string> = {
+const COMPLETION_KIND_NAMES = {
   1: 'Text',
   2: 'Method',
   3: 'Function',
@@ -118,11 +123,13 @@ const COMPLETION_KIND_NAMES: Record<number, string> = {
   23: 'Event',
   24: 'Operator',
   25: 'TypeParameter',
-};
+} as const;
+type CompletionKindName = (typeof COMPLETION_KIND_NAMES)[keyof typeof COMPLETION_KIND_NAMES];
+const completionKindNames: Partial<Record<number, CompletionKindName>> = COMPLETION_KIND_NAMES;
 
 /** The name of Monaco's CompletionItemKind member for an LSP kind. */
-const completionKindName = (kind: number | undefined): string =>
-  COMPLETION_KIND_NAMES[kind ?? 1] ?? 'Text';
+const completionKindName = (kind: number | undefined): CompletionKindName =>
+  completionKindNames[kind ?? 1] ?? 'Text';
 
 type MarkedString = string | { language: string; value: string };
 interface Markup {
@@ -153,6 +160,26 @@ function escapeMarkdown(text: string): string {
   return text.replaceAll(/([\\`*_{}[\]()#+\-.!|>])/g, String.raw`\$1`);
 }
 
+interface LspHover {
+  contents: MarkedString | MarkedString[] | Markup;
+  range?: LspRange;
+}
+
+const isHover = (value: unknown): value is LspHover => isRecord(value);
+
+interface LspSignatureHelp {
+  signatures: {
+    label: string;
+    documentation?: string | Markup;
+    parameters?: { label: string | [number, number]; documentation?: string | Markup }[];
+    activeParameter?: number;
+  }[];
+  activeSignature?: number;
+  activeParameter?: number;
+}
+
+const isSignatureHelp = (value: unknown): value is LspSignatureHelp => isRecord(value);
+
 interface LspTextEdit {
   range: LspRange;
   newText: string;
@@ -163,18 +190,40 @@ const toMonacoEdit = (edit: LspTextEdit): { range: MonacoRange; text: string } =
   text: edit.newText,
 });
 
+/** Whether `value` can be read as a range: an object whose `start` and `end` are there. */
+const isLspRange = (value: unknown): value is LspRange =>
+  isRecord(value) &&
+  value.start !== undefined &&
+  value.start !== null &&
+  value.end !== undefined &&
+  value.end !== null;
+
+/**
+ * Where a prepareRename answer puts the name: its `range`, or the answer itself when it is a bare range.
+ * Throws when it has neither: there is no range to read.
+ */
+function renameRange(answer: unknown): LspRange {
+  const target = isRecord(answer) ? (answer.range ?? answer) : answer;
+  if (!isLspRange(target)) throw new TypeError('the prepareRename answer has no range');
+  return target;
+}
+
 type LspLocation =
   | { uri: string; range: LspRange }
   | { targetUri: string; targetSelectionRange: LspRange; targetRange: LspRange };
 
+const isLocation = (value: unknown): value is LspLocation => isRecord(value);
+
 /** Locations (or links) as plain {uri, range}, whichever shape the server used, or none. */
 function normalizeLocations(result: unknown): { uri: string; range: MonacoRange }[] {
-  const list = Array.isArray(result) ? result : result ? [result] : [];
-  return (list as LspLocation[]).map((item) =>
-    'targetUri' in item
+  const list: unknown[] = Array.isArray(result) ? result : result ? [result] : [];
+  return list.map((item) => {
+    // Why throw: anything else has no location to read, and Monaco takes a throw as no answer.
+    if (!isLocation(item)) throw new TypeError('a location is not an object');
+    return 'targetUri' in item
       ? { range: fromLspRange(item.targetSelectionRange ?? item.targetRange), uri: item.targetUri }
-      : { range: fromLspRange(item.range), uri: item.uri }
-  );
+      : { range: fromLspRange(item.range), uri: item.uri };
+  });
 }
 
 interface LspFileOperation {
@@ -188,6 +237,9 @@ interface LspWorkspaceEdit {
   changes?: Record<string, LspTextEdit[]>;
   documentChanges?: ({ textDocument: { uri: string }; edits: LspTextEdit[] } | LspFileOperation)[];
 }
+
+const isWorkspaceEdit = (value: unknown): value is LspWorkspaceEdit => isRecord(value);
+const isTextEditList = (value: unknown): value is LspTextEdit[] => Array.isArray(value);
 
 /** Splits a workspace edit into edits for the open document and the number of other files it touches. */
 function splitWorkspaceEdit(
@@ -225,8 +277,7 @@ interface MonacoWorkspaceEdit {
   }[];
 }
 
-// oxlint-disable-next-line typescript/consistent-type-definitions -- needs an implicit index signature
-type LspCodeAction = {
+interface LspCodeAction {
   title: string;
   kind?: string;
   isPreferred?: boolean;
@@ -234,7 +285,10 @@ type LspCodeAction = {
   data?: unknown;
   command?: unknown;
   disabled?: { reason: string };
-};
+}
+
+const isCodeAction = (value: unknown): value is LspCodeAction => isRecord(value);
+const isCodeActionList = (value: unknown): value is LspCodeAction[] => Array.isArray(value);
 
 /**
  * A code action as Monaco takes it, with its edits to the open document pointed at the editor's model.
@@ -299,8 +353,20 @@ interface LspSymbol {
   containerName?: string;
 }
 
+interface MonacoDocumentSymbol {
+  name: string;
+  detail: string;
+  kind: number;
+  range: MonacoRange;
+  selectionRange: MonacoRange;
+  tags: never[];
+  children?: MonacoDocumentSymbol[];
+}
+
+const isSymbolList = (value: unknown): value is LspSymbol[] => Array.isArray(value);
+
 /** Document symbols (tree or flat list) in Monaco's shape. LSP's symbol kinds are Monaco's plus one. */
-function toDocumentSymbols(symbols: LspSymbol[] | null | undefined): unknown[] {
+function toDocumentSymbols(symbols: LspSymbol[] | null | undefined): MonacoDocumentSymbol[] {
   return (symbols ?? []).map((symbol) => {
     const range = fromLspRange(
       symbol.range ??
@@ -333,17 +399,52 @@ interface LspCompletionDetails {
   additionalTextEdits?: LspTextEdit[];
 }
 
+/** A completion's edit: a plain text edit, or LSP's insert and replace ranges. */
+type LspCompletionEdit =
+  | LspTextEdit
+  | { newText: string; range?: undefined; insert: LspRange; replace: LspRange };
+
+interface LspCompletionItem extends LspCompletionDetails {
+  label: string;
+  labelDetails?: { detail?: string; description?: string };
+  kind?: number;
+  textEdit?: LspCompletionEdit;
+  insertText?: string;
+  insertTextFormat?: number;
+  filterText?: string;
+  sortText?: string;
+  preselect?: boolean;
+  commitCharacters?: string[];
+  deprecated?: boolean;
+  tags?: number[];
+}
+
+const isCompletionDetails = (value: unknown): value is LspCompletionDetails => isRecord(value);
+const isCompletionItemList = (value: unknown): value is LspCompletionItem[] => Array.isArray(value);
+
+/** A completion answer's items, from a bare list or a CompletionList; none when there is neither. */
+function completionItems(result: unknown): LspCompletionItem[] {
+  const items: unknown = Array.isArray(result)
+    ? result
+    : isRecord(result)
+      ? (result.items ?? [])
+      : [];
+  // Why throw: anything else has no items to read, and Monaco takes a throw as no answer.
+  if (!isCompletionItemList(items)) throw new TypeError('completion items are not a list');
+  return items;
+}
+
 /**
  * What a server fills in when asked to resolve a completion item: the documentation, a detail line and,
  * above all, the edits that go with picking it (the import that makes a symbol from another file usable).
  * Only what the server gave is returned, so nothing already known is overwritten with nothing.
  */
-function completionDetails(resolved: LspCompletionDetails | null | undefined): {
+function completionDetails(resolved: unknown): {
   detail?: string;
   documentation?: { value: string };
   additionalTextEdits?: { range: MonacoRange; text: string }[];
 } {
-  if (!resolved) {
+  if (!isCompletionDetails(resolved)) {
     return {};
   }
   const documentation = markdownValue(resolved.documentation);
@@ -381,6 +482,8 @@ interface LspInlayHint {
   paddingRight?: boolean;
 }
 
+const isInlayHintList = (value: unknown): value is LspInlayHint[] => Array.isArray(value);
+
 /** An inlay hint in Monaco's shape. Both number their kinds the same way: 1 type, 2 parameter. */
 function toInlayHint(hint: LspInlayHint): {
   label: string | { label: string; tooltip?: string }[];
@@ -413,15 +516,19 @@ function toInlayHint(hint: LspInlayHint): {
 
 // Why: a label part's tooltip may be MarkupContent on the wire even where the type says string.
 const tooltipText = (tooltip: unknown): string =>
-  typeof tooltip === 'string'
-    ? tooltip
-    : String((tooltip as { value?: unknown } | null)?.value ?? '');
+  typeof tooltip === 'string' ? tooltip : String(isRecord(tooltip) ? (tooltip.value ?? '') : '');
+
+interface LspSemanticTokens {
+  data: number[];
+  resultId?: string;
+}
+
+const isSemanticTokens = (value: unknown): value is LspSemanticTokens =>
+  isRecord(value) && Array.isArray(value.data);
 
 /** A full semantic tokens answer as Monaco takes it; null when there is none. */
-function toSemanticTokens(
-  result: { data: number[]; resultId?: string } | null
-): { data: Uint32Array; resultId?: string } | null {
-  if (!result || !Array.isArray(result.data)) {
+function toSemanticTokens(result: unknown): { data: Uint32Array; resultId?: string } | null {
+  if (!isSemanticTokens(result)) {
     return null;
   }
   return {
@@ -429,6 +536,14 @@ function toSemanticTokens(
     ...(result.resultId ? { resultId: result.resultId } : {}),
   };
 }
+
+interface SemanticTokensLegend {
+  tokenTypes: string[];
+  tokenModifiers: string[];
+}
+
+const isSemanticTokensLegend = (value: unknown): value is SemanticTokensLegend =>
+  isRecord(value) && Array.isArray(value.tokenTypes) && Array.isArray(value.tokenModifiers);
 
 /**
  * Whether to ask for inlay hints: when the server offers them, and not in Blade, where PHPantom 1.1.0
@@ -454,10 +569,22 @@ export {
   toDocumentSymbols,
   markdownValue,
   completionDetails,
+  completionItems,
   toCompletionLabel,
   toInlayHint,
   toSemanticTokens,
   inlayHintsWanted,
+  renameRange,
+  isCodeAction,
+  isCodeActionList,
+  isDiagnosticList,
+  isHover,
+  isInlayHintList,
+  isSemanticTokensLegend,
+  isSignatureHelp,
+  isSymbolList,
+  isTextEditList,
+  isWorkspaceEdit,
 };
 export type {
   LspPosition,
@@ -471,5 +598,6 @@ export type {
   LspCodeAction,
   LspSymbol,
   LspCompletionDetails,
+  LspCompletionItem,
   LspInlayHint,
 };

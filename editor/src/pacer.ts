@@ -1,6 +1,7 @@
 // Orca refuses frame calls past 120 in 10 s, counted per plugin across all its tabs and windows, with `rate_limited` ("too many panel requests"; Orca 1.4.278 sends no retryAfterMs with it).
 // This keeps one editor's share of that budget and holds its calls back after a refusal.
 // No Monaco here.
+import { isRecord } from '../../src/utils/json.ts';
 
 interface PacerOptions {
   windowMs?: number;
@@ -56,7 +57,7 @@ class Pacer {
     const now = this.now();
     // Why not escalate during a hold: calls already in flight when it began come back refused too.
     if (now < this.blockedUntil) return this.blockedUntil - now;
-    const given = (error as { retryAfterMs?: unknown } | null)?.retryAfterMs;
+    const given = isRecord(error) ? error.retryAfterMs : undefined;
     let hold: number;
     if (typeof given === 'number' && Number.isFinite(given) && given >= 0) {
       // Why clamp: 0 would retry in a tight loop, and a huge value would stall the editor for good.

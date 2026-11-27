@@ -5,9 +5,15 @@ import type { LspBridge, RequestKind } from '../bridge.ts';
 import type { EditorContext } from '../editor.ts';
 import {
   completionDetails,
+  completionItems,
   completionKindName,
   fromLspRange,
   inlayHintsWanted,
+  isHover,
+  isInlayHintList,
+  isSemanticTokensLegend,
+  isSignatureHelp,
+  isSymbolList,
   markdownValue,
   toCompletionLabel,
   toDocumentSymbols,
@@ -17,7 +23,7 @@ import {
   toMarkdown,
   toMonacoEdit,
   toSemanticTokens,
-  type LspInlayHint,
+  type LspCompletionItem,
   type LspPosition,
   type LspTextEdit,
 } from '../lsp-convert.ts';
@@ -25,9 +31,11 @@ import type { monaco } from '../monaco.ts';
 import {
   SERVER_NAME,
   canceled,
+  capability,
   disposeAll,
+  isRecord,
+  stringList,
   withSignal,
-  type Capabilities,
   type Disposable,
   type Model,
 } from './shared.ts';
@@ -38,17 +46,16 @@ function registerReadingProviders(
   capabilities: Record<string, unknown>
 ): Disposable {
   const { monaco, model } = ctx;
-  const caps = capabilities as Capabilities;
   const language = model.getLanguageId();
   const registered: Disposable[] = [];
   const ours = (candidate: Model): boolean => candidate === model;
   const ask = async (
     method: string,
-    params: Record<string, unknown>,
+    params: object,
     token: monaco.CancellationToken,
     kind: RequestKind,
     silent = false
-  ): Promise<any> =>
+  ): Promise<unknown> =>
     withSignal(token, async (signal) => bridge.ask(method, params, signal, { kind, silent }));
   const atCursor = (position: monaco.Position): { position: LspPosition } => ({
     position: toLspPosition(position),
@@ -56,9 +63,9 @@ function registerReadingProviders(
   const edits = (list: LspTextEdit[]): monaco.languages.TextEdit[] => list.map(toMonacoEdit);
 
   // --- completion ---
-  if (caps.completionProvider) {
+  if (capabilities.completionProvider) {
     // The server's own item for each suggestion shown: resolving it needs exactly what the server sent.
-    const serverItems = new WeakMap<object, Record<string, unknown>>();
+    const serverItems = new WeakMap<object, LspCompletionItem>();
     registered.push(
       monaco.languages.registerCompletionItemProvider(language, {
         async provideCompletionItems(m, position, context, token) {
@@ -77,7 +84,7 @@ function registerReadingProviders(
             // Why passive even for "invoked" (0): Monaco reports quick suggestions while typing that way too.
             'passive'
           );
-          const items: any[] = Array.isArray(result) ? result : (result?.items ?? []);
+          const items = completionItems(result);
           const word = m.getWordUntilPosition(position);
           const fallback = new monaco.Range(
             position.lineNumber,
@@ -86,7 +93,7 @@ function registerReadingProviders(
             word.endColumn
           );
           return {
-            incomplete: Boolean(result?.isIncomplete),
+            incomplete: isRecord(result) && Boolean(result.isIncomplete),
             suggestions: items.map((item) => {
               const edit = item.textEdit;
               const range = edit
@@ -107,9 +114,7 @@ function registerReadingProviders(
                   item.insertTextFormat === 2
                     ? monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet
                     : undefined,
-                kind: monaco.languages.CompletionItemKind[
-                  completionKindName(item.kind) as keyof typeof monaco.languages.CompletionItemKind
-                ],
+                kind: monaco.languages.CompletionItemKind[completionKindName(item.kind)],
                 label: toCompletionLabel(item),
                 preselect: item.preselect,
                 range,
@@ -125,7 +130,7 @@ function registerReadingProviders(
           };
         },
         // Why: PHPantom sends the `use` import that goes with a class from another namespace only here.
-        resolveCompletionItem: caps.completionProvider.resolveProvider
+        resolveCompletionItem: capability(capabilities, 'completionProvider', 'resolveProvider')
           ? async (suggestion, token) => {
               const raw = serverItems.get(suggestion);
               if (!raw) return suggestion;
@@ -137,27 +142,30 @@ function registerReadingProviders(
               return { ...suggestion, ...completionDetails(resolved) };
             }
           : undefined,
-        triggerCharacters: caps.completionProvider.triggerCharacters,
+        triggerCharacters: stringList(
+          capability(capabilities, 'completionProvider', 'triggerCharacters')
+        ),
       })
     );
   }
 
   // --- hover and signature help ---
-  if (caps.hoverProvider) {
+  if (capabilities.hoverProvider) {
     registered.push(
       monaco.languages.registerHoverProvider(language, {
         async provideHover(m, position, token) {
           if (!ours(m)) return null;
           const result = await ask('textDocument/hover', atCursor(position), token, 'passive');
-          const contents = toMarkdown(result?.contents).map((value) => ({ value }));
+          const hover = isHover(result) ? result : undefined;
+          const contents = toMarkdown(hover?.contents).map((value) => ({ value }));
           return contents.length > 0
-            ? { contents, ...(result.range ? { range: fromLspRange(result.range) } : {}) }
+            ? { contents, ...(hover?.range ? { range: fromLspRange(hover.range) } : {}) }
             : null;
         },
       })
     );
   }
-  if (caps.signatureHelpProvider) {
+  if (capabilities.signatureHelpProvider) {
     registered.push(
       monaco.languages.registerSignatureHelpProvider(language, {
         async provideSignatureHelp(m, position, token, context) {
@@ -177,17 +185,18 @@ function registerReadingProviders(
             // Why passive even for "invoked": Monaco invokes it itself, after a completion that adds parentheses.
             'passive'
           );
-          if (!result?.signatures?.length) return null;
+          const help = isSignatureHelp(result) ? result : undefined;
+          if (!help?.signatures?.length) return null;
           return {
             dispose() {},
             value: {
-              activeParameter: result.activeParameter ?? 0,
-              activeSignature: result.activeSignature ?? 0,
-              signatures: result.signatures.map((signature: any) => ({
+              activeParameter: help.activeParameter ?? 0,
+              activeSignature: help.activeSignature ?? 0,
+              signatures: help.signatures.map((signature) => ({
                 documentation: markdownValue(signature.documentation),
                 label: signature.label,
                 // A label is either the text or [start, end] offsets into the signature's label, in both.
-                parameters: (signature.parameters ?? []).map((parameter: any) => ({
+                parameters: (signature.parameters ?? []).map((parameter) => ({
                   documentation: markdownValue(parameter.documentation),
                   label: parameter.label,
                 })),
@@ -198,15 +207,22 @@ function registerReadingProviders(
             },
           };
         },
-        signatureHelpRetriggerCharacters: caps.signatureHelpProvider.retriggerCharacters,
-        signatureHelpTriggerCharacters: caps.signatureHelpProvider.triggerCharacters,
+        signatureHelpRetriggerCharacters: stringList(
+          capability(capabilities, 'signatureHelpProvider', 'retriggerCharacters')
+        ),
+        signatureHelpTriggerCharacters: stringList(
+          capability(capabilities, 'signatureHelpProvider', 'triggerCharacters')
+        ),
       })
     );
   }
 
   // --- semantic colouring ---
-  const semantic = caps.semanticTokensProvider;
-  if (semantic?.legend && semantic.full) {
+  const legend = capability(capabilities, 'semanticTokensProvider', 'legend');
+  if (
+    isSemanticTokensLegend(legend) &&
+    capability(capabilities, 'semanticTokensProvider', 'full')
+  ) {
     const changed = new monaco.Emitter<void>();
     registered.push(
       changed,
@@ -214,7 +230,7 @@ function registerReadingProviders(
         if (kinds.includes('semanticTokens')) changed.fire();
       }),
       monaco.languages.registerDocumentSemanticTokensProvider(language, {
-        getLegend: () => semantic.legend,
+        getLegend: () => legend,
         onDidChange: changed.event,
         async provideDocumentSemanticTokens(m, _lastResultId, token) {
           if (!ours(m)) return null;
@@ -232,7 +248,7 @@ function registerReadingProviders(
   }
 
   // --- inlay hints ---
-  if (inlayHintsWanted(language, caps)) {
+  if (inlayHintsWanted(language, capabilities)) {
     const changed = new monaco.Emitter<void>();
     registered.push(
       changed,
@@ -250,24 +266,23 @@ function registerReadingProviders(
             token,
             'background'
           );
-          if (!Array.isArray(result)) return null;
-          return { dispose() {}, hints: (result as LspInlayHint[]).map(toInlayHint) };
+          if (!isInlayHintList(result)) return null;
+          // oxlint-disable-next-line typescript/no-unsafe-enum-assignment -- LSP and Monaco number inlay hint kinds the same way (1 type, 2 parameter)
+          return { dispose() {}, hints: result.map(toInlayHint) };
         },
       })
     );
   }
 
   // --- the outline ---
-  if (caps.documentSymbolProvider) {
+  if (capabilities.documentSymbolProvider) {
     registered.push(
       monaco.languages.registerDocumentSymbolProvider(language, {
         displayName: SERVER_NAME,
         async provideDocumentSymbols(m, token) {
           if (!ours(m)) return null;
           const result = await ask('textDocument/documentSymbol', {}, token, 'background');
-          return Array.isArray(result)
-            ? (toDocumentSymbols(result) as monaco.languages.DocumentSymbol[])
-            : null;
+          return isSymbolList(result) ? toDocumentSymbols(result) : null;
         },
       })
     );

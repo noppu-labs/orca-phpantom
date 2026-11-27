@@ -27,6 +27,7 @@ import {
   type ServerState,
   type StatusBarUpdate,
 } from '../services/status.ts';
+import { isRecord } from '../utils/json.ts';
 import { fitsIn, leadingThatFit, orcaSize } from '../utils/size.ts';
 import { sameUri, uriKey } from '../utils/uri.ts';
 
@@ -884,8 +885,10 @@ class Router {
         }
         for (const panel of panels) {
           const key = `refresh:${panel}`;
-          const queued = this.outbox.queued(key) as { kinds: RefreshKind[] } | undefined;
-          const kinds = new Set(queued?.kinds ?? []);
+          const queued = this.outbox.queued(key);
+          const kinds = new Set<RefreshKind>(
+            isRecord(queued) && Array.isArray(queued.kinds) ? queued.kinds : []
+          );
           kinds.add(kind);
           this.outbox.send(panel, key, 'phpantom.refresh', { kinds: [...kinds] });
         }
@@ -994,9 +997,9 @@ class Router {
       return { result };
     }
     if (method === 'textDocument/completion') {
-      const items = Array.isArray(result) ? result : (result as { items?: unknown } | null)?.items;
+      const items = Array.isArray(result) ? result : isRecord(result) ? result.items : undefined;
       if (Array.isArray(items)) {
-        const shell = Array.isArray(result) ? {} : (result as Record<string, unknown>);
+        const shell = isRecord(result) ? result : {};
         const kept = leadingThatFit(
           items,
           orcaSize({ result: { ...shell, isIncomplete: true, items: [] } }),
@@ -1015,18 +1018,16 @@ class Router {
       return { result: kept, truncated: result.length - kept.length };
     }
     const tokens =
-      method === 'textDocument/semanticTokens/full'
-        ? (result as { data?: unknown } | null)?.data
-        : undefined;
-    if (Array.isArray(tokens)) {
+      method === 'textDocument/semanticTokens/full' && isRecord(result) ? result.data : undefined;
+    if (isRecord(result) && Array.isArray(tokens)) {
       // Why whole tokens: `data` is five numbers per token, each relative to the one before, so a leading run of whole tokens is still correct colouring; a number is 8 bytes plus 4 for its slot in the array.
-      const shell = orcaSize({ result: { ...(result as object), data: [] } });
+      const shell = orcaSize({ result: { ...result, data: [] } });
       const room = Math.floor((ANSWER_LIMIT.bytes - shell.bytes) / 12);
       const count = Math.max(
         0,
         Math.min(tokens.length, room) - (Math.min(tokens.length, room) % 5)
       );
-      return { result: { ...(result as object), data: tokens.slice(0, count) } };
+      return { result: { ...result, data: tokens.slice(0, count) } };
     }
     return { error: 'too_large' };
   }

@@ -4,13 +4,21 @@ import { test } from 'node:test';
 
 import {
   completionDetails,
+  completionItems,
   completionKindName,
   diagnosticsTouching,
   fromLspRange,
   inlayHintsWanted,
+  isCodeAction,
+  isDiagnosticList,
+  isHover,
+  isSemanticTokensLegend,
+  isSignatureHelp,
+  isWorkspaceEdit,
   markdownValue,
   markerSeverity,
   normalizeLocations,
+  renameRange,
   splitWorkspaceEdit,
   toDocumentSymbols,
   toLspPosition,
@@ -313,4 +321,84 @@ test('an action computed against a version carries it on every edit, so Monaco r
     12
   );
   assert.equal(action?.edit?.edits[0].versionId, 12);
+});
+
+// Odd answers: the guards branch as reading the fields directly would.
+test('completionItems reads a list or a CompletionList, and throws on items that are not a list', () => {
+  const item = { label: 'a' };
+  assert.deepEqual(completionItems([item]), [item]);
+  assert.deepEqual(completionItems({ isIncomplete: true, items: [item] }), [item]);
+  for (const nothing of [null, undefined, true, 'abc', 3, {}, { items: null }]) {
+    assert.deepEqual(completionItems(nothing), []);
+  }
+  for (const broken of [{ items: 'abc' }, { items: {} }, { items: 0 }]) {
+    assert.throws(() => completionItems(broken), TypeError);
+  }
+  // The same objects, not copies: resolving sends the server back exactly what it sent.
+  const list = [item];
+  assert.equal(completionItems(list), list);
+});
+
+test('completionDetails of anything but an object is nothing', () => {
+  for (const odd of [true, 'abc', 3, [], [{ detail: 'x' }]]) {
+    assert.deepEqual(completionDetails(odd), {});
+  }
+});
+
+test('renameRange takes the range, or the answer itself when it is a bare range', () => {
+  const range = { start: { line: 1, character: 2 }, end: { line: 1, character: 5 } };
+  assert.equal(renameRange(range), range);
+  assert.equal(renameRange({ range, placeholder: 'Foo' }), range);
+  // A null range falls back to the answer itself, as `result.range ?? result` did.
+  const bare = { range: null, ...range };
+  assert.equal(renameRange(bare), bare);
+  for (const broken of [true, 'abc', 3, [], {}, { start: null, end: range.end }, { range: 5 }]) {
+    assert.throws(() => renameRange(broken), TypeError);
+  }
+});
+
+test('normalizeLocations throws on a location that is not an object, as reading it did', () => {
+  assert.throws(() => normalizeLocations([null]), TypeError);
+  assert.throws(() => normalizeLocations('file:///a'), TypeError);
+  assert.throws(() => normalizeLocations([[]]), TypeError);
+  assert.deepEqual(normalizeLocations(undefined), []);
+  assert.deepEqual(normalizeLocations(0), []);
+});
+
+test('semantic tokens need an object with a data list', () => {
+  for (const odd of [true, 'abc', [], { data: 'abc' }, { data: null }]) {
+    assert.equal(toSemanticTokens(odd), null);
+  }
+  // Each entry is converted as Uint32Array.from converts it, numbers or not.
+  assert.deepEqual([...toSemanticTokens({ data: ['3', 'x'] })!.data], [3, 0]);
+});
+
+test('a semantic tokens legend needs both of its lists', () => {
+  assert.equal(isSemanticTokensLegend({ tokenModifiers: [], tokenTypes: [] }), true);
+  for (const odd of [
+    true,
+    'abc',
+    [],
+    {},
+    { tokenTypes: [] },
+    { tokenModifiers: [], tokenTypes: 'a' },
+  ]) {
+    assert.equal(isSemanticTokensLegend(odd), false);
+  }
+});
+
+test('a diagnostics list is shown only when every entry is an object', () => {
+  assert.equal(isDiagnosticList([]), true);
+  assert.equal(isDiagnosticList([{ message: 'm' }]), true);
+  assert.equal(isDiagnosticList([{ message: 'm' }, null]), false);
+  assert.equal(isDiagnosticList([[]]), false);
+});
+
+test('object guards reject null, arrays and other values, as reading a field from them gave nothing', () => {
+  for (const guard of [isCodeAction, isHover, isSignatureHelp, isWorkspaceEdit]) {
+    for (const odd of [null, undefined, true, 'abc', 3, []]) {
+      assert.equal(guard(odd), false);
+    }
+    assert.equal(guard({}), true);
+  }
 });

@@ -2,6 +2,7 @@
 // 10 s, 256 KiB each, measured by Orca's own function: see size.ts) even when PHPantom publishes diagnostics for hundreds of files at once.
 // Posts are keyed: a newer payload for a key replaces the queued one, so the latest state always arrives and stale ones are never sent.
 
+import { isRecord } from '../utils/json.ts';
 import { fitsIn, orcaSize, type Size } from '../utils/size.ts';
 
 // Orca drops a post over 256 KiB or 10,000 objects by its own measure; this leaves room for what it may miss.
@@ -25,8 +26,11 @@ interface DiagnosticsPayload {
   truncated?: number;
 }
 
+const isDiagnosticsPayload = (payload: unknown): payload is DiagnosticsPayload =>
+  isRecord(payload) && Array.isArray(payload.diagnostics);
+
 function severityOf(diagnostic: unknown): number {
-  const severity = (diagnostic as { severity?: unknown } | null)?.severity;
+  const severity = isRecord(diagnostic) ? diagnostic.severity : undefined;
   // Why 1: clients show a diagnostic without a severity as an error.
   return typeof severity === 'number' ? severity : 1;
 }
@@ -121,15 +125,17 @@ class Outbox {
       return payload;
     }
     if (event === 'phpantom.diagnostics') {
-      return this.fitDiagnostics(payload as DiagnosticsPayload);
+      // Why throw: the router queues diagnostics only as a list, and flush skips a post whose fit throws.
+      if (!isDiagnosticsPayload(payload)) throw new TypeError('diagnostics payload without a list');
+      return this.fitDiagnostics(payload);
     }
-    const message = (payload as { message?: unknown } | null)?.message;
-    if (typeof message === 'string') {
-      const shell = orcaSize({ ...(payload as object), message: '' });
+    const message = isRecord(payload) ? payload.message : undefined;
+    if (isRecord(payload) && typeof message === 'string') {
+      const shell = orcaSize({ ...payload, message: '' });
       const room = this.limit.bytes - shell.bytes;
       if (room > 0 && shell.objects <= this.limit.objects) {
         // Why chars before bytes: a character is at most 4 bytes, so this many always fit.
-        return { ...(payload as object), message: message.slice(0, Math.floor(room / 4)) };
+        return { ...payload, message: message.slice(0, Math.floor(room / 4)) };
       }
     }
     return payload;

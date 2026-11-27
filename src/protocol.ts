@@ -50,7 +50,7 @@ declare module 'orca' {
       output: { ok: true } | { detached: true } | { resync: true };
     };
     'phpantom.request': {
-      input: { docId: string; session: string; method: string; params: Record<string, unknown> };
+      input: { docId: string; session: string; method: string; params: object };
       output: { result: unknown; truncated?: number } | { detached: true } | { error: string };
     };
     'phpantom.close': { input: { docId: string }; output: { ok: true } };

@@ -2,6 +2,7 @@
 import { spawn, type ChildProcess } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 
+import { isRecord } from '../../utils/json.ts';
 import type { ServerState } from '../status.ts';
 import { CLIENT_CAPABILITIES } from './capabilities.ts';
 import { RpcConnection } from './jsonrpc.ts';
@@ -42,6 +43,14 @@ interface ProgressValue {
   kind?: string;
   percentage?: number;
 }
+
+// The params of the notifications PHPantom sends, with the fields LSP gives them.
+const isPublishDiagnostics = (params: unknown): params is { uri: string; diagnostics: unknown[] } =>
+  isRecord(params);
+const isProgress = (params: unknown): params is { token: string | number; value: ProgressValue } =>
+  isRecord(params);
+const isLogMessage = (params: unknown): params is { type: number; message: string } =>
+  isRecord(params);
 
 async function delay(ms: number): Promise<'timeout'> {
   return new Promise((resolve) =>
@@ -136,7 +145,7 @@ class PhpantomServer {
         }, this.options.initializeTimeoutMs ?? INITIALIZE_TIMEOUT_MS);
         timer.unref();
       });
-      const result = (await Promise.race([
+      const result = await Promise.race([
         rpc.request('initialize', {
           capabilities: CLIENT_CAPABILITIES,
           clientInfo: { name: 'orca-phpantom', version: '0.2.1' },
@@ -147,8 +156,10 @@ class PhpantomServer {
           ],
         }),
         timeout,
-      ])) as { capabilities?: Record<string, unknown> } | null;
-      this.capabilities = result?.capabilities ?? {};
+      ]);
+      // Why only an object: any other value offers nothing, as {} does.
+      this.capabilities =
+        isRecord(result) && isRecord(result.capabilities) ? result.capabilities : {};
       rpc.notify('initialized', {});
       this.started = true;
       if (this.finished) {
@@ -233,7 +244,7 @@ class PhpantomServer {
   private onRequest(method: string, params: unknown): unknown {
     switch (method) {
       case 'workspace/configuration': {
-        const items = (params as { items?: unknown[] } | null)?.items;
+        const items = isRecord(params) ? params.items : undefined;
         return Array.isArray(items) ? items.map(() => null) : [];
       }
       case 'workspace/applyEdit': {
@@ -252,16 +263,17 @@ class PhpantomServer {
   private onNotification(method: string, params: unknown): void {
     const { events } = this.options;
     if (method === 'textDocument/publishDiagnostics') {
-      const { uri, diagnostics } = params as { uri: string; diagnostics: unknown[] };
-      events.diagnostics(uri, diagnostics);
+      // Why throw: the connection reports a notification that fails.
+      if (!isPublishDiagnostics(params)) throw new TypeError('publishDiagnostics without params');
+      events.diagnostics(params.uri, params.diagnostics);
     } else if (method === '$/progress') {
-      const { token, value } = params as { token: string | number; value: ProgressValue };
-      this.onProgress(String(token), value);
-    } else if (method === 'window/logMessage') {
-      const { type, message } = params as { type: number; message: string };
-      if (type === 1 || type === 2) {
-        events.log(message);
-      }
+      if (isProgress(params)) this.onProgress(String(params.token), params.value);
+    } else if (
+      method === 'window/logMessage' &&
+      isLogMessage(params) &&
+      (params.type === 1 || params.type === 2)
+    ) {
+      events.log(params.message);
     }
   }
 

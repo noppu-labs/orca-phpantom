@@ -2,7 +2,7 @@
 // PHPantom's diagnostics for this editor, kept as sent and shown as markers.
 import type { LspBridge } from '../bridge.ts';
 import type { EditorContext } from '../editor.ts';
-import { toMarker, type LspDiagnostic } from '../lsp-convert.ts';
+import { isDiagnosticList, toMarker, type LspDiagnostic } from '../lsp-convert.ts';
 import { disposeAll, type Disposable, type Model } from './shared.ts';
 
 const MARKER_OWNER = 'phpantom';
@@ -21,11 +21,13 @@ function diagnosticsOf(model: Model): LspDiagnostic[] {
 function showDiagnostics(ctx: EditorContext, bridge: LspBridge): Disposable {
   const set = (diagnostics: LspDiagnostic[]): void => {
     diagnosticsByModel.set(ctx.model, diagnostics);
+    // oxlint-disable-next-line typescript/no-unsafe-enum-assignment -- toMarker has already turned LSP's severities into Monaco's numbers, and both number tags the same way
     ctx.monaco.editor.setModelMarkers(ctx.model, MARKER_OWNER, diagnostics.map(toMarker));
   };
   return disposeAll([
     bridge.onDiagnostics((diagnostics) => {
-      set(diagnostics as LspDiagnostic[]);
+      // Why skip: a list with something other than an object in it cannot be shown as markers.
+      if (isDiagnosticList(diagnostics)) set(diagnostics);
     }),
     bridge.onStatus((status) => {
       if (status.state !== 'ready') set([]);

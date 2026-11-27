@@ -6,7 +6,12 @@ import type { EditorContext } from '../editor.ts';
 import {
   diagnosticsTouching,
   fromLspRange,
+  isCodeAction,
+  isCodeActionList,
+  isTextEditList,
+  isWorkspaceEdit,
   normalizeLocations,
+  renameRange,
   splitWorkspaceEdit,
   toCodeAction,
   toLspPosition,
@@ -14,8 +19,6 @@ import {
   toMonacoEdit,
   type LspCodeAction,
   type LspPosition,
-  type LspTextEdit,
-  type LspWorkspaceEdit,
   type MonacoRange,
   type MonacoWorkspaceEdit,
 } from '../lsp-convert.ts';
@@ -34,9 +37,11 @@ import { diagnosticsOf } from './diagnostics.ts';
 import {
   SERVER_NAME,
   canceled,
+  capability,
   disposeAll,
+  isRecord,
+  stringList,
   withSignal,
-  type Capabilities,
   type Disposable,
   type Model,
 } from './shared.ts';
@@ -58,7 +63,6 @@ function registerEditingProviders(
   capabilities: Record<string, unknown>
 ): Disposable {
   const { monaco, model } = ctx;
-  const caps = capabilities as Capabilities;
   const language = model.getLanguageId();
   const registered: Disposable[] = [];
   const ours = (candidate: Model): boolean => candidate === model;
@@ -67,18 +71,18 @@ function registerEditingProviders(
   const documentUri = (): string => (bridge.status?.state === 'ready' ? bridge.status.uri : '');
   const ask = async (
     method: string,
-    params: Record<string, unknown>,
+    params: object,
     token: monaco.CancellationToken,
     options: AskOptions = {}
-  ): Promise<any> =>
+  ): Promise<unknown> =>
     withSignal(token, async (signal) =>
       bridge.ask(method, params, signal, { kind: 'user', ...options })
     );
   const atCursor = (position: monaco.Position): { position: LspPosition } => ({
     position: toLspPosition(position),
   });
-  const edits = (list: LspTextEdit[] | null | undefined): monaco.languages.TextEdit[] | null =>
-    Array.isArray(list) ? list.map(toMonacoEdit) : null;
+  const edits = (list: unknown): monaco.languages.TextEdit[] | null =>
+    isTextEditList(list) ? list.map(toMonacoEdit) : null;
 
   // --- definitions and references ---
   const peekModels = new PeekModels((uri, text) => {
@@ -165,7 +169,7 @@ function registerEditingProviders(
     }));
   };
 
-  if (caps.definitionProvider) {
+  if (capabilities.definitionProvider) {
     registered.push(
       monaco.languages.registerDefinitionProvider(language, {
         provideDefinition: async (m, position, token) =>
@@ -173,7 +177,7 @@ function registerEditingProviders(
       })
     );
   }
-  if (caps.declarationProvider) {
+  if (capabilities.declarationProvider) {
     registered.push(
       monaco.languages.registerDeclarationProvider(language, {
         provideDeclaration: async (m, position, token) =>
@@ -181,7 +185,7 @@ function registerEditingProviders(
       })
     );
   }
-  if (caps.typeDefinitionProvider) {
+  if (capabilities.typeDefinitionProvider) {
     registered.push(
       monaco.languages.registerTypeDefinitionProvider(language, {
         provideTypeDefinition: async (m, position, token) =>
@@ -189,7 +193,7 @@ function registerEditingProviders(
       })
     );
   }
-  if (caps.implementationProvider) {
+  if (capabilities.implementationProvider) {
     registered.push(
       monaco.languages.registerImplementationProvider(language, {
         provideImplementation: async (m, position, token) =>
@@ -197,7 +201,7 @@ function registerEditingProviders(
       })
     );
   }
-  if (caps.referencesProvider) {
+  if (capabilities.referencesProvider) {
     registered.push(
       monaco.languages.registerReferenceProvider(language, {
         provideReferences: async (m, position, context, token) =>
@@ -214,7 +218,7 @@ function registerEditingProviders(
   ): { options: { tabSize: number; insertSpaces: boolean } } => ({
     options: { insertSpaces: options.insertSpaces, tabSize: options.tabSize },
   });
-  if (caps.documentFormattingProvider) {
+  if (capabilities.documentFormattingProvider) {
     registered.push(
       monaco.languages.registerDocumentFormattingEditProvider(language, {
         displayName: SERVER_NAME,
@@ -229,7 +233,7 @@ function registerEditingProviders(
       })
     );
   }
-  if (caps.documentRangeFormattingProvider) {
+  if (capabilities.documentRangeFormattingProvider) {
     registered.push(
       monaco.languages.registerDocumentRangeFormattingEditProvider(language, {
         displayName: SERVER_NAME,
@@ -249,22 +253,21 @@ function registerEditingProviders(
   }
 
   // --- rename, within this file only ---
-  if (caps.renameProvider) {
-    const prepares =
-      typeof caps.renameProvider === 'object' && Boolean(caps.renameProvider.prepareProvider);
+  if (capabilities.renameProvider) {
+    const prepares = Boolean(capability(capabilities, 'renameProvider', 'prepareProvider'));
     registered.push(
       monaco.languages.registerRenameProvider(language, {
         async provideRenameEdits(m, position, newName, token) {
           if (!ours(m)) return null;
           // The bridge drops an answer the text moved under; the stamp makes Monaco refuse it if it moves later.
           const versionId = model.getVersionId();
-          const result = (await ask(
+          const result = await ask(
             'textDocument/rename',
             { ...atCursor(position), newName },
             token
-          )) as LspWorkspaceEdit | null;
+          );
           if (!result) return null;
-          const split = splitWorkspaceEdit(result, documentUri());
+          const split = splitWorkspaceEdit(isWorkspaceEdit(result) ? result : null, documentUri());
           if (split.otherFiles > 0) {
             const reason = renameReachesOtherFiles(split.otherFiles);
             // Why a note too: standalone Monaco only logs a rename's reject reason to the console.
@@ -294,9 +297,9 @@ function registerEditingProviders(
                 };
               }
               // The server either leaves the range to the client ...
-              if (result.defaultBehavior) return null;
+              if (isRecord(result) && result.defaultBehavior) return null;
               // ... or sends a range, alone or with a placeholder. Why not show the placeholder: for a class PHPantom 1.1.0 sends the fully qualified name while the range and the new name are the short one.
-              const range = fromLspRange(result.range ?? result);
+              const range = fromLspRange(renameRange(result));
               return { range, text: m.getValueInRange(range) };
             }
           : undefined,
@@ -305,16 +308,11 @@ function registerEditingProviders(
   }
 
   // --- code actions ---
-  if (caps.codeActionProvider) {
+  if (capabilities.codeActionProvider) {
     // The server's own action for each one shown, and the model version it was computed against: resolving needs exactly what the server sent, and an edit applies only to that version's text.
     const serverActions = new WeakMap<object, { raw: LspCodeAction; versionId: number }>();
-    const kinds =
-      typeof caps.codeActionProvider === 'object'
-        ? caps.codeActionProvider.codeActionKinds
-        : undefined;
-    const resolves =
-      typeof caps.codeActionProvider === 'object' &&
-      Boolean(caps.codeActionProvider.resolveProvider);
+    const kinds = stringList(capability(capabilities, 'codeActionProvider', 'codeActionKinds'));
+    const resolves = Boolean(capability(capabilities, 'codeActionProvider', 'resolveProvider'));
     const toMonacoWorkspaceEdit = (edit: MonacoWorkspaceEdit): monaco.languages.WorkspaceEdit => ({
       edits: edit.edits.map((item) => ({
         ...item,
@@ -348,7 +346,7 @@ function registerEditingProviders(
             );
             const actions: monaco.languages.CodeAction[] = [];
             if (model.getVersionId() !== versionId) return { actions, dispose() {} };
-            for (const raw of Array.isArray(result) ? (result as LspCodeAction[]) : []) {
+            for (const raw of isCodeActionList(result) ? result : []) {
               const converted = toCodeAction(raw, documentUri(), modelUri, versionId);
               if (!converted) continue;
               if (converted.needsResolve && !resolves) continue;
@@ -377,13 +375,13 @@ function registerEditingProviders(
               showNote('info', MOVED_FIX, EDIT_NOTE);
               return action;
             }
-            const resolved = raw.edit
-              ? raw
-              : ((await ask('codeAction/resolve', raw, token)) as LspCodeAction | null);
+            const resolved = raw.edit ? raw : await ask('codeAction/resolve', raw, token);
             if (!resolved) {
               if (token.isCancellationRequested) throw canceled();
               return action;
             }
+            // Anything but an object is no action.
+            if (!isCodeAction(resolved)) return action;
             const converted = toCodeAction(resolved, documentUri(), modelUri, versionId);
             if (!converted?.edit) return action;
             if (converted.otherFiles > 0) {

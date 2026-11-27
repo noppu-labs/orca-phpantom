@@ -1,6 +1,7 @@
 // Adapted from actus7/orca-autocomplete src/lsp/jsonrpc.ts @ da5a680 (MIT). See THIRD_PARTY_NOTICES.md.
 // A minimal JSON-RPC 2.0 connection over the framing every language server uses on stdio:
 // `Content-Length: n`, a blank line, then n bytes of JSON.
+import { isRecord } from '../../utils/json.ts';
 
 interface RpcHandlers {
   /** A request the server makes of us (configuration, registering capabilities ...); its result is the answer. */
@@ -14,6 +15,16 @@ interface Pending {
   resolve: (value: unknown) => void;
   reject: (error: Error) => void;
 }
+
+interface RpcMessage {
+  id?: number | string;
+  method?: string;
+  params?: unknown;
+  result?: unknown;
+  error?: { code: number; message: string };
+}
+
+const isRpcMessage = (value: unknown): value is RpcMessage => isRecord(value);
 
 const HEADER_END = Buffer.from('\r\n\r\n');
 const LENGTH_HEADER = /content-length:\s*(\d+)/i;
@@ -122,18 +133,14 @@ class RpcConnection {
   }
 
   private dispatch(body: string): void {
-    let message: {
-      id?: number | string;
-      method?: string;
-      params?: unknown;
-      result?: unknown;
-      error?: { code: number; message: string };
-    };
+    let message: unknown;
     try {
       message = JSON.parse(body);
     } catch {
       return;
     }
+    // Why: a body that is not an object (a batch, a bare value) carries nothing this connection answers.
+    if (!isRpcMessage(message)) return;
     if (message.method !== undefined && message.id !== undefined) {
       void this.answer(message.id, message.method, message.params);
     } else if (message.method !== undefined) {

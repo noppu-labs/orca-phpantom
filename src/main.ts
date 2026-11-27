@@ -54,7 +54,7 @@ export default async function activate(orca: OrcaWorkerApi): Promise<void> {
       await orca.host.call('editor.open', { path, workspaceId });
     },
     post(event, payload, options) {
-      // Why the cast: the router posts the declared phpantom.* events, typed where they are built.
+      // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- the router posts the declared phpantom.* events, typed where they are built
       orca.panels.post(event as 'phpantom.status', payload as never, options);
     },
     async settings() {

@@ -1,6 +1,8 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { posix, win32 } from 'node:path';
 
+import { isRecord } from '../../utils/json.ts';
+
 const FULL_COLOUR_CONFIG = '[semantic-tokens]\nmode = "full"\n';
 
 /** Where PHPantom reads its global `.phpantom.toml`, by the same rules as its `etcetera` base strategy. */
@@ -36,7 +38,7 @@ function writeFullColourDefault(
       `Wrote ${path} to turn on full colouring, because the plugin downloaded PHPantom and there was no global PHPantom config`
     );
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'EEXIST') {
+    if (isRecord(error) && error.code === 'EEXIST') {
       return;
     }
     log(

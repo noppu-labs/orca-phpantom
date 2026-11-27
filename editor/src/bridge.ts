@@ -1,6 +1,11 @@
 // Keeps one editor's document attached to PHPantom through the worker: opens it in chunks, streams incremental changes, forwards LSP requests, and opens it again when the worker or its server restarts or the frame turns out to belong to another workspace.
 // No Monaco here, so Node can test it with fakes.
-import type { PluginRequestInput, PluginRequestOutput, PluginRequests } from 'orca';
+import type {
+  PluginPanelEvents,
+  PluginRequestInput,
+  PluginRequestOutput,
+  PluginRequests,
+} from 'orca';
 
 import type { AttachStatus, Language, LspContentChange, LspRange } from '../../src/protocol.ts';
 import { isRateLimited, Pacer } from './pacer.ts';
@@ -24,7 +29,10 @@ interface BridgeHost {
     options?: { timeoutMs?: number; signal?: AbortSignal }
   ) => Promise<PluginRequestOutput<K>>;
   /** What the worker posts to this editor's panel; every frame of the editor hears every post. */
-  on: (event: string, handler: (payload: any) => void) => Disposable;
+  on: <K extends keyof PluginPanelEvents>(
+    event: K,
+    handler: (payload: PluginPanelEvents[K]) => void
+  ) => Disposable;
   /** The focused workspace, which is not always this frame's: see the R2 notes on LspBridge. */
   readContext: () => Promise<WorkspaceContext | null>;
   /** Orca's `workspace.changed`, the current context first. Background frames hear it too. */
@@ -349,7 +357,7 @@ class LspBridge {
   /** Sends `method` once queued changes are in; null when aborted, failed, held back, or (for edits) outdated. */
   public async ask(
     method: string,
-    params: Record<string, unknown>,
+    params: object,
     signal?: AbortSignal,
     options: AskOptions = {}
   ): Promise<unknown | null> {
@@ -359,7 +367,7 @@ class LspBridge {
   /** As `ask`, with how many items the worker cut from a list too large for Orca to carry. */
   public async askDetailed(
     method: string,
-    params: Record<string, unknown>,
+    params: object,
     signal?: AbortSignal,
     options: AskOptions = {}
   ): Promise<{ result: unknown; truncated: number } | null> {
@@ -711,10 +719,10 @@ class LspBridge {
   // Why: Orca remounts an editor frame (with a new docId) each time its tab shows, and the old frame's pagehide close may never reach the worker, so the worker releases what it stops hearing from.
   private startPinging(): void {
     if (this.pingTimer !== undefined || this.disposed) return;
-    const timer: { unref?: () => void } | number = setInterval(() => void this.ping(), this.pingMs);
+    const timer = setInterval(() => void this.ping(), this.pingMs);
     // Why: under Node (the tests) a bridge never disposed must not keep the process alive; a browser timer is a number.
     if (typeof timer === 'object') timer.unref?.();
-    this.pingTimer = timer as ReturnType<typeof setInterval>;
+    this.pingTimer = timer;
   }
 
   private stopPinging(): void {
