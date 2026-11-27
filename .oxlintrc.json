@@ -156,7 +156,7 @@
       }
     },
     {
-      "files": ["**/*"],
+      "files": ["editor/src/monaco-modules.d.ts"],
       "rules": {
         "import/unambiguous": "off"
       }
