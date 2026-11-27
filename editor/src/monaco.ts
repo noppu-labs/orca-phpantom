@@ -1,4 +1,5 @@
 // Monaco with only what this plugin uses: the editor, its features, PHP, HTML and Blade.
+// oxlint-disable-next-line import/no-namespace, oxc/no-barrel-file, unicorn/prefer-export-from -- the one module that imports monaco-editor: it registers Blade with the namespace and re-exports it whole as Monaco's API for the rest of editor/src
 import * as monaco from 'monaco-editor/editor';
 // oxlint-disable-next-line import/no-unassigned-import -- registers Monaco's editor features as it loads
 import 'monaco-editor/features/register.all';

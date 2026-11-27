@@ -1,6 +1,7 @@
 // Adapted from actus7/orca-autocomplete editor/src/lsp.ts @ da5a680 (MIT). See THIRD_PARTY_NOTICES.md.
 // Monaco's editing features answered by PHPantom through the bridge: going to definitions and references, formatting, rename and code actions.
 // Only what the server says it supports is registered, for the model's own language, and only this editor's model is answered.
+import { isRecord, isTruthy } from '../../../src/utils/json.ts';
 import { isFileUri } from '../../../src/utils/uri.ts';
 import type { AskOptions, LspBridge } from '../bridge.ts';
 import type { EditorContext } from '../editor.ts';
@@ -40,8 +41,6 @@ import {
   canceled,
   capability,
   disposeAll,
-  isRecord,
-  isTruthy,
   listOrUndefined,
   noop,
   withSignal,

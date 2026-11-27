@@ -1,5 +1,6 @@
 import { assert, mockHost, mountWorker, test } from 'orca/testing';
 
+// oxlint-disable-next-line import/no-namespace -- mountWorker takes the worker module's namespace, as Orca loads it
 import * as main from '../../src/main.ts';
 
 test('registers every handler and sets the status bar', async () => {

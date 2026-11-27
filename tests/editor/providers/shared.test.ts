@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { capability, isRecord, listOrUndefined } from '../../../editor/src/providers/shared.ts';
+import { capability, listOrUndefined } from '../../../editor/src/providers/shared.ts';
+import { isRecord } from '../../../src/utils/json.ts';
 
 test('capability walks nested keys and returns undefined off the path', () => {
   assert.equal(capability({ a: { b: true } }, 'a', 'b'), true);

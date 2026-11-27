@@ -5,6 +5,9 @@
 // FAKE_CAPABILITIES=<json>: initialize answers these capabilities instead of the usual ones.
 // FAKE_MODE=silent: never answers initialize. FAKE_MODE=stubborn: answers, then ignores shutdown, exit, stdin end.
 // Both ignore SIGTERM, so only SIGKILL removes them.
+import { Buffer } from 'node:buffer';
+import process from 'node:process';
+
 const mode = process.env.FAKE_MODE ?? '';
 if (mode !== '') {
   process.on('SIGTERM', () => undefined);

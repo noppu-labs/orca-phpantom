@@ -1,6 +1,6 @@
 // Adapted from actus7/orca-autocomplete editor/src/lsp.ts @ da5a680 (MIT). See THIRD_PARTY_NOTICES.md.
 // What the language feature providers share: their types, the server name they show, and the cancellation and disposal helpers.
-import { isRecord, isTruthy } from '../../../src/utils/json.ts';
+import { isRecord } from '../../../src/utils/json.ts';
 import type { monaco } from '../monaco.ts';
 
 interface Disposable {
@@ -64,15 +64,5 @@ function disposeAll(list: Disposable[]): Disposable {
   };
 }
 
-export {
-  SERVER_NAME,
-  canceled,
-  capability,
-  disposeAll,
-  isRecord,
-  isTruthy,
-  listOrUndefined,
-  noop,
-  withSignal,
-};
+export { SERVER_NAME, canceled, capability, disposeAll, listOrUndefined, noop, withSignal };
 export type { Disposable, Model };

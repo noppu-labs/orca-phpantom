@@ -1,6 +1,7 @@
 // Adapted from actus7/orca-autocomplete editor/src/lsp.ts @ da5a680 (MIT). See THIRD_PARTY_NOTICES.md.
 // Monaco's reading features answered by PHPantom through the bridge: completion, hover, signature help, semantic colouring, inlay hints and the outline.
 // Only what the server says it supports is registered, for the model's own language, and only this editor's model is answered.
+import { isRecord, isTruthy } from '../../../src/utils/json.ts';
 import type { LspBridge, RequestKind } from '../bridge.ts';
 import type { EditorContext } from '../editor.ts';
 import {
@@ -33,8 +34,6 @@ import {
   canceled,
   capability,
   disposeAll,
-  isRecord,
-  isTruthy,
   listOrUndefined,
   noop,
   withSignal,
