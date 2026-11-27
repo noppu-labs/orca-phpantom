@@ -1,5 +1,6 @@
 // Adapted from actus7/orca-autocomplete src/lsp/jsonrpc.test.ts @ da5a680 (MIT). See THIRD_PARTY_NOTICES.md.
 import { assert, test } from 'orca/testing';
+
 import { RpcConnection } from './jsonrpc.ts';
 
 const frame = (message: object): Buffer => {

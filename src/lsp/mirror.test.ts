@@ -1,4 +1,5 @@
 import { assert, test } from 'orca/testing';
+
 import { DocumentMirror } from './mirror.ts';
 
 const ins = (line: number, character: number, text: string) => ({

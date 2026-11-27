@@ -1,5 +1,6 @@
 // Adapted from actus7/orca-autocomplete editor/src/edits.test.ts @ da5a680 (MIT). See THIRD_PARTY_NOTICES.md.
 import { assert, test } from 'orca/testing';
+
 import { smallestEdit } from './edits.ts';
 
 const apply = (before: string, edit: { start: number; end: number; text: string }): string =>

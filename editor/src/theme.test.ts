@@ -1,4 +1,5 @@
 import { assert, test } from 'orca/testing';
+
 import {
   SEMANTIC_MODIFIERS,
   SEMANTIC_TYPES,

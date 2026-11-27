@@ -1,5 +1,6 @@
 import { assert, test } from 'orca/testing';
 import { mockEditorHost } from 'orca/testing';
+
 import { bindDocument, flushWhenHidden, type TextView } from './sync.ts';
 
 function fakeView(initial = ''): TextView & { type(text: string): void } {

@@ -1,5 +1,6 @@
 // blade.test.ts — run the Monarch rules' regexes over sample lines; no Monaco import.
 import { assert, test } from 'orca/testing';
+
 import { bladeGrammar } from './blade.ts';
 import { firstRuleRegex, tokenTypes } from './monarch-walk.test-helper.ts';
 

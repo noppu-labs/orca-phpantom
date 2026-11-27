@@ -1,4 +1,5 @@
 import { assert, test } from 'orca/testing';
+
 import { mergeText } from './merge.ts';
 
 test('takes the outside text when only the file changed', () => {

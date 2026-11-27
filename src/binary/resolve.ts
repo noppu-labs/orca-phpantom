@@ -1,5 +1,6 @@
 import { chmodSync, existsSync, mkdirSync, renameSync, writeFileSync } from 'node:fs';
 import { posix, win32 } from 'node:path';
+
 import { writeFullColourDefault } from './colour.ts';
 import { downloadVerified } from './download.ts';
 import { extractSingleFile } from './extract.ts';

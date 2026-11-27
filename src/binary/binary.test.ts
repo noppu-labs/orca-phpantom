@@ -1,4 +1,3 @@
-import { assert, test } from 'orca/testing';
 import { createHash } from 'node:crypto';
 import {
   chmodSync,
@@ -13,6 +12,9 @@ import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+
+import { assert, test } from 'orca/testing';
+
 import { downloadVerified } from './download.ts';
 import { extractSingleFile } from './extract.ts';
 import { atLeast, findExecutable, parseVersion, readVersion, wellKnownDirs } from './find.ts';

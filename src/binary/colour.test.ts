@@ -1,4 +1,3 @@
-import { assert, test } from 'orca/testing';
 import { createHash } from 'node:crypto';
 import {
   chmodSync,
@@ -12,6 +11,9 @@ import {
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+
+import { assert, test } from 'orca/testing';
+
 import { FULL_COLOUR_CONFIG, globalConfigPath } from './colour.ts';
 import type { ReleaseAsset } from './release.ts';
 import { cacheDir, resolveBinary, type ResolveOptions } from './resolve.ts';

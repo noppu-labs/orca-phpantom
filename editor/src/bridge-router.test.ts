@@ -1,11 +1,13 @@
-// The bridge against the real router (and the fake language server), not against a scripted host: the
-// two halves of the protocol have to agree on chunks, versions, lengths, resyncs and sessions.
-import { afterEach, assert, test } from 'orca/testing';
 import { spawn } from 'node:child_process';
 import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+
+// The bridge against the real router (and the fake language server), not against a scripted host: the
+// two halves of the protocol have to agree on chunks, versions, lengths, resyncs and sessions.
+import { afterEach, assert, test } from 'orca/testing';
+
 import { PhpantomServer } from '../../src/lsp/server.ts';
 import { Router, type RouterHost } from '../../src/router.ts';
 import { ORCA_MAX_OBJECTS, orcaSize } from '../../src/size.ts';

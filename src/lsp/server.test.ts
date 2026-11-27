@@ -1,9 +1,11 @@
-import { assert, test } from 'orca/testing';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+
+import { assert, test } from 'orca/testing';
+
+import type { ServerState } from '../status.ts';
 import { CLIENT_CAPABILITIES } from './capabilities.ts';
 import { PhpantomServer, type RefreshKind, type ServerEvents } from './server.ts';
-import type { ServerState } from '../status.ts';
 
 const FAKE = fileURLToPath(new URL('./fixtures/fake-server.mjs', import.meta.url));
 

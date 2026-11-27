@@ -2,6 +2,7 @@
 // of the client, turns its notifications into typed events, and reports when it goes away.
 import { spawn, type ChildProcess } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
+
 import type { ServerState } from '../status.ts';
 import { CLIENT_CAPABILITIES } from './capabilities.ts';
 import { RpcConnection } from './jsonrpc.ts';

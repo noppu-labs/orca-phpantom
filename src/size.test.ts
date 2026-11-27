@@ -1,4 +1,5 @@
 import { assert, test } from 'orca/testing';
+
 import { leadingThatFit, orcaSize } from './size.ts';
 
 const location = {

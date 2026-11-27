@@ -1,9 +1,9 @@
 // Adapted from actus7/orca-autocomplete editor/src/main.ts @ da5a680 (MIT). See THIRD_PARTY_NOTICES.md.
 // Monaco in Orca's frame, bound to the open file through Orca's document session, in Orca's theme and font.
 import type { Language } from '../../src/protocol.ts';
+import { modelView } from './model-view.ts';
 import { monaco } from './monaco.ts';
 import { showNote } from './notes.ts';
-import { modelView } from './model-view.ts';
 import { bindDocument, flushWhenHidden } from './sync.ts';
 import { defineThemes, THEME_NAME, typographyOptions } from './theme.ts';
 

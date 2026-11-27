@@ -1,5 +1,7 @@
-import { assert, test } from 'orca/testing';
 import { mock } from 'node:test';
+
+import { assert, test } from 'orca/testing';
+
 import { Outbox } from './outbox.ts';
 import { orcaSize } from './size.ts';
 

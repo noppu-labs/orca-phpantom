@@ -1,5 +1,6 @@
 // Adapted from actus7/orca-autocomplete src/lsp/uri.test.ts @ da5a680 (MIT). See THIRD_PARTY_NOTICES.md.
 import { assert, test } from 'orca/testing';
+
 import { sameUri, uriKey } from './uri.ts';
 
 test('the spellings a server may use for one Windows file are the same file', () => {

@@ -1,4 +1,5 @@
 import { assert, mockEditorHost, test } from 'orca/testing';
+
 import { frameHost } from './frame-host.ts';
 import { bindDocument, type TextView } from './sync.ts';
 

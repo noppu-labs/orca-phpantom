@@ -1,11 +1,12 @@
+import { readdirSync, rmSync, statSync } from 'node:fs';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
 // Adapted from actus7/orca-autocomplete editor/build.mjs @ da5a680 (MIT). See THIRD_PARTY_NOTICES.md.
 // Builds the editor into editor/dist: Orca installs a plugin as files and runs it with no network
 // and no node_modules, so Monaco and our code ship prebuilt. Run `node editor/build.mjs` after
 // changing editor/src and commit the result; CI rebuilds and fails when editor/dist differs.
 import { build } from 'esbuild';
-import { readdirSync, rmSync, statSync } from 'node:fs';
-import { join } from 'node:path';
-import { fileURLToPath } from 'node:url';
 
 const MAX_FILE_BYTES = 10 * 1024 * 1024;
 const MAX_FILES = 200;

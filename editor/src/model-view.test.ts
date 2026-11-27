@@ -1,4 +1,5 @@
 import { assert, mockEditorHost, test } from 'orca/testing';
+
 import { smallestEdit } from './edits.ts';
 import { modelView, type Eol, type ModelPort } from './model-view.ts';
 import { bindDocument } from './sync.ts';

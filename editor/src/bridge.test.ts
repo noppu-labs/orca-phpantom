@@ -1,4 +1,5 @@
 import { assert, test } from 'orca/testing';
+
 import { DocumentMirror } from '../../src/lsp/mirror.ts';
 import type { AttachStatus } from '../../src/protocol.ts';
 import { LspBridge, type BridgeHost, type WorkspaceContext } from './bridge.ts';

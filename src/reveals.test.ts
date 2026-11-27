@@ -1,4 +1,5 @@
 import { assert, test } from 'orca/testing';
+
 import { PendingReveals } from './reveals.ts';
 
 const range = (line: number) => ({ start: { line, character: 0 }, end: { line, character: 4 } });

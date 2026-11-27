@@ -6,7 +6,9 @@ import { readFile, stat } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { isAbsolute, relative, sep } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+
 import type { PluginRequests } from 'orca';
+
 import { resolveBinary, type Resolution } from './binary/resolve.ts';
 import { locateFile } from './locate/locate.ts';
 import {

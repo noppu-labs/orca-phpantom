@@ -1,4 +1,5 @@
 import { assert, test } from 'orca/testing';
+
 import { aggregate, renderStatus } from './status.ts';
 
 test('no servers renders idle', () => {

@@ -1,6 +1,7 @@
 // Adapted from actus7/orca-autocomplete editor/src/lsp-convert.test.ts @ da5a680 (MIT). See THIRD_PARTY_NOTICES.md.
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+
 import {
   completionDetails,
   completionKindName,

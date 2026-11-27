@@ -340,10 +340,11 @@ export async function run(LANGUAGE: 'php' | 'blade') {
 `worker.ts`:
 
 ```ts
-import type { OrcaWorkerApi } from 'orca/worker';
+import { execFileSync } from 'node:child_process';
 import { readdir, readFile } from 'node:fs/promises';
 import { join, relative } from 'node:path';
-import { execFileSync } from 'node:child_process';
+
+import type { OrcaWorkerApi } from 'orca/worker';
 
 const SKIP = new Set(['.git', 'vendor', 'node_modules']);
 async function walk(

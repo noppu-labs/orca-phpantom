@@ -1,5 +1,5 @@
-import { mergeText } from './merge.ts';
 import { smallestEdit, type Splice } from './edits.ts';
+import { mergeText } from './merge.ts';
 
 export type TextView = {
   getValue(): string;

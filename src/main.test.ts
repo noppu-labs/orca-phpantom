@@ -1,4 +1,5 @@
 import { assert, mountWorker, test } from 'orca/testing';
+
 import * as main from './main.ts';
 
 test('registers every handler and sets the status bar', async () => {

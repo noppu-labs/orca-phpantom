@@ -1,13 +1,15 @@
-import { afterEach, assert, test } from 'orca/testing';
 import { spawn } from 'node:child_process';
 import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+
+import { afterEach, assert, test } from 'orca/testing';
+
 import type { Resolution } from './binary/resolve.ts';
-import type { LspRange } from './protocol.ts';
-import { PhpantomServer, type ServerEvents } from './lsp/server.ts';
 import type { WorkspaceRow } from './locate/workspaces.ts';
+import { PhpantomServer, type ServerEvents } from './lsp/server.ts';
+import type { LspRange } from './protocol.ts';
 import { Router, type RouterHost } from './router.ts';
 import { ORCA_MAX_OBJECTS, orcaSize } from './size.ts';
 import type { StatusBarUpdate } from './status.ts';

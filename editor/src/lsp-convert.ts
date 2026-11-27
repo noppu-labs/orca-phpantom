@@ -1,6 +1,6 @@
+import { sameUri } from '../../src/lsp/uri.ts';
 // Adapted from actus7/orca-autocomplete editor/src/lsp-convert.ts @ da5a680 (MIT). See THIRD_PARTY_NOTICES.md.
 import type { LspContentChange } from '../../src/protocol.ts';
-import { sameUri } from '../../src/lsp/uri.ts';
 
 // Conversions between the Language Server Protocol and Monaco. Pure data in, pure data out, so Node
 // can test them: the Monaco-aware code only wraps these.

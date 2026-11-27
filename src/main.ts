@@ -1,4 +1,5 @@
 import type { OrcaWorkerApi } from 'orca/worker';
+
 import type { WorkspaceRow } from './locate/workspaces.ts';
 import './protocol.ts';
 import { Router, type RouterHost } from './router.ts';
@@ -19,17 +20,15 @@ export default async function activate(orca: OrcaWorkerApi): Promise<void> {
   const host: RouterHost = {
     listWorkspaces(options) {
       if (options?.fresh || !workspaces || Date.now() - workspaces.at > WORKSPACE_LIST_TTL_MS) {
-        const rows = orca.host
-          .call('workspace.list')
-          .then(({ workspaces: list }) =>
-            list.map((row): WorkspaceRow => ({
-              id: row.id,
-              name: row.name,
-              branch: row.branch,
-              path: row.path,
-              hostId: row.hostId,
-            }))
-          );
+        const rows = orca.host.call('workspace.list').then(({ workspaces: list }) =>
+          list.map((row): WorkspaceRow => ({
+            id: row.id,
+            name: row.name,
+            branch: row.branch,
+            path: row.path,
+            hostId: row.hostId,
+          }))
+        );
         const cached = { rows, at: Date.now() };
         workspaces = cached;
         rows.catch(() => {

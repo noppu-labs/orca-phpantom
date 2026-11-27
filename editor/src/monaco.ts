@@ -6,6 +6,7 @@ import 'monaco-editor/editor/contrib/semanticTokens/browser/documentSemanticToke
 import 'monaco-editor/languages/definitions/php/register';
 import 'monaco-editor/languages/definitions/html/register';
 import { conf, language } from 'monaco-editor/languages/definitions/html/html';
+
 import { bladeGrammar } from './blade.ts';
 
 // Monaco's background worker sits beside the bundle in editor/dist.

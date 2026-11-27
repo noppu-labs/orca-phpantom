@@ -7,6 +7,7 @@
 // shares most of its lines, as long as one file is clearly ahead of the rest.
 import { readFile, readdir, stat } from 'node:fs/promises';
 import { join, sep } from 'node:path';
+
 import type { Language } from '../protocol.ts';
 
 export type Located =

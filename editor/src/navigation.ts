@@ -1,3 +1,4 @@
+import { sameUri } from '../../src/lsp/uri.ts';
 // Going to code in other files. Monaco shows only models it has, so the files a result points at get
 // read-only models for its previews (peek, Cmd-hover), and opening one goes to the worker, which opens
 // the file in an Orca tab. The pure parts here take no Monaco, so Node can test them.
@@ -5,7 +6,6 @@ import type { LspBridge } from './bridge.ts';
 import type { EditorContext } from './editor.ts';
 import { toLspRange, type MonacoRange } from './lsp-convert.ts';
 import { showNote } from './notes.ts';
-import { sameUri } from '../../src/lsp/uri.ts';
 
 type Disposable = { dispose(): void };
 type Location = { uri: string; range: MonacoRange };

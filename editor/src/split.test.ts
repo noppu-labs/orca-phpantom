@@ -1,4 +1,5 @@
 import { assert, test } from 'orca/testing';
+
 import { DocumentMirror } from '../../src/lsp/mirror.ts';
 import { orcaSize } from '../../src/size.ts';
 import {
