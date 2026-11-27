@@ -10,6 +10,9 @@ import { clearNote, showNote } from './notes.ts'
 import { registerEditingProviders, registerReadingProviders, showDiagnostics } from './providers.ts'
 
 const NOTE = 'phpantom-attach'
+const BUSY_NOTE = 'phpantom-busy'
+const BUSY_TEXT = 'Orca is limiting how often PHPantom can answer right now. Try again in a moment.'
+const BUSY_NOTE_MS = 6000
 
 function modelSource(ctx: EditorContext): DocumentSource {
   const { model, language } = ctx
@@ -71,6 +74,13 @@ export function attachLanguageServer(ctx: EditorContext): LspBridge {
     register('language features', () => registerReadingProviders(ctx, bridge, status.capabilities))
     register('navigation and edits', () => registerEditingProviders(ctx, bridge, status.capabilities))
     register('editor opener', () => installOpener(ctx, bridge))
+  })
+  // Only for something the person asked for: passive requests Orca holds back are dropped quietly.
+  let busyTimer: ReturnType<typeof setTimeout> | undefined
+  bridge.onBusy(() => {
+    showNote('info', BUSY_TEXT, BUSY_NOTE)
+    clearTimeout(busyTimer)
+    busyTimer = setTimeout(() => clearNote(BUSY_NOTE), BUSY_NOTE_MS)
   })
   bridge.onReveal((range) => {
     const target = fromLspRange(range)

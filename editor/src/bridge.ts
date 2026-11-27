@@ -3,6 +3,7 @@
 // or the frame turns out to belong to another workspace. No Monaco here, so Node can test it with fakes.
 import type { PluginRequestInput, PluginRequestOutput, PluginRequests } from 'orca'
 import type { AttachStatus, Language, LspContentChange, LspRange } from '../../src/protocol.ts'
+import { isRateLimited, Pacer } from './pacer.ts'
 import { chunkText, splitChanges } from './split.ts'
 
 type Disposable = { dispose(): void }
@@ -45,9 +46,21 @@ export type DocumentSource = {
   onChanges(listener: (changes: SourceChange[], isFlush: boolean) => void): Disposable
 }
 
+/**
+ * How a request is paced. `user`: someone asked (go to definition, rename, format, an invoked fix); it
+ * waits out a short hold and is retried once, then says the editor is busy. `passive`: Monaco asked on
+ * its own (hover, completion as you type); dropped while Orca holds calls back or past this editor's
+ * share. `background`: whole-document answers Monaco asks again after every change (colouring, inlay
+ * hints, the outline, the lightbulb); as passive, and it first waits for a pause in typing.
+ */
+export type RequestKind = 'user' | 'passive' | 'background'
+
+/** `silent`: a user request Monaco also makes on its own (resolving a focused item); it never shows the busy note. */
+export type AskOptions = { timeoutMs?: number; kind?: RequestKind; silent?: boolean }
+
 export type BridgeOptions = {
   docId?: string
-  /** Quiet time before queued changes are sent. */
+  /** Most time a typed change waits before it is sent; changes typed meanwhile go with it in one request. */
   syncDelayMs?: number
   /** Least time between two attempts to attach a file the worker could not place. */
   retryGapMs?: number
@@ -64,6 +77,17 @@ export type BridgeOptions = {
   settleMs?: number
   /** Time between two pings that renew the worker's lease on this document while attached. */
   pingMs?: number
+  /** Most passive and background requests in 10 s; Orca's 120 is shared by every PHPantom tab. */
+  passiveCap?: number
+  /** The hold after Orca refuses a call for the rate limit without saying how long, doubling up to the most. */
+  firstBackoffMs?: number
+  maxBackoffMs?: number
+  /** Time without typing a background request waits for. */
+  backgroundQuietMs?: number
+  /** The least a background request waits, so one Monaco replaces (a scroll, a cursor move) is cancelled unsent. */
+  backgroundMinWaitMs?: number
+  /** The longest hold a user request waits out before it says the editor is busy instead. */
+  userMaxWaitMs?: number
 }
 
 // Requests whose answer edits the text: applied to a text that moved since, they would corrupt it.
@@ -71,13 +95,26 @@ const VERSION_GUARDED = new Set(['textDocument/formatting', 'textDocument/rangeF
 // The last chunk waits for PHPantom to start, which can mean a cold index or a download.
 const LAST_CHUNK_TIMEOUT_MS = 120_000
 
-type Events = { ready: Ready; status: AttachStatus; diagnostics: unknown[]; refresh: string[]; reveal: LspRange }
+type Events = { ready: Ready; status: AttachStatus; diagnostics: unknown[]; refresh: string[]; reveal: LspRange; busy: undefined }
 type QueuedEvent = { changes: SourceChange[]; lengthAfter: number }
 type Group = { changes: LspContentChange[]; length: number }
 
 const codeOf = (error: unknown): unknown => (typeof error === 'object' && error !== null ? (error as { code?: unknown }).code : undefined)
 const messageOf = (error: unknown): string => (error instanceof Error ? error.message : String(error))
 const isEmpty = (range: LspRange): boolean => range.start.line === range.end.line && range.start.character === range.end.character
+
+/** Resolves after `ms`, or as soon as `signal` aborts. */
+function sleep(ms: number, signal?: AbortSignal): Promise<void> {
+  return new Promise((resolve) => {
+    const done = (): void => {
+      clearTimeout(timer)
+      signal?.removeEventListener('abort', done)
+      resolve()
+    }
+    const timer = setTimeout(done, ms)
+    signal?.addEventListener('abort', done, { once: true })
+  })
+}
 
 /**
  * An event's changes as request-sized groups, each with the document length after it, and the length
@@ -126,13 +163,18 @@ export class LspBridge {
   private readonly mountWindowMs: number
   private readonly settleMs: number
   private readonly pingMs: number
+  private readonly backgroundQuietMs: number
+  private readonly backgroundMinWaitMs: number
+  private readonly userMaxWaitMs: number
+  private readonly pacer: Pacer
   private readonly subscriptions: Disposable[] = []
   private readonly listeners: { [K in keyof Events]: Set<(value: Events[K]) => void> } = {
     ready: new Set(),
     status: new Set(),
     diagnostics: new Set(),
     refresh: new Set(),
-    reveal: new Set()
+    reveal: new Set(),
+    busy: new Set()
   }
 
   private current: AttachStatus | null = null
@@ -143,6 +185,11 @@ export class LspBridge {
   /** Changes since the last snapshot are queued only while an attach is in flight or done. */
   private accepting = false
   private queue: QueuedEvent[] = []
+  /** Groups of changes Orca refused for the rate limit; they go out first, as they were. */
+  private unsent: Group[] = []
+  private lastChangeAt = 0
+  /** Set when a background request was dropped during a hold: Monaco would not ask again until the next edit. */
+  private refreshTimer: ReturnType<typeof setTimeout> | undefined
   private needsResync = false
   private syncTimer: ReturnType<typeof setTimeout> | undefined
   /** Opens and changes run one at a time, so two chunk sequences for this document never interleave. */
@@ -180,7 +227,7 @@ export class LspBridge {
     this.host = host
     this.source = source
     this.docId = options.docId ?? crypto.randomUUID()
-    this.syncDelayMs = options.syncDelayMs ?? 50
+    this.syncDelayMs = options.syncDelayMs ?? 400
     this.retryGapMs = options.retryGapMs ?? 8000
     this.maxRetries = options.maxRetries ?? 20
     this.quietMs = options.quietMs ?? 2000
@@ -189,6 +236,10 @@ export class LspBridge {
     this.mountWindowMs = options.mountWindowMs ?? 1500
     this.settleMs = options.settleMs ?? 1500
     this.pingMs = options.pingMs ?? 20_000
+    this.backgroundQuietMs = options.backgroundQuietMs ?? 500
+    this.backgroundMinWaitMs = options.backgroundMinWaitMs ?? 250
+    this.userMaxWaitMs = options.userMaxWaitMs ?? 3000
+    this.pacer = new Pacer({ passiveCap: options.passiveCap, firstBackoffMs: options.firstBackoffMs, maxBackoffMs: options.maxBackoffMs })
 
     // Listen before the first open: PHPantom publishes diagnostics while the open is still answering.
     const mine = (payload: { docId?: unknown } | null | undefined): boolean => payload?.docId === this.docId
@@ -237,8 +288,8 @@ export class LspBridge {
     return this.settled(this.start(false))
   }
 
-  /** Sends `method` once queued changes are in; null when aborted, failed, or (for edits) outdated. */
-  async ask(method: string, params: Record<string, unknown>, signal?: AbortSignal, options: { timeoutMs?: number } = {}): Promise<unknown | null> {
+  /** Sends `method` once queued changes are in; null when aborted, failed, held back, or (for edits) outdated. */
+  async ask(method: string, params: Record<string, unknown>, signal?: AbortSignal, options: AskOptions = {}): Promise<unknown | null> {
     return (await this.askDetailed(method, params, signal, options))?.result ?? null
   }
 
@@ -247,26 +298,58 @@ export class LspBridge {
     method: string,
     params: Record<string, unknown>,
     signal?: AbortSignal,
-    options: { timeoutMs?: number } = {}
+    options: AskOptions = {}
   ): Promise<{ result: unknown; truncated: number } | null> {
+    const kind = options.kind ?? 'user'
+    const busy = (): void => {
+      if (!options.silent) this.emit('busy', undefined)
+    }
     const requestOptions = signal || options.timeoutMs ? { ...(signal ? { signal } : {}), ...(options.timeoutMs ? { timeoutMs: options.timeoutMs } : {}) } : undefined
-    for (let attempt = 0; attempt < 2; attempt++) {
+    // Why: Monaco shifts a background answer by every edit made after it asked; one that holds them already would move twice.
+    const askedAt = this.source.getVersion()
+    if (kind === 'background' && !(await this.typingPaused(askedAt, signal))) return null
+    let reattached = false
+    let refused = false
+    for (;;) {
       if (signal?.aborted || !this.attachedTo) return null
-      await this.flush()
+      if (kind === 'user' ? !(await this.holdPassed(signal, options.silent)) : !this.pacer.takePassive()) {
+        if (kind === 'background') this.refreshLater()
+        return null
+      }
+      await this.flush(true)
       const attachment = this.attachedTo
       const session = attachment?.session
       if (!attachment || !session || signal?.aborted) return null
+      // Why: changes Orca refused are not in the worker's copy yet, so an answer would be about older text.
+      if (this.unsent.length > 0) {
+        if (kind === 'user') busy()
+        if (kind === 'background') this.refreshLater()
+        return null
+      }
       const version = this.source.getVersion()
+      if (kind === 'background' && version !== askedAt) return null
       let answer: PluginRequestOutput<'phpantom.request'>
       try {
-        answer = await this.host.request('phpantom.request', { docId: this.docId, session, method, params }, requestOptions)
+        answer = await this.send('phpantom.request', { docId: this.docId, session, method, params }, requestOptions)
       } catch (error) {
-        if (signal?.aborted || codeOf(error) !== 'unavailable') return null
+        if (signal?.aborted) return null
+        if (isRateLimited(error)) {
+          if (kind === 'background') this.refreshLater()
+          if (kind !== 'user') return null
+          if (refused) {
+            busy()
+            return null
+          }
+          refused = true
+          continue
+        }
+        if (codeOf(error) !== 'unavailable') return null
         answer = { detached: true }
       }
       if (signal?.aborted) return null
       if ('detached' in answer) {
-        if (attempt > 0) return null
+        if (reattached) return null
+        reattached = true
         if (this.attachedTo?.session === session) {
           this.lost()
         }
@@ -279,21 +362,20 @@ export class LspBridge {
       if (VERSION_GUARDED.has(method) && this.source.getVersion() !== version) return null
       return { result: answer.result ?? null, truncated: answer.truncated ?? 0 }
     }
-    return null
   }
 
   /** Opens `uri` in an Orca tab, revealing `range` there; null when not attached or the worker failed. */
   async navigate(uri: string, range: LspRange): Promise<PluginRequestOutput<'phpantom.navigate'> | null> {
     const session = this.attachedTo?.session
     if (!session) return null
-    return this.host.request('phpantom.navigate', { docId: this.docId, session, uri, range }).catch(() => null)
+    return this.userCall(() => this.send('phpantom.navigate', { docId: this.docId, session, uri, range }))
   }
 
   /** The text of files on disk, for Monaco's previews; null when not attached, aborted or failed. */
   async peek(uris: string[], signal?: AbortSignal): Promise<PluginRequestOutput<'phpantom.peek'> | null> {
     const session = this.attachedTo?.session
     if (!session || signal?.aborted) return null
-    return this.host.request('phpantom.peek', { docId: this.docId, session, uris }, signal ? { signal } : undefined).catch(() => null)
+    return this.userCall(() => this.send('phpantom.peek', { docId: this.docId, session, uris }, signal ? { signal } : undefined), signal)
   }
 
   onReady(listener: (status: Ready) => void): Disposable {
@@ -317,6 +399,11 @@ export class LspBridge {
     return this.listen('reveal', listener)
   }
 
+  /** A user request could not be served because Orca is holding this plugin's calls back. */
+  onBusy(listener: () => void): Disposable {
+    return this.listen('busy', listener)
+  }
+
   dispose(): void {
     if (this.disposed) return
     this.disposed = true
@@ -324,9 +411,10 @@ export class LspBridge {
     clearTimeout(this.syncTimer)
     clearTimeout(this.reattachTimer)
     clearTimeout(this.retryTimer)
+    clearTimeout(this.refreshTimer)
     this.stopPinging()
     for (const subscription of this.subscriptions) subscription.dispose()
-    this.host.request('phpantom.close', { docId: this.docId }).catch(() => undefined)
+    this.send('phpantom.close', { docId: this.docId }).catch(() => undefined)
   }
 
   // --- attaching ---
@@ -360,6 +448,7 @@ export class LspBridge {
     // Snapshot and queue reset together: every change after this line is queued on top of `text`.
     const text = this.source.getText()
     this.queue = []
+    this.unsent = []
     this.needsResync = false
     this.accepting = true
     if (!resync) {
@@ -383,7 +472,17 @@ export class LspBridge {
           last,
           ...(resync ? { resync: true as const } : {})
         }
-        answer = await this.host.request('phpantom.open', input, last ? { timeoutMs: LAST_CHUNK_TIMEOUT_MS } : undefined)
+        for (;;) {
+          try {
+            answer = await this.send('phpantom.open', input, last ? { timeoutMs: LAST_CHUNK_TIMEOUT_MS } : undefined)
+            break
+          } catch (error) {
+            // Orca refused the chunk before the worker saw it: the same chunk goes again after the hold.
+            if (!isRateLimited(error) || generation !== this.generation || this.disposed) throw error
+            await sleep(Math.max(this.pacer.wait(), 1))
+            if (generation !== this.generation || this.disposed) return null
+          }
+        }
         if (generation !== this.generation) return null
         if (!last && answer.state !== 'pending') {
           // The worker lost the earlier chunks (it restarted between them): this text never arrived whole.
@@ -448,8 +547,10 @@ export class LspBridge {
     if (this.current?.state === 'ready') this.current = null
     this.accepting = false
     this.queue = []
+    this.unsent = []
     this.needsResync = false
     clearTimeout(this.syncTimer)
+    this.syncTimer = undefined
     // Markers from a server that no longer has this document would never be cleared otherwise.
     if (had) this.emit('diagnostics', [])
   }
@@ -510,14 +611,15 @@ export class LspBridge {
   /** Not in the lane: it must not wait behind a long open. A released document goes the way of a lost one. */
   private async ping(): Promise<void> {
     const attachment = this.attachedTo
-    if (!attachment || this.pinging || this.disposed) return
+    // Why skip during a hold: the lease is three minutes and a ping goes every 20 s.
+    if (!attachment || this.pinging || this.disposed || this.pacer.wait() > 0) return
     const token = {}
     this.pinging = token
     const generation = this.generation
     let released: boolean
     try {
       // Why the timeout: a ping that hangs would otherwise swallow every tick after it.
-      const answer = await this.host.request('phpantom.ping', { docId: this.docId, session: attachment.session }, { timeoutMs: this.pingMs })
+      const answer = await this.send('phpantom.ping', { docId: this.docId, session: attachment.session }, { timeoutMs: this.pingMs })
       released = 'detached' in answer
     } catch (error) {
       // Only a missing worker means the document is gone; a timeout says nothing about it.
@@ -573,6 +675,7 @@ export class LspBridge {
   // --- changes ---
 
   private changed(changes: SourceChange[], isFlush: boolean): void {
+    this.lastChangeAt = Date.now()
     if (!this.accepting) {
       this.retrySoon(this.quietMs, false)
       return
@@ -583,40 +686,62 @@ export class LspBridge {
     } else if (!this.needsResync) {
       this.queue.push({ changes, lengthAfter: this.source.getLength() })
     }
-    this.scheduleSync(this.syncDelayMs)
+    // Why not restart a running timer: steady typing must still go out every syncDelayMs, not only when it stops.
+    if (this.syncTimer === undefined) this.scheduleSync(this.syncDelayMs)
   }
 
   private scheduleSync(delay: number): void {
     clearTimeout(this.syncTimer)
-    this.syncTimer = setTimeout(() => void this.flush(), delay)
+    this.syncTimer = setTimeout(() => {
+      this.syncTimer = undefined
+      void this.flush(false)
+    }, delay)
   }
 
-  /** Sends whatever is queued, behind any open in flight. */
-  private flush(): Promise<unknown> {
+  /**
+   * Sends what is queued, behind any open in flight. `drain` (a request about to go out) also sends edits
+   * typed meanwhile; the timer sends one batch, and edits typed during it wait for the timer they armed.
+   */
+  private flush(drain: boolean): Promise<unknown> {
     clearTimeout(this.syncTimer)
-    return this.inLane(() => this.sync())
+    this.syncTimer = undefined
+    return this.inLane(() => this.sync(drain))
   }
 
-  private async sync(): Promise<void> {
+  private async sync(drain: boolean): Promise<void> {
     while (this.attachedTo && !this.disposed) {
       const generation = this.generation
       if (this.needsResync) {
         await this.open(++this.generation, true)
         continue
       }
-      const event = this.queue.shift()
-      if (!event) return
-      const split = groupsOf(event)
-      // Why check the start: a length that does not chain on from the last one means the queue missed something.
-      if (!split || split.lengthBefore !== this.sentLength) {
-        this.resyncNext()
-        continue
+      let groups: Group[]
+      const held = this.unsent.length > 0
+      if (held) {
+        groups = this.unsent
+        this.unsent = []
+      } else {
+        if (this.queue.length === 0) return
+        // Every queued event in one go: their changes apply one after another, as LSP applies a list.
+        const events = this.queue.splice(0)
+        const split = groupsOf({ changes: events.flatMap((event) => event.changes), lengthAfter: events[events.length - 1].lengthAfter })
+        // Why check the start: a length that does not chain on from the last one means the queue missed something.
+        if (!split || split.lengthBefore !== this.sentLength) {
+          this.resyncNext()
+          continue
+        }
+        groups = split.groups
       }
-      for (const group of split.groups) {
+      for (let index = 0; index < groups.length; index++) {
+        const group = groups[index]
+        if (this.pacer.wait() > 0) {
+          this.holdBack(groups.slice(index))
+          return
+        }
         const session = this.attachedTo.session
         let answer: PluginRequestOutput<'phpantom.change'>
         try {
-          answer = await this.host.request('phpantom.change', {
+          answer = await this.send('phpantom.change', {
             docId: this.docId,
             session,
             version: this.version + 1,
@@ -625,6 +750,11 @@ export class LspBridge {
           })
         } catch (error) {
           if (generation !== this.generation) return
+          // Refused before the worker saw it, so it did not land: send the same groups after the hold.
+          if (isRateLimited(error)) {
+            this.holdBack(groups.slice(index))
+            return
+          }
           if (codeOf(error) === 'unavailable') {
             this.lost()
             return
@@ -645,12 +775,88 @@ export class LspBridge {
         this.version += 1
         this.sentLength = group.length
       }
+      if (!drain && !held && !this.needsResync) return
     }
+  }
+
+  private holdBack(groups: Group[]): void {
+    this.unsent = groups
+    this.scheduleSync(Math.max(this.pacer.wait(), 1))
   }
 
   private resyncNext(): void {
     this.needsResync = true
     this.queue = []
+    this.unsent = []
+  }
+
+  // --- pacing ---
+
+  /** Every call to the worker goes through here, so the pacer sees each one and every refusal. */
+  private async send<K extends keyof PluginRequests>(
+    name: K,
+    input: PluginRequestInput<K>,
+    options?: { timeoutMs?: number; signal?: AbortSignal }
+  ): Promise<PluginRequestOutput<K>> {
+    try {
+      const output = await this.host.request(name, input, options)
+      this.pacer.succeeded()
+      return output
+    } catch (error) {
+      if (isRateLimited(error)) this.pacer.refused(error)
+      throw error
+    }
+  }
+
+  /** Asks Monaco for colouring and hints again once the hold ends (or the share frees), once. */
+  private refreshLater(): void {
+    if (this.refreshTimer !== undefined || this.disposed) return
+    this.refreshTimer = setTimeout(() => {
+      this.refreshTimer = undefined
+      if (!this.disposed && this.attachedTo) this.emit('refresh', ['semanticTokens', 'inlayHints'])
+    }, Math.max(this.pacer.wait(), 1000))
+  }
+
+  /** Waits out a short hold; a longer one says the editor is busy and answers false. */
+  private async holdPassed(signal?: AbortSignal, silent = false): Promise<boolean> {
+    const hold = this.pacer.wait()
+    if (hold === 0) return true
+    if (hold > this.userMaxWaitMs) {
+      if (!silent) this.emit('busy', undefined)
+      return false
+    }
+    await sleep(hold, signal)
+    return !signal?.aborted && !this.disposed
+  }
+
+  /** A user call: after the hold, and once more if Orca refuses it; null when it fails. */
+  private async userCall<T>(run: () => Promise<T>, signal?: AbortSignal): Promise<T | null> {
+    for (let refused = false; ; refused = true) {
+      if (!(await this.holdPassed(signal))) return null
+      try {
+        return await run()
+      } catch (error) {
+        if (!isRateLimited(error) || signal?.aborted) return null
+        if (refused) {
+          this.emit('busy', undefined)
+          return null
+        }
+      }
+    }
+  }
+
+  /**
+   * Waits `backgroundMinWaitMs`, and until typing paused for `backgroundQuietMs`. False when aborted or when
+   * the text moved past `version` meanwhile: Monaco asks again after a change.
+   */
+  private async typingPaused(version: number, signal?: AbortSignal): Promise<boolean> {
+    const started = Date.now()
+    for (;;) {
+      if (signal?.aborted || this.disposed || this.source.getVersion() !== version) return false
+      const settledIn = Math.max(this.lastChangeAt + this.backgroundQuietMs, started + this.backgroundMinWaitMs) - Date.now()
+      if (settledIn <= 0) return true
+      await sleep(settledIn, signal)
+    }
   }
 
   // --- plumbing ---
