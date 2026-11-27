@@ -160,6 +160,15 @@ test('finds executables and well-known folders', () => {
     String.raw`C:\u\.cargo\bin`,
   ]);
 });
+test('an empty or missing HOME or USERPROFILE adds no cargo folder', () => {
+  assert.deepEqual(wellKnownDirs({}, 'win32'), []);
+  assert.deepEqual(wellKnownDirs({ USERPROFILE: '' }, 'win32'), []);
+  assert.deepEqual(wellKnownDirs({}, 'linux'), ['/opt/homebrew/bin', '/usr/local/bin']);
+  assert.deepEqual(wellKnownDirs({ HOME: '' }, 'linux'), ['/opt/homebrew/bin', '/usr/local/bin']);
+});
+test('an empty XDG_CACHE_HOME places the cache as a missing one does', () => {
+  assert.equal(cacheDir({ XDG_CACHE_HOME: '' }, 'linux', '/h'), '/h/.cache/noppu-labs.phpantom');
+});
 test('places the cache per platform', () => {
   assert.equal(cacheDir({}, 'darwin', '/h'), '/h/Library/Caches/noppu-labs.phpantom');
   assert.equal(cacheDir({}, 'linux', '/h'), '/h/.cache/noppu-labs.phpantom');
@@ -387,3 +396,66 @@ if (process.env.PHPANTOM_INTEGRATION === '1') {
     }
   });
 }
+
+// An empty version is no version: the condition rewrite keeps each of these a failure.
+test('a setting whose binary reports an empty version is not a working binary', async () => {
+  const home = temp();
+  try {
+    const setting = join(home, 'phpantom_lsp');
+    writeFileSync(setting, 'x');
+    const r = await resolveBinary({
+      ...base(home),
+      settingPath: setting,
+      readVersionImpl: async () => '',
+    });
+    assert.deepEqual(r, {
+      ok: false,
+      message: `phpantomPath is set to ${setting}, which is not a working phpantom_lsp.`,
+    });
+  } finally {
+    rmSync(home, { recursive: true, force: true });
+  }
+});
+test('a PATH binary or a cached copy that reports an empty version is skipped', async () => {
+  const home = temp();
+  const bin = temp();
+  try {
+    writeFileSync(join(bin, 'phpantom_lsp'), 'installed');
+    chmodSync(join(bin, 'phpantom_lsp'), 0o755);
+    const dir = join(cacheDir({}, 'linux', home), '1.1.0', 'linux-x64');
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, 'phpantom_lsp'), 'cached');
+    writeFileSync(join(dir, 'verified'), '1.1.0');
+    const asked: string[] = [];
+    const r = await resolveBinary({
+      ...base(home),
+      env: { PATH: bin },
+      readVersionImpl: async (path) => {
+        asked.push(path);
+        return path.startsWith(bin) || path.startsWith(home) ? '' : null;
+      },
+    });
+    assert.equal(r.ok, false);
+    assert.ok(asked.includes(join(bin, 'phpantom_lsp')));
+    assert.ok(asked.includes(join(dir, 'phpantom_lsp')));
+  } finally {
+    rmSync(home, { recursive: true, force: true });
+    rmSync(bin, { recursive: true, force: true });
+  }
+});
+test('a download whose binary reports an empty version did not run', async () => {
+  const home = temp();
+  try {
+    const { asset, body } = tarball();
+    const r = await resolveBinary({
+      ...base(home),
+      allowDownload: true,
+      readVersionImpl: async () => '',
+      assets: () => asset,
+      fetchImpl: async () => new Response(new Uint8Array(body)),
+    });
+    assert.deepEqual(r, { ok: false, message: 'The downloaded phpantom_lsp did not run.' });
+  } finally {
+    rmSync(home, { recursive: true, force: true });
+  }
+});

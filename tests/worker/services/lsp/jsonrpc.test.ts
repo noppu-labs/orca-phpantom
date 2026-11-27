@@ -87,6 +87,34 @@ test('junk before a header is skipped', () => {
   );
 });
 
+test('a Content-Length of 0 is a frame with an empty body, skipped, and the next one arrives', () => {
+  const { connection, notifications } = connect();
+  connection.feed(
+    Buffer.concat([
+      Buffer.from('Content-Length: 0\r\n\r\n'),
+      frame({ jsonrpc: '2.0', method: 'after', params: null }),
+    ])
+  );
+  assert.deepEqual(
+    notifications.map((notification) => notification.method),
+    ['after']
+  );
+});
+
+test('a header with no length is dropped, and the frame after it arrives', () => {
+  const { connection, notifications } = connect();
+  connection.feed(
+    Buffer.concat([
+      Buffer.from('Content-Type: x\r\n\r\n'),
+      frame({ jsonrpc: '2.0', method: 'after', params: null }),
+    ])
+  );
+  assert.deepEqual(
+    notifications.map((notification) => notification.method),
+    ['after']
+  );
+});
+
 test('cancelling a request sends $/cancelRequest and rejects', async () => {
   const { connection, sent } = connect();
   const controller = new AbortController();

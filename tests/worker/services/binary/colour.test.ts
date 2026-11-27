@@ -204,3 +204,14 @@ test('a copy downloaded earlier does not write the config again', async () => {
     rmSync(home, { recursive: true, force: true });
   }
 });
+
+test('a missing APPDATA or XDG_CONFIG_HOME falls back as an empty one does', () => {
+  assert.equal(
+    globalConfigPath({}, 'win32', String.raw`C:\u`),
+    String.raw`C:\u\AppData\Roaming\phpantom_lsp\.phpantom.toml`
+  );
+  assert.equal(
+    globalConfigPath({ XDG_CONFIG_HOME: undefined }, 'linux', '/h'),
+    '/h/.config/phpantom_lsp/.phpantom.toml'
+  );
+});

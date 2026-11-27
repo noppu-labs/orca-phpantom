@@ -1496,3 +1496,120 @@ test('a sweep that fires late (the computer slept) releases nothing; the next on
     detached: true,
   });
 });
+
+// Truthiness the condition rewrite keeps.
+test('the status command names a resolver failure, and an empty failure message is no error', async () => {
+  const failing = await setup({
+    files: { 'a/A.php': '<?php // ok\n' },
+    resolve: async () => ({ ok: false, message: 'no phpantom_lsp here' }),
+  });
+  await openWhole(failing.worker, {
+    docId: 'd1',
+    language: 'php',
+    workspaceId: 'ws-a',
+    text: '<?php // ok\n',
+  });
+  assert.equal(failing.router.describe(), 'PHPantom error: no phpantom_lsp here');
+
+  const silent = await setup({
+    files: { 'a/A.php': '<?php // ok\n' },
+    resolve: async () => ({ ok: false, message: '' }),
+  });
+  assert.deepEqual(
+    await openWhole(silent.worker, {
+      docId: 'd1',
+      language: 'php',
+      workspaceId: 'ws-a',
+      text: '<?php // ok\n',
+    }),
+    { state: 'error', message: '' }
+  );
+  assert.equal(silent.router.describe(), 'PHPantom: no PHP files open.');
+  await sleep(1100);
+  assert.notEqual(silent.statuses.at(-1)?.icon, 'error');
+  silent.router.forgetBinary();
+  assert.equal(silent.router.describe(), 'PHPantom: no PHP files open.');
+});
+
+test('the status command shows a progress message only when there is one', async () => {
+  const { worker, router, started } = await setup({ files: { 'a/A.php': '<?php // ok\n' } });
+  await openWhole(worker, {
+    docId: 'd1',
+    language: 'php',
+    workspaceId: 'ws-a',
+    text: '<?php // ok\n',
+  });
+  started[0].events.progress({ phase: 'indexing', percent: 40, message: '' });
+  assert.match(router.describe(), /: indexing 40%, 1 open document\(s\)/u);
+  started[0].events.progress({ phase: 'indexing', percent: 40 });
+  assert.match(router.describe(), /: indexing 40%, 1 open document\(s\)/u);
+  started[0].events.progress({ phase: 'indexing', percent: 40, message: 'files' });
+  assert.match(router.describe(), /: indexing 40% \(files\), 1 open document\(s\)/u);
+});
+
+test('navigate to a missing file or to a folder fails', async () => {
+  const { worker, dir } = await setup({ files: { 'a/A.php': '<?php // ok\n', 'a/sub/x.txt': '' } });
+  const status = await openWhole(worker, {
+    docId: 'd1',
+    language: 'php',
+    workspaceId: 'ws-a',
+    text: '<?php // ok\n',
+  });
+  const range: LspRange = { start: at(0, 0), end: at(0, 0) };
+  for (const target of [join(dir, 'a', 'Missing.php'), join(dir, 'a', 'sub')]) {
+    assert.deepEqual(
+      await worker.request('phpantom.navigate', {
+        docId: 'd1',
+        session: status.session,
+        uri: pathToFileURL(target).href,
+        range,
+      }),
+      { opened: false, reason: 'failed' }
+    );
+  }
+});
+
+test('a resync open of a document the router does not know attaches it in full', async () => {
+  const { worker } = await setup({ files: { 'a/A.php': '<?php // ok\n' } });
+  const status = await openWhole(worker, {
+    docId: 'unknown',
+    language: 'php',
+    workspaceId: 'ws-a',
+    text: '<?php // ok\n',
+    resync: true,
+  });
+  assert.equal(status.state, 'ready');
+});
+
+test('a departing holder sends nothing when every other holder waits for its resync', async () => {
+  const text = '<?php // ok\n';
+  const { worker, started } = await setup({ files: { 'a/A.php': text } });
+  const first = await openWhole(worker, {
+    docId: 'f1',
+    language: 'php',
+    workspaceId: 'ws-a',
+    text,
+  });
+  await openWhole(worker, {
+    docId: 'f2',
+    language: 'php',
+    workspaceId: 'ws-a',
+    text,
+    panel: 'panel-2',
+  });
+  assert.deepEqual(
+    await worker.request('phpantom.change', {
+      docId: 'f2',
+      session: first.session,
+      version: 2,
+      changes: [insert(0, 'Y')],
+      length: 99,
+    }),
+    { resync: true }
+  );
+  const changes = () =>
+    started[0].server.notified.filter((n) => n.method === 'textDocument/didChange').length;
+  const before = changes();
+  assert.deepEqual(await worker.request('phpantom.close', { docId: 'f1' }), { ok: true });
+  assert.equal(changes(), before);
+});

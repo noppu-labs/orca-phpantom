@@ -1327,3 +1327,119 @@ test('a background request dropped while refused changes wait asks Monaco for a 
   await until(() => host.mirror?.text === doc.text, 'the held change');
   bridge.dispose();
 });
+
+// --- truthiness the condition rewrite keeps ---
+
+test('an empty session is no session: nothing goes out under it', async () => {
+  const host = fakeHost();
+  host.session = '';
+  const bridge = new LspBridge(host, source('<?php\n'), FAST);
+  assert.equal((await bridge.attach()).state, 'ready');
+  const range = { start: { line: 0, character: 0 }, end: { line: 0, character: 0 } };
+  assert.equal(await bridge.ask('textDocument/hover', {}), null);
+  assert.equal(await bridge.navigate('file:///ws-a/app/B.php', range), null);
+  assert.equal(await bridge.peek(['file:///ws-a/app/B.php']), null);
+  assert.equal(
+    host.calls('phpantom.request').length +
+      host.calls('phpantom.navigate').length +
+      host.calls('phpantom.peek').length,
+    0
+  );
+  bridge.dispose();
+});
+
+test('a timeout of 0 or NaN is no timeout', async () => {
+  const host = fakeHost();
+  const bridge = new LspBridge(host, source('<?php\n'), FAST);
+  await bridge.attach();
+  const controller = new AbortController();
+  await bridge.ask('textDocument/hover', {}, undefined, { timeoutMs: 0 });
+  await bridge.ask('textDocument/hover', {}, undefined, { timeoutMs: Number.NaN });
+  await bridge.ask('textDocument/hover', {}, controller.signal, { timeoutMs: 0 });
+  await bridge.ask('textDocument/hover', {}, controller.signal, { timeoutMs: Number.NaN });
+  assert.deepEqual(
+    host.calls('phpantom.request').map((call) => call.options),
+    [undefined, undefined, { signal: controller.signal }, { signal: controller.signal }]
+  );
+  bridge.dispose();
+});
+
+test('a user request with silent false still says the editor is busy', async () => {
+  const host = fakeHost();
+  const bridge = new LspBridge(host, source('<?php\n'), PACED);
+  await bridge.attach();
+  host.refuse = (name) => (name === 'phpantom.request' ? tooMany() : undefined);
+  const busy: number[] = [];
+  bridge.onBusy(() => busy.push(1));
+  assert.equal(
+    await bridge.ask('textDocument/rename', {}, undefined, { kind: 'user', silent: false }),
+    null
+  );
+  assert.deepEqual(busy, [1]);
+  bridge.dispose();
+});
+
+test('a request answers null without asking before an attach or with a signal already aborted', async () => {
+  const host = fakeHost();
+  const bridge = new LspBridge(host, source('<?php\n'), FAST);
+  assert.equal(await bridge.ask('textDocument/hover', {}), null);
+  await bridge.attach();
+  const controller = new AbortController();
+  controller.abort();
+  assert.equal(await bridge.ask('textDocument/hover', {}, controller.signal), null);
+  assert.equal(await bridge.peek(['file:///ws-a/app/B.php'], controller.signal), null);
+  assert.equal(host.calls('phpantom.request').length + host.calls('phpantom.peek').length, 0);
+  bridge.dispose();
+});
+
+test('a request whose flush loses the attachment, or outlives its signal, answers null without asking', async () => {
+  const host = fakeHost();
+  const doc = source('<?php\n$a = 1;\n');
+  const bridge = new LspBridge(host, doc, { ...FAST, syncDelayMs: 1000, reattachGapMs: 1000 });
+  await bridge.attach();
+  const controller = new AbortController();
+  const base = host.handlers.change;
+  host.handlers.change = (input, self) => {
+    controller.abort();
+    return base(input, self);
+  };
+  doc.edit(11, 12, '2');
+  assert.equal(await bridge.ask('textDocument/hover', {}, controller.signal), null);
+  assert.equal(host.calls('phpantom.change').length, 1);
+  host.handlers.change = () => ({ detached: true });
+  doc.edit(11, 12, '3');
+  assert.equal(await bridge.ask('textDocument/hover', {}), null);
+  assert.equal(host.calls('phpantom.change').length, 2);
+  assert.equal(host.calls('phpantom.request').length, 0);
+  bridge.dispose();
+});
+
+test('a request that fails after its signal aborted answers null', async () => {
+  const host = fakeHost();
+  const bridge = new LspBridge(host, source('<?php\n'), FAST);
+  await bridge.attach();
+  const controller = new AbortController();
+  host.handlers.request = () => {
+    controller.abort();
+    throw Object.assign(new Error('gone'), { code: 'unavailable' });
+  };
+  assert.equal(await bridge.ask('textDocument/hover', {}, controller.signal), null);
+  assert.equal(host.calls('phpantom.request').length, 1);
+  assert.equal(host.calls('phpantom.open').length, 1);
+  bridge.dispose();
+});
+
+test('a peek Orca refuses after its signal aborted answers null without asking again', async () => {
+  const host = fakeHost();
+  const bridge = new LspBridge(host, source('<?php\n'), PACED);
+  await bridge.attach();
+  const controller = new AbortController();
+  host.refuse = (name) => {
+    if (name !== 'phpantom.peek') return undefined;
+    controller.abort();
+    return tooMany();
+  };
+  assert.equal(await bridge.peek(['file:///ws-a/app/B.php'], controller.signal), null);
+  assert.equal(host.calls('phpantom.peek').length, 1);
+  bridge.dispose();
+});

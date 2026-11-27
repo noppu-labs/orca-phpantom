@@ -212,6 +212,40 @@ test('a missing executable rejects start', async () => {
   assert.equal(server.alive, false);
 });
 
+test('a child without its pipes is killed and start rejects', async () => {
+  const events: ServerEvents = {
+    diagnostics() {},
+    progress() {},
+    refresh() {},
+    log() {},
+    exit() {},
+  };
+  for (const missing of [null, undefined]) {
+    for (const pipe of ['stdin', 'stdout', 'stderr']) {
+      let killed = 0;
+      const child = {
+        stdin: {},
+        stdout: {},
+        stderr: {},
+        [pipe]: missing,
+        kill: () => {
+          killed += 1;
+          return true;
+        },
+      };
+      const server = new PhpantomServer({
+        executable: 'phpantom_lsp',
+        root: process.cwd(),
+        events,
+        spawnImpl: (() => child) as unknown as typeof spawn,
+        initializeTimeoutMs: 2000,
+      });
+      await assert.rejects(server.start(), /could not open the language server pipes/u);
+      assert.equal(killed, 1, `${pipe} ${String(missing)}`);
+    }
+  }
+});
+
 test('client capabilities never ask for pull diagnostics', () => {
   assert.equal((CLIENT_CAPABILITIES.textDocument as any).diagnostic, undefined);
   assert.deepEqual((CLIENT_CAPABILITIES.textDocument.semanticTokens as any).tokenTypes.length, 15);

@@ -487,3 +487,20 @@ test("the manifest's php editor opens exactly the extensions the locator accepts
   );
   assert.deepEqual(editors.find((editor) => editor.id === 'blade')!.extensions, ['.blade.php']);
 });
+
+test('a candidate that is missing or a folder is skipped, and the walk still finds the file', async () => {
+  const a = await tree({ 'app/Example.php': SRC, 'Folder.php/keep.txt': '' });
+  try {
+    assert.deepEqual(
+      await locateFile({
+        tiers: [[a]],
+        candidates: [join(a, 'Missing.php'), join(a, 'Folder.php')],
+        language: 'php',
+        content: SRC,
+      }),
+      { status: 'found', path: join(a, 'app/Example.php'), root: a }
+    );
+  } finally {
+    await cleanup();
+  }
+});
