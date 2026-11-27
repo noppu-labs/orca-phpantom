@@ -459,10 +459,10 @@ test('shared file (b): tabs that drift apart leave PHPantom on the last sender',
   const { change, text } = await twoHolders();
   await change('d1', 2, [insert(5, 'X')], 13);
   await change('d2', 2, [insert(5, 'X')], 13);
-  // D2: '<?phpX // ok\n' minus 6 characters.
+  // `d2`: '<?phpX // ok\n' minus 6 characters.
   assert.deepEqual(await change('d2', 3, [remove(5, 11)], 7), { ok: true });
   assert.equal(await text(), '<?phpk\n');
-  // D1 never saw that delete; its own edit must not land on d2's text.
+  // `d1` never saw that delete; its own edit must not land on d2's text.
   assert.deepEqual(await change('d1', 3, [insert(0, 'Y')], 14), { ok: true });
   assert.equal(await text(), 'Y<?phpX // ok\n');
   assert.deepEqual(await change('d2', 4, [insert(0, 'Z')], 8), { ok: true });
@@ -1176,7 +1176,7 @@ test('two holders on one file: the one that expires leaves the file open for the
   });
   assert.equal(one.uri, two.uri);
   assert.match(router.describe(), /2 open document\(s\)/);
-  // D2 edits, so PHPantom holds d2's text when d1 leaves.
+  // `d2` edits, so PHPantom holds d2's text when d1 leaves.
   assert.deepEqual(
     await worker.request('phpantom.change', {
       docId: 'd2',
@@ -1228,7 +1228,7 @@ test('a ping under a stale session or for an unknown document answers detached',
 
 test("a request first gives PHPantom the asking document's text", async () => {
   const { worker, one, change, text } = await twoHolders();
-  // D2 edits last, so PHPantom holds d2's text; d1 still has the saved one.
+  // `d2` edits last, so PHPantom holds d2's text; d1 still has the saved one.
   assert.deepEqual(await change('d2', 2, [insert(0, 'Z')], 13), { ok: true });
   assert.equal(await text(), 'Z<?php // ok\n');
   assert.deepEqual(
@@ -1312,7 +1312,7 @@ test("three holders: the first expiring hands PHPantom the most recently seen te
     { ok: true }
   );
   assert.equal(await serverText(started), `YX${saved}`);
-  // F1 last seen 61 s ago, f2 51 s, f3 31 s: only f1 is past its lease.
+  // `f1` last seen 61 s ago, f2 51 s, f3 31 s: only f1 is past its lease.
   clock += 31_000;
   await router.sweep();
   assert.match(router.describe(), /2 open document\(s\)/);
@@ -1361,7 +1361,7 @@ test('a departing holder skips a holder waiting for its resync', async () => {
     text: `X${saved}`,
     panel: 'panel-3',
   });
-  // F3's copy breaks (a wrong length) just before f1 leaves: its mirror is not the editor's text.
+  // `f3`'s copy breaks (a wrong length) just before f1 leaves: its mirror is not the editor's text.
   assert.deepEqual(
     await worker.request('phpantom.change', {
       docId: 'f3',

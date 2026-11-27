@@ -2,11 +2,8 @@
 // 8 bytes per number, 1 per null, undefined or boolean, each string's UTF-8 bytes, and for an array 8 plus
 // 4 per element, for an object 4 per key plus the key's UTF-8 bytes (nothing is added for the object itself).
 // It refuses a value with more than 10,000 arrays and objects, or nested deeper than 100, whatever its size
-// (`structuredCloneMessageBytes` in plugin-panel-message-budget.js, and `MW` in the main bundle, which
-// Measures `plugin.request` answers (1 MiB), worker posts (256 KiB, payload only) and panel requests
-// (64 KiB, the whole `{ sessionToken, action, params }` message)). A list of locations is mostly small
-// Objects and numbers, so it hits these limits long before its JSON would. Depth is not tracked here:
-// Nothing the plugin sends nests anywhere near 100.
+// (`structuredCloneMessageBytes` in plugin-panel-message-budget.js, and `MW` in the main bundle, which measures `plugin.request` answers (1 MiB), worker posts (256 KiB, payload only) and panel requests
+// (64 KiB, the whole `{ sessionToken, action, params }` message)). A list of locations is mostly small objects and numbers, so it hits these limits long before its JSON would. Depth is not tracked here:
 
 export interface Size {
   bytes: number;

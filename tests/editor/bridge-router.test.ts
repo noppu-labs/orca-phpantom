@@ -4,8 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-// The bridge against the real router (and the fake language server), not against a scripted host: the
-// Two halves of the protocol have to agree on chunks, versions, lengths, resyncs and sessions.
+// The bridge against the real router (and the fake language server), not against a scripted host: the two halves of the protocol have to agree on chunks, versions, lengths, resyncs and sessions.
 import { afterEach, assert, test } from 'orca/testing';
 
 import { LspBridge, type BridgeHost } from '../../editor/src/bridge.ts';

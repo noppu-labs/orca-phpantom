@@ -1,5 +1,4 @@
-// The Monaco side of the bridge: the model as a DocumentSource, and what the person sees (markers,
-// Reveals, notes, the language features) from what the worker says.
+// The Monaco side of the bridge: the model as a DocumentSource, and what the person sees (markers, reveals, notes, the language features) from what the worker says.
 import type { AttachStatus } from '../../src/protocol.ts';
 import { LspBridge, type DocumentSource } from './bridge.ts';
 import type { EditorContext } from './editor.ts';

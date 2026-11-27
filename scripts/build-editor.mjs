@@ -3,9 +3,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 // Adapted from actus7/orca-autocomplete editor/build.mjs @ da5a680 (MIT). See THIRD_PARTY_NOTICES.md.
-// Builds the editor into editor/dist: Orca installs a plugin as files and runs it with no network
-// And no node_modules, so Monaco and our code ship prebuilt. Run `npm run build` after
-// Changing editor/src and commit the result; CI rebuilds and fails when editor/dist differs.
+// Builds the editor into editor/dist: Orca installs a plugin as files and runs it with no network and no node_modules, so Monaco and our code ship prebuilt. Run `npm run build` after
 import { build } from 'esbuild';
 
 const MAX_FILE_BYTES = 10 * 1024 * 1024;

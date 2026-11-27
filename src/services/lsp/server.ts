@@ -1,5 +1,4 @@
-// One `phpantom_lsp --stdio` child for one composer root: starts it, answers the requests it makes
-// Of the client, turns its notifications into typed events, and reports when it goes away.
+// One `phpantom_lsp --stdio` child for one composer root: starts it, answers the requests it makes of the client, turns its notifications into typed events, and reports when it goes away.
 import { spawn, type ChildProcess } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 

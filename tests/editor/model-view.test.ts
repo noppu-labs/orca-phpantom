@@ -101,8 +101,7 @@ test('an outside write is its own undo step', () => {
   assert.ok(after.includes('replace'));
 });
 test('a line-ending switch is an undo step of its own, before the text edit', () => {
-  // Monaco records an edit's offsets against the buffer after the switch, but redo replays them on
-  // The buffer before it (textModel.js _applyRedo), so the two must not share an undo step.
+  // Monaco records an edit's offsets against the buffer after the switch, but redo replays them on the buffer before it (textModel.js _applyRedo), so the two must not share an undo step.
   const { fake } = outsideWrite('a\nb\nc', 'a\r\nb\r\nX');
   assert.deepEqual(fake.calls.slice(fake.calls.indexOf('setText') + 1), [
     'stack',

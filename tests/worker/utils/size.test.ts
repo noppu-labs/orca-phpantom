@@ -8,7 +8,7 @@ const location = {
 };
 
 test('measures a value the way Orca does, not as JSON', () => {
-  // Uri 4+3+9, range 4+5, start 4+5 and end 4+3, each position (4+4+8)+(4+9+8); four objects.
+  // `uri` 4+3+9, range 4+5, start 4+5 and end 4+3, each position (4+4+8)+(4+9+8); four objects.
   assert.deepEqual(orcaSize(location), { bytes: 115, objects: 4 });
   // An array adds 8, and 4 per element.
   assert.deepEqual(orcaSize([location]), { bytes: 127, objects: 5 });

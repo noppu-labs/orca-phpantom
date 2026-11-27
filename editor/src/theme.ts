@@ -37,8 +37,7 @@ export const THEME_NAME = { dark: 'phpantom-dark', light: 'phpantom-light' } as 
 
 type Base = 'variable' | 'type' | 'keyword' | 'comment' | 'annotation';
 
-// Monaco's own `vs-dark` and `vs` rules (editor/standalone/common/themes.js). Neither has a function
-// Colour, so functions and methods keep the editor's foreground, as they do without semantic tokens.
+// Monaco's own `vs-dark` and `vs` rules (editor/standalone/common/themes.js). Neither has a function colour, so functions and methods keep the editor's foreground, as they do without semantic tokens.
 const BASE_COLOURS: Record<'dark' | 'light', Record<Base, string>> = {
   dark: {
     variable: '74B0DF',

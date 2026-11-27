@@ -1,5 +1,4 @@
-// A small Monarch tokenizer for tests: it runs a grammar's rules over a line the way Monaco's
-// MonarchLexer does (rules anchored at the position, first match wins, `@@` is a literal `@`, groups,
+// A small Monarch tokenizer for tests: it runs a grammar's rules over a line the way Monaco's monarchLexer does (rules anchored at the position, first match wins, `@@` is a literal `@`, groups,
 // `include`, `next`/`switchTo`/`@pop`, repeated token types merged), so grammars can be tested in
 // Node without Monaco. It throws where Monarch would, so a broken rule fails here and not in the frame.
 

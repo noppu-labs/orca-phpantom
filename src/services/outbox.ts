@@ -1,7 +1,6 @@
 // Every post to an editor goes through here, so the plugin stays inside Orca's limits (200 posts per
 // 10 s, 256 KiB each, measured by Orca's own function: see size.ts) even when PHPantom publishes diagnostics for hundreds of files at once.
-// Posts are keyed: a newer payload for a key replaces the queued one, so the latest state always
-// Arrives and stale ones are never sent.
+// Posts are keyed: a newer payload for a key replaces the queued one, so the latest state always arrives and stale ones are never sent.
 
 import { fitsIn, orcaSize, type Size } from '../utils/size.ts';
 

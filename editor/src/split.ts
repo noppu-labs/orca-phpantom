@@ -2,9 +2,7 @@ import type { LspContentChange, LspPosition } from '../../src/protocol.ts';
 import { orcaSize } from '../../src/utils/size.ts';
 
 // Orca refuses a panel request ("panel message exceeds the size limit") whose whole message is over 64 KiB or
-// 10,000 arrays and objects by its own measure (see src/utils/size.ts), not by its JSON. A group of changes is held
-// To both budgets below, in JSON bytes and in Orca's measure, which leaves room for the message around it:
-// The session token (up to 128 bytes), the action and request names, and the document id, session and length.
+// 10,000 arrays and objects by its own measure (see src/utils/size.ts), not by its JSON. A group of changes is held to both budgets below, in JSON bytes and in Orca's measure, which leaves room for the message around it:
 export const REQUEST_BUDGET_BYTES = 56 * 1024;
 export const REQUEST_BUDGET_OBJECTS = 9000;
 
@@ -77,8 +75,7 @@ const ORCA_ENVELOPE = orcaSize([EMPTY_CHANGE]).bytes;
  * (Monaco normalises its buffers to a single EOL); chunkText also keeps LF off the start of every later piece.
  */
 function splitOne(change: LspContentChange, budget: number): LspContentChange[] {
-  // Why the smaller: a piece's raw UTF-8 bytes never exceed its JSON size, so JSON-bounding it bounds Orca's
-  // Measure of the text too; this adds what Orca counts around it.
+  // Why the smaller: a piece's raw UTF-8 bytes never exceed its JSON size, so JSON-bounding it bounds Orca's measure of the text too; this adds what Orca counts around it.
   const textBudget = Math.min(budget - 2 - ENVELOPE + 2, budget - ORCA_ENVELOPE + 2);
   const pieces = chunkText(change.text, Math.max(textBudget, 16));
   const last = pieces.at(-1)!;

@@ -2,8 +2,7 @@
 import type { LspContentChange } from '../../src/protocol.ts';
 import { sameUri } from '../../src/utils/uri.ts';
 
-// Conversions between the Language Server Protocol and Monaco. Pure data in, pure data out, so Node
-// Can test them: the Monaco-aware code only wraps these.
+// Conversions between the Language Server Protocol and Monaco. Pure data in, pure data out, so Node can test them: the Monaco-aware code only wraps these.
 
 export interface LspPosition {
   line: number;

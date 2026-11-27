@@ -1,6 +1,4 @@
-// The worker's switchboard: editors send `phpantom.*` requests, the router finds the file each
-// Document is, runs one PHPantom per composer root, forwards LSP traffic, and posts diagnostics
-// And status back to the editors.
+// The worker's switchboard: editors send `phpantom.*` requests, the router finds the file each document is, runs one PHPantom per composer root, forwards LSP traffic, and posts diagnostics
 import { randomUUID } from 'node:crypto';
 import { readFile, stat } from 'node:fs/promises';
 import { homedir } from 'node:os';
@@ -105,8 +103,7 @@ interface Doc {
   lastSeen: number;
 }
 
-// Orca takes an answer of at most 1 MiB and 10,000 objects by its own measure (see size.ts); this
-// Leaves room for what the measure may miss.
+// Orca takes an answer of at most 1 MiB and 10,000 objects by its own measure (see size.ts); this leaves room for what the measure may miss.
 const ANSWER_LIMIT = { bytes: 900 * 1024, objects: 9000 };
 // Lists whose leading items are still a useful answer. Never edits: half a formatting is a broken file.
 const CUTTABLE_LISTS = new Set([
@@ -121,8 +118,7 @@ const CUTTABLE_LISTS = new Set([
   'textDocument/codeAction',
 ]);
 const PEEK_MAX_FILES = 25;
-// Files attached before, tried again when a tab of theirs is shown: a new frame must locate its file anew,
-// And the walk never reaches Composer's vendor folder, where go to definition often leads.
+// Files attached before, tried again when a tab of theirs is shown: a new frame must locate its file anew, and the walk never reaches Composer's vendor folder, where go to definition often leads.
 const REMEMBERED_FILES = 50;
 const PEEK_MAX_BYTES = 600 * 1024;
 const IDLE_MS = 10 * 60_000;
@@ -269,8 +265,7 @@ export class Router {
       // Its copy failed the length check: an answer now would be about text the editor does not have.
       return { error: 'the document is being sent again' };
     }
-    // Why: several documents can hold one file, and PHPantom holds whichever sent last. Positions in the
-    // Question, and edits in the answer, are this document's.
+    // Why: several documents can hold one file, and PHPantom holds whichever sent last. Positions in the question, and edits in the answer, are this document's.
     this.sendFull(doc.server, doc.file, doc.mirror.text);
     const params = input.method.startsWith('textDocument/')
       ? { ...input.params, textDocument: { uri: doc.uri } }
@@ -481,8 +476,7 @@ export class Router {
 
     let rows = await this.host.listWorkspaces();
     if (input.workspaceId !== null && !rows.some((row) => row.id === input.workspaceId)) {
-      // Why ask again: a worktree made in the last few seconds is missing from the cached list, and
-      // Without its row the file would attach to a sibling's copy (or a remote one to a local look-alike).
+      // Why ask again: a worktree made in the last few seconds is missing from the cached list, and without its row the file would attach to a sibling's copy (or a remote one to a local look-alike).
       rows = await this.host.listWorkspaces({ fresh: true });
     }
     const context =
@@ -614,8 +608,7 @@ export class Router {
     const gap = now - this.lastSweepAt;
     this.lastSweepAt = now;
     if (gap > 2 * this.sweepMs) {
-      // The computer slept or the worker was held up: editors could not ping meanwhile either, so silence
-      // Says nothing yet. The next tick, on time, judges after they have had the chance.
+      // The computer slept or the worker was held up: editors could not ping meanwhile either, so silence says nothing yet. The next tick, on time, judges after they have had the chance.
       this.host.log(
         `Lease check ran ${Math.round((gap - this.sweepMs) / 1000)} s late; releasing nothing this time`
       );
@@ -629,8 +622,7 @@ export class Router {
         continue;
       }
       const { docId } = doc;
-      // Why in its lane and checked again there: an open in flight for this docId finishes first, and a
-      // Document it attached anew has just been seen.
+      // Why in its lane and checked again there: an open in flight for this docId finishes first, and a document it attached anew has just been seen.
       releases.push(
         this.inLane(docId, async () => {
           const current = this.docs.get(docId);
@@ -657,9 +649,7 @@ export class Router {
       .map((docId) => this.docs.get(docId))
       .filter((other) => other !== undefined);
     if (remaining.length > 0) {
-      // Why resend: PHPantom holds whatever the leaving document sent last. The one heard from most recently is
-      // The tab on screen; the others are frames Orca replaced that hold on until their lease ends. One waiting
-      // For its resync has a copy that is not its editor's text, and sends the whole text soon anyway.
+      // Why resend: PHPantom holds whatever the leaving document sent last. The one heard from most recently is the tab on screen; the others are frames Orca replaced that hold on until their lease ends. One waiting
       const current = remaining
         .filter((other) => !other.needsResync)
         .sort((a, b) => b.lastSeen - a.lastSeen)[0];
@@ -1022,8 +1012,7 @@ export class Router {
         ? (result as { data?: unknown } | null)?.data
         : undefined;
     if (Array.isArray(tokens)) {
-      // Why whole tokens: `data` is five numbers per token, each relative to the one before, so a leading
-      // Run of whole tokens is still correct colouring; a number is 8 bytes plus 4 for its slot in the array.
+      // Why whole tokens: `data` is five numbers per token, each relative to the one before, so a leading run of whole tokens is still correct colouring; a number is 8 bytes plus 4 for its slot in the array.
       const shell = orcaSize({ result: { ...(result as object), data: [] } });
       const room = Math.floor((ANSWER_LIMIT.bytes - shell.bytes) / 12);
       const count = Math.max(
