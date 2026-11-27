@@ -181,10 +181,9 @@ To switch a file to PHPantom, use the view toggle at the top right of the editor
 
 ## Known gaps
 
-- Twig templates ([issue #3](https://github.com/noppu-labs/orca-phpantom/issues/3)), Symfony's YAML
-  and XML files, Drupal's `.yml` files and `.env` open in Orca's editor, without PHPantom's
-  completion and navigation. Going to a definition from PHP still opens a Twig template or a
-  Drupal `.services.yml` file.
+- Twig templates ([issue #3](https://github.com/noppu-labs/orca-phpantom/issues/3)), Symfony's YAML and
+  XML files, Drupal's `.yml` files and `.env` open in Orca's editor without PHPantom's completion and
+  navigation. Go to definition from PHP still opens a Twig template or a Drupal `.services.yml` file.
 - Code lenses and workspace symbol search are not shown.
 - Livewire 4's single-file components (the `make:livewire` default) don't resolve or complete in a
   `<livewire:...>` tag, a gap PHPantom 1.1.0 lists itself. Class components work.
@@ -213,6 +212,7 @@ To switch a file to PHPantom, use the view toggle at the top right of the editor
 - A file changed on disk while its workspace is in the background updates only when you switch back.
 - Errors and warnings appear a moment after a file opens. In a big project the first completions wait
   for indexing, shown as `indexing` in the status bar.
+- Orca 1.4.278 screenshots showed no syntax colours in any file type, unlike 1.4.277. Not checked by hand.
 - PHPantom lets go of a file about three minutes after you close its tab or switch away from it.
 
 The test runs behind this README, with checklists for what needs a person at the keyboard, are in
