@@ -1,7 +1,7 @@
 // blade.test.ts — run the Monarch rules' regexes over sample lines; no Monaco import.
 import { assert, test } from 'orca/testing';
 
-import { bladeGrammar } from './blade.ts';
+import { bladeGrammar, type MonarchLanguage } from './blade.ts';
 import { firstRuleRegex, tokenTypes } from './monarch-walk.test-helper.ts';
 
 // The parts of Monaco's HTML grammar that matter here: a catch-all text rule in root, a one-regex
@@ -147,7 +147,8 @@ test('tokenizes bound component attributes in both quotes', () => {
 });
 test('scans a 5,000-character bound attribute name in linear time', () => {
   const g = bladeGrammar(fakeHtml());
-  const bound = g.language.tokenizer.bladeComponent.filter(
+  const tokenizer: MonarchLanguage['tokenizer'] = g.language.tokenizer;
+  const bound = tokenizer.bladeComponent.filter(
     (rule): rule is [RegExp, unknown[]] =>
       Array.isArray(rule) && Array.isArray(rule[1]) && rule[1][0] === 'attribute.name'
   );
@@ -175,5 +176,5 @@ test('the walker compiles `@@` to a literal `@`', () => {
   const endphp = firstRuleRegex(bladeGrammar(fakeHtml()), 'bladePhp');
   assert.equal(endphp.source, String.raw`^(?:@endphp\b)`);
   assert.match('@endphp', endphp);
-  assert.doesNotMatch('@@endphp', endphp);
+  assert.ok(!endphp.test('@@endphp'));
 });
