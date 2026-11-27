@@ -16,7 +16,7 @@ export async function bindDocument(
   if (!api) {
     throw new Error('orca.document is only available in custom editors');
   }
-  const session = await api.session<string>({
+  const session = await api.session({
     merge: (base, outside, mine) => {
       const merged = mergeText(base, outside, mine);
       if (merged.conflicts > 0) {
