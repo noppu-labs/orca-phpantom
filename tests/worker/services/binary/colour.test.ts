@@ -49,7 +49,7 @@ function downloading(home: string, logs: string[]): ResolveOptions {
     home,
     readVersionImpl: inHome(home),
     assets: () => asset,
-    fetchImpl: (async () => new Response(new Uint8Array(body))) as unknown as typeof fetch,
+    fetchImpl: async () => new Response(new Uint8Array(body)),
     log: (message) => logs.push(message),
   };
 }
@@ -104,7 +104,7 @@ test('a download writes the full-colour global config when there is none', async
     assert.equal(readFileSync(config, 'utf8'), '[semantic-tokens]\nmode = "full"\n');
     assert.equal(FULL_COLOUR_CONFIG, '[semantic-tokens]\nmode = "full"\n');
     assert.equal(logs.length, 1);
-    assert.ok(logs[0]!.includes(config), logs[0]);
+    assert.ok(logs[0].includes(config), logs[0]);
   } finally {
     rmSync(home, { recursive: true, force: true });
   }
@@ -154,7 +154,7 @@ test('a config that cannot be written logs a warning and still starts PHPantom',
     const r = await resolveBinary(downloading(home, logs));
     assert.equal(r.ok && r.source, 'download');
     assert.equal(logs.length, 1);
-    assert.match(logs[0]!, /^Warning: /);
+    assert.match(logs[0], /^Warning: /);
   } finally {
     rmSync(home, { recursive: true, force: true });
   }

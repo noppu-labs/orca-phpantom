@@ -14,7 +14,7 @@ const bytes = (data: string | Buffer): Buffer =>
 export function tarChecksum(header: Buffer): number {
   let sum = 0;
   for (let i = 0; i < 512; i++) {
-    sum += i >= 148 && i < 156 ? 0x20 : header[i]!;
+    sum += i >= 148 && i < 156 ? 0x20 : header[i];
   }
   return sum;
 }

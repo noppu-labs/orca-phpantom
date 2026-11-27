@@ -49,7 +49,7 @@ const ASSETS: Record<string, ReleaseAsset> = {
 
 /** The pinned release asset for a `process.platform` and `process.arch`, or null when there is no build. */
 export function assetFor(platform: string, arch: string): ReleaseAsset | null {
-  return Object.hasOwn(ASSETS, `${platform}-${arch}`) ? ASSETS[`${platform}-${arch}`]! : null;
+  return Object.hasOwn(ASSETS, `${platform}-${arch}`) ? ASSETS[`${platform}-${arch}`] : null;
 }
 
 export function downloadUrl(asset: ReleaseAsset): string {

@@ -692,11 +692,7 @@ export function registerEditingProviders(
             }
             const resolved = raw.edit
               ? raw
-              : ((await ask(
-                  'codeAction/resolve',
-                  raw as Record<string, unknown>,
-                  token
-                )) as LspCodeAction | null);
+              : ((await ask('codeAction/resolve', raw, token)) as LspCodeAction | null);
             if (!resolved) {
               if (token.isCancellationRequested) throw canceled();
               return action;

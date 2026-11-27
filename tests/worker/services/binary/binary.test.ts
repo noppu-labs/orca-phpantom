@@ -272,9 +272,9 @@ test('skips an old PATH binary, downloads when allowed, then uses the cache', as
     }
     const second = await resolveBinary({
       ...options,
-      fetchImpl: (async () => {
+      fetchImpl: async () => {
         throw new Error('no network');
-      }) as unknown as typeof fetch,
+      },
     });
     assert.equal(second.ok && second.source, 'cache');
   } finally {
@@ -292,10 +292,10 @@ test('shares one download between concurrent resolves', async () => {
       allowDownload: true,
       readVersionImpl: inHome(home),
       assets: () => asset,
-      fetchImpl: (async () => {
+      fetchImpl: async () => {
         fetched++;
         return new Response(new Uint8Array(body));
-      }) as unknown as typeof fetch,
+      },
     };
     const [a, b] = await Promise.all([resolveBinary(options), resolveBinary(options)]);
     assert.ok(a.ok && b.ok);
@@ -351,7 +351,7 @@ test('a failed checksum leaves nothing in the cache', async () => {
       allowDownload: true,
       readVersionImpl: inHome(home),
       assets: () => ({ ...asset, sha256: '0'.repeat(64) }),
-      fetchImpl: (async () => new Response('tampered')) as unknown as typeof fetch,
+      fetchImpl: async () => new Response('tampered'),
     });
     assert.equal(r.ok, false);
     assert.ok(!existsSync(join(cacheDir({}, 'linux', home), '1.1.0')));

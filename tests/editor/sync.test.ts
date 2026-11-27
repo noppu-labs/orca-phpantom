@@ -84,9 +84,10 @@ test('flushes when the page hides or goes away, and never throws', async () => {
   const view = fakeView();
   const doc = await bindDocument(view);
   const win = new EventTarget();
-  const page = Object.assign(new EventTarget(), {
-    visibilityState: 'visible' as DocumentVisibilityState,
-  });
+  const page = Object.assign<EventTarget, { visibilityState: DocumentVisibilityState }>(
+    new EventTarget(),
+    { visibilityState: 'visible' }
+  );
   const hooked = flushWhenHidden(doc.flush, win, page);
   view.type('a\nb\n');
   // Shown, not hidden: nothing is sent early.
