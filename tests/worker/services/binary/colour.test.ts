@@ -10,7 +10,6 @@ import {
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { fileURLToPath } from 'node:url';
 
 import { assert, test } from 'orca/testing';
 
@@ -21,9 +20,7 @@ import {
   resolveBinary,
   type ResolveOptions,
 } from '../../../../src/services/binary/resolve.ts';
-
-const fixture = (name: string): string =>
-  fileURLToPath(new URL(`../../../fixtures/${name}`, import.meta.url));
+import { oneTarGz } from '../../../helpers/archives.ts';
 
 function temp(): string {
   return mkdtempSync(join(tmpdir(), 'phpantom-colour-'));
@@ -36,7 +33,7 @@ const inHome =
     path.startsWith(home) ? '1.1.0' : null;
 
 function downloading(home: string, logs: string[]): ResolveOptions {
-  const body = readFileSync(fixture('one.tar.gz'));
+  const body = oneTarGz();
   const asset: ReleaseAsset = {
     asset: 'one.tar.gz',
     sha256: createHash('sha256').update(body).digest('hex'),

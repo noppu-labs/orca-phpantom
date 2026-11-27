@@ -11,7 +11,6 @@ import {
 import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { fileURLToPath } from 'node:url';
 
 import { assert, test } from 'orca/testing';
 
@@ -34,9 +33,7 @@ import {
   resolveBinary,
   type ResolveOptions,
 } from '../../../../src/services/binary/resolve.ts';
-
-const fixture = (name: string): string =>
-  fileURLToPath(new URL(`../../../fixtures/${name}`, import.meta.url));
+import { oneTarGz, oneZip, tar, tarChecksum, tarGz, zip } from '../../../helpers/archives.ts';
 
 async function withServer(body: Buffer, run: (url: string) => Promise<void>): Promise<void> {
   const server = createServer((_request, response) => {
@@ -80,22 +77,42 @@ test('maps all six platforms and nothing else', () => {
   );
 });
 test('extracts the one file from each archive kind', () => {
+  assert.equal(extractSingleFile(oneTarGz(), 'tar.gz', 'phpantom_lsp').toString(), 'fake-binary');
+  assert.equal(extractSingleFile(oneZip(), 'zip', 'phpantom_lsp.exe').toString(), 'fake-exe');
+  assert.throws(() => extractSingleFile(oneZip(), 'zip', 'other'), /archive has no other/);
+  assert.throws(() => extractSingleFile(oneTarGz(), 'tar.gz', 'other'), /archive has no other/);
+});
+test('generated archives carry real gzip and zip framing', () => {
+  const gz = oneTarGz();
+  assert.equal(gz[0], 0x1f);
+  assert.equal(gz[1], 0x8b);
+  assert.equal(oneZip().readUInt32LE(0), 0x04034b50);
+  assert.equal(oneZip().readUInt32LE(oneZip().length - 22), 0x06054b50);
+});
+test('generated tar has valid ustar headers and an end marker', () => {
+  const archive = tar({ a: 'x', b: 'y'.repeat(600) });
+  for (const offset of [0, 1024]) {
+    const header = archive.subarray(offset, offset + 512);
+    assert.equal(header.subarray(257, 262).toString(), 'ustar');
+    assert.equal(parseInt(header.subarray(148, 154).toString(), 8), tarChecksum(header));
+  }
+  assert.equal(archive.length, 512 + 512 + 512 + 1024 + 1024);
+  assert.ok(archive.subarray(-1024).every((byte) => byte === 0));
+});
+test('round-trips content through every archive shape', () => {
+  const body = Buffer.from('z'.repeat(2000) + 'tail');
+  const files = { 'other.txt': 'skip me', 'phpantom_lsp': body };
+  assert.equal(extractSingleFile(tarGz(files), 'tar.gz', 'phpantom_lsp').equals(body), true);
   assert.equal(
-    extractSingleFile(readFileSync(fixture('one.tar.gz')), 'tar.gz', 'phpantom_lsp').toString(),
-    'fake-binary'
+    extractSingleFile(tarGz({ './phpantom_lsp': body }), 'tar.gz', 'phpantom_lsp').equals(body),
+    true
   );
+  assert.equal(extractSingleFile(zip(files), 'zip', 'phpantom_lsp').equals(body), true);
   assert.equal(
-    extractSingleFile(readFileSync(fixture('one.zip')), 'zip', 'phpantom_lsp.exe').toString(),
-    'fake-exe'
+    extractSingleFile(zip(files, { method: 'deflate' }), 'zip', 'phpantom_lsp').equals(body),
+    true
   );
-  assert.throws(
-    () => extractSingleFile(readFileSync(fixture('one.zip')), 'zip', 'other'),
-    /archive has no other/
-  );
-  assert.throws(
-    () => extractSingleFile(readFileSync(fixture('one.tar.gz')), 'tar.gz', 'other'),
-    /archive has no other/
-  );
+  assert.ok(zip(files, { method: 'deflate' }).length < zip(files).length);
 });
 test('reads and compares versions', () => {
   assert.equal(parseVersion('phpantom_lsp 1.1.0\n'), '1.1.0');
@@ -180,7 +197,7 @@ const inHome =
     path.startsWith(home) ? '1.1.0' : null;
 
 const tarball = (): { asset: ReleaseAsset; body: Buffer } => {
-  const body = readFileSync(fixture('one.tar.gz'));
+  const body = oneTarGz();
   return {
     body,
     asset: {
