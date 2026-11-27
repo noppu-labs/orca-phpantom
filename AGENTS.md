@@ -53,9 +53,14 @@ src/
 │   ├── json.ts                # isRecord, isTruthy
 │   ├── size.ts                # orcaSize: a value measured the way Orca measures it; fitsIn, leadingThatFit
 │   └── uri.ts                 # uriKey, sameUri, isFileUri
-└── constants/                 # characters.ts, orca-measure.ts, units.ts; no imports, the editor bundle reads them too
+└── constants/                 # no imports; the editor bundle reads them, the build script reads units.ts
+    ├── characters.ts          # line-ending and surrogate code units
+    ├── orca-measure.ts        # the bytes Orca counts per number, array and slot
+    └── units.ts               # BYTES_PER_KIB
 editor/
-├── pages/                     # blade.html, php.html: the manifest's editor entries, loading dist/main.js
+├── pages/
+│   ├── blade.html             # the blade editor entry: sets the language, loads dist/main.js
+│   └── php.html               # the php editor entry, the same page for PHP
 ├── src/
 │   ├── main.ts                # bundle entry: startEditor, then attachLanguageServer
 │   ├── editor.ts              # Monaco in the frame, bound to Orca's document session, theme and font
@@ -75,9 +80,14 @@ editor/
 │   ├── blade.ts               # the Blade Monarch grammar over Monaco's HTML grammar
 │   ├── theme.ts               # dark and light themes with the semantic token rules
 │   ├── notes.ts               # short notes over the editor
-│   ├── providers/             # shared.ts, diagnostics.ts, reading.ts (completion, hover ...), editing.ts (definitions, rename, actions ...)
+│   ├── providers/
+│   │   ├── shared.ts          # what the providers share: types, cancellation, disposal
+│   │   ├── diagnostics.ts     # PHPantom's diagnostics as Monaco markers
+│   │   ├── reading.ts         # completion, hover, signature help, semantic tokens, inlay hints, outline
+│   │   └── editing.ts         # definitions, references, formatting, rename, code actions
 │   ├── vendor/diff3.mjs       # copy of node-diff3 3.2.1 (see THIRD_PARTY_NOTICES.md)
-│   └── env.d.ts, monaco-modules.d.ts
+│   ├── env.d.ts               # the __PHPANTOM_LANGUAGE__ global the pages set
+│   └── monaco-modules.d.ts    # types for Monaco's HTML language definition
 └── dist/                      # build output, committed
 scripts/build-editor.ts        # esbuild bundle into editor/dist, checks Orca's 10 MiB and 200-file limits
 tests/

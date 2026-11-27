@@ -47,7 +47,7 @@ Each frame sends `phpantom.ping` every 20 seconds. Every 15 seconds the worker r
 
 ### Restart
 
-`PHPantom: Restart language servers` stops every PHPantom, forgets the binary, and posts `restarting` to each open tab, which then attaches again. When a PHPantom exits on its own, its tabs get an `error` status and attach again later. A root whose server crashed 4 times in 5 minutes is not restarted until the command runs.
+`PHPantom: Restart language servers` stops every PHPantom, forgets the binary, and posts `restarting` to each open tab, which then attaches again. When a PHPantom exits on its own, its tabs get an `error` status and attach again later. After a root's fourth crash within 5 minutes, opening a file there answers an error until the oldest of those crashes is 5 minutes old or the command runs.
 
 ### Binary lookup and download
 
@@ -68,7 +68,7 @@ After a download the plugin writes a global `.phpantom.toml` that turns on full 
 
 ### Panel requests and events
 
-Declared in `src/protocol.ts`. Every request but `open` and `close` carries the worker's `session`, and a stale session answers `detached`.
+Declared in `src/protocol.ts`. Every request but `open` and `close` carries the worker's `session`. For a stale session or a document the worker no longer holds, `change`, `request` and `ping` answer `detached`, `navigate` answers `failed`, and `peek` returns no files.
 
 | Request             | Input                                     | Output                                                              |
 | ------------------- | ----------------------------------------- | ------------------------------------------------------------------- |
@@ -80,14 +80,14 @@ Declared in `src/protocol.ts`. Every request but `open` and `close` carries the 
 | `phpantom.peek`     | Document id, URIs                         | The files read, and how many were left out                          |
 | `phpantom.ping`     | Document id                               | `ok` or `detached`                                                  |
 
-| Event                  | Payload                                                      |
-| ---------------------- | ------------------------------------------------------------ |
-| `phpantom.diagnostics` | A document's diagnostics, as PHPantom published them         |
-| `phpantom.status`      | A document's state: `restarting`, `stopped` or `error`       |
-| `phpantom.refresh`     | Which features to ask for again, when PHPantom asks for that |
-| `phpantom.reveal`      | A range to show in a document                                |
+| Event                  | Payload                                                            |
+| ---------------------- | ------------------------------------------------------------------ |
+| `phpantom.diagnostics` | A document's diagnostics, and how many were left out (`truncated`) |
+| `phpantom.status`      | A document's state: `restarting`, `stopped` or `error`             |
+| `phpantom.refresh`     | Which features to ask for again, when PHPantom asks for that       |
+| `phpantom.reveal`      | A range to show in a document                                      |
 
-Posts go through `src/services/outbox.ts`, which keeps them under Orca's 200 posts per 10 seconds and 256 KiB each.
+Posts go through `src/services/outbox.ts`, which keeps them under Orca's 200 posts per 10 seconds and 256 KiB each. A newer post of the same kind for the same document replaces a queued one. A diagnostics list too big for one post keeps its most severe entries, and a long status message is shortened.
 
 ### Settings, commands and the status bar
 

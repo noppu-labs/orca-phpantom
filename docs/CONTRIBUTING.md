@@ -103,7 +103,7 @@ Where things go:
 
 ## The editor build
 
-Orca installs a plugin as the files in its repository and runs no build step, and an editor frame has no network and no `node_modules`. So `scripts/build-editor.ts` bundles Monaco and `editor/src` into `editor/dist` with esbuild, and that output is committed. The build checks Orca's limits: no file over 10 MiB, at most 200 files. CI rebuilds it on every pull request and fails on any difference.
+Orca installs a plugin as the files in its repository and runs no build step, and an editor frame loads only the plugin's own files, with no `node_modules`. So `scripts/build-editor.ts` bundles Monaco and `editor/src` into `editor/dist` with esbuild, and that output is committed. The build checks Orca's limits: no file over 10 MiB, at most 200 files. CI rebuilds it on every pull request and fails on any difference.
 
 ## Releases
 

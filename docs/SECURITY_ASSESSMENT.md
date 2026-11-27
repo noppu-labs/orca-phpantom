@@ -41,9 +41,9 @@ What remains: gunzip and inflate have no output limit.
 
 Impact: medium, since an exception in the stdout handler would end the worker and detach every tab. Likelihood: low.
 
-`src/services/lsp/jsonrpc.ts` drops a body that is not JSON, skips and logs one that is not an object, and discards a header without a length. A notification handler that throws is caught and logged, and every event the router handles runs inside a guard. A notification without params is reported instead of read. `initialize` must answer within 60 seconds. An answer too big for Orca is cut or refused before it leaves the worker. A server that crashes 4 times in 5 minutes is not restarted until the user asks.
+`src/services/lsp/jsonrpc.ts` drops a body that is not JSON, skips and logs one that is not an object, and discards a header without a length. A notification handler that throws is caught and logged, and every event the router handles runs inside a guard. A notification without params is reported instead of read. `initialize` must answer within 60 seconds. An answer too big for Orca is cut or refused before it leaves the worker. After a fourth crash within 5 minutes, a root's server is not started again until that window passes or the user runs the restart command.
 
-What remains: `Content-Length` has no limit, so a frame is buffered in full whatever size it declares. Results and diagnostics reach the frame as PHPantom sent them, checked only where the code branches on a field.
+What remains: `Content-Length` has no limit, so a frame is buffered in full whatever size it declares. Results and diagnostics reach the frame with PHPantom's content, cut only for size and checked only where the code branches on a field.
 
 ### 4. A workspace file opened outside the workspace root
 
@@ -59,7 +59,7 @@ Impact: medium, because script in a frame can send every `phpantom.*` request, `
 
 PHPantom's hovers and its completion and signature documentation are rendered by Monaco's Markdown renderer, which sanitizes with DOMPurify. The plugin never marks Markdown as trusted, so command links stay off. The bundle holds Monaco 0.58.0 with DOMPurify 3.4.17, and `npm audit` reports no advisory for either. Each frame is isolated (`"frame": "isolated"` in the manifest).
 
-What remains: the editor does not set Monaco's `markdownImages` option, whose default allows images from any origin, so a hover with a remote image makes the frame fetch it. Whether Orca's frame blocks that request has not been checked. A fix in Monaco or DOMPurify reaches users only after `npm run build` and a release. Dependabot raises those bumps as their own group.
+What remains: the editor does not set Monaco's `markdownImages` option, whose default allows images from any origin, so a hover can hold a remote image. The Orca 1.4.278 app bundle serves plugin files with a Content-Security-Policy whose `img-src` and `connect-src` allow only the plugin's own files, `data:` and `blob:`, which would block that fetch. That this policy covers the editor frame was read from the bundle, not tested in a tab. A fix in Monaco or DOMPurify reaches users only after `npm run build` and a release. Dependabot raises those bumps as their own group.
 
 ### 6. Opening an untrusted project runs its tools
 
