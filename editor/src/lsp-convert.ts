@@ -1,6 +1,6 @@
 // Adapted from actus7/orca-autocomplete editor/src/lsp-convert.ts @ da5a680 (MIT). See THIRD_PARTY_NOTICES.md.
 import type { LspContentChange } from '../../src/protocol.ts';
-import { isRecord } from '../../src/utils/json.ts';
+import { isRecord, isTruthy } from '../../src/utils/json.ts';
 import { sameUri } from '../../src/utils/uri.ts';
 
 // Conversions between the Language Server Protocol and Monaco. Pure data in, pure data out, so Node can test them: the Monaco-aware code only wraps these.
@@ -50,6 +50,7 @@ const toLspContentChange = (change: {
 
 /** LSP severity (1 error ... 4 hint) as Monaco's MarkerSeverity (8, 4, 2, 1). */
 function markerSeverity(severity: number | undefined): number {
+  if (severity === undefined) return 8;
   switch (severity) {
     case 2: {
       return 4;
@@ -92,8 +93,12 @@ function toMarker(diagnostic: LspDiagnostic): MonacoRange & {
     message: diagnostic.message,
     severity: markerSeverity(diagnostic.severity),
     ...(code === undefined ? {} : { code: String(code) }),
-    ...(diagnostic.source ? { source: diagnostic.source } : {}),
-    ...(diagnostic.tags?.length ? { tags: diagnostic.tags } : {}),
+    ...(diagnostic.source === undefined || diagnostic.source === ''
+      ? {}
+      : { source: diagnostic.source }),
+    ...(diagnostic.tags === undefined || diagnostic.tags.length === 0
+      ? {}
+      : { tags: diagnostic.tags }),
   };
 }
 
@@ -216,7 +221,7 @@ const isLocation = (value: unknown): value is LspLocation => isRecord(value);
 
 /** Locations (or links) as plain {uri, range}, whichever shape the server used, or none. */
 function normalizeLocations(result: unknown): { uri: string; range: MonacoRange }[] {
-  const list: unknown[] = Array.isArray(result) ? result : result ? [result] : [];
+  const list: unknown[] = Array.isArray(result) ? result : isTruthy(result) ? [result] : [];
   return list.map((item) => {
     // Why throw: anything else has no location to read, and reading one from it throws too.
     if (!isLocation(item)) throw new TypeError('a location is not an object');
@@ -263,7 +268,7 @@ function splitWorkspaceEdit(
     ]);
   }
   const ownKey = [...byUri.keys()].find((uri) => sameUri(uri, documentUri));
-  const own = (ownKey && byUri.get(ownKey)) || [];
+  const own = ownKey === undefined || ownKey === '' ? [] : (byUri.get(ownKey) ?? []);
   const otherFiles =
     [...byUri.keys()].filter((uri) => !sameUri(uri, documentUri)).length + fileOperations;
   return { otherFiles, own: own.map(toMonacoEdit) };
@@ -317,11 +322,12 @@ function toCodeAction(
   const edit: MonacoWorkspaceEdit | undefined = split
     ? { edits: split.own.map((textEdit) => ({ resource: modelUri, textEdit, versionId })) }
     : undefined;
+  const reason = action.disabled?.reason;
   return {
     title: action.title,
-    ...(action.kind ? { kind: action.kind } : {}),
-    ...(action.isPreferred ? { isPreferred: true } : {}),
-    ...(action.disabled?.reason ? { disabled: action.disabled.reason } : {}),
+    ...(action.kind === undefined || action.kind === '' ? {} : { kind: action.kind }),
+    ...(action.isPreferred === true ? { isPreferred: true } : {}),
+    ...(reason === undefined || reason === '' ? {} : { disabled: reason }),
     ...(edit ? { edit } : {}),
     needsResolve: !action.edit,
     otherFiles: split?.otherFiles ?? 0,
@@ -449,11 +455,11 @@ function completionDetails(resolved: unknown): {
   }
   const documentation = markdownValue(resolved.documentation);
   return {
-    ...(resolved.detail ? { detail: resolved.detail } : {}),
+    ...(resolved.detail === undefined || resolved.detail === '' ? {} : { detail: resolved.detail }),
     ...(documentation ? { documentation } : {}),
-    ...(resolved.additionalTextEdits?.length
-      ? { additionalTextEdits: resolved.additionalTextEdits.map(toMonacoEdit) }
-      : {}),
+    ...(resolved.additionalTextEdits === undefined || resolved.additionalTextEdits.length === 0
+      ? {}
+      : { additionalTextEdits: resolved.additionalTextEdits.map(toMonacoEdit) }),
   };
 }
 
@@ -463,13 +469,15 @@ function toCompletionLabel(item: {
   labelDetails?: { detail?: string; description?: string };
 }): string | { label: string; detail?: string; description?: string } {
   const { detail, description } = item.labelDetails ?? {};
-  if (!detail && !description) {
+  const hasDetail = detail !== undefined && detail !== '';
+  const hasDescription = description !== undefined && description !== '';
+  if (!hasDetail && !hasDescription) {
     return item.label;
   }
   return {
     label: item.label,
-    ...(detail ? { detail } : {}),
-    ...(description ? { description } : {}),
+    ...(hasDetail ? { detail } : {}),
+    ...(hasDescription ? { description } : {}),
   };
 }
 
@@ -509,8 +517,8 @@ function toInlayHint(hint: LspInlayHint): {
       : {
           tooltip: typeof hint.tooltip === 'string' ? hint.tooltip : { value: hint.tooltip.value },
         }),
-    ...(hint.paddingLeft ? { paddingLeft: true } : {}),
-    ...(hint.paddingRight ? { paddingRight: true } : {}),
+    ...(hint.paddingLeft === true ? { paddingLeft: true } : {}),
+    ...(hint.paddingRight === true ? { paddingRight: true } : {}),
   };
 }
 
@@ -533,7 +541,9 @@ function toSemanticTokens(result: unknown): { data: Uint32Array; resultId?: stri
   }
   return {
     data: Uint32Array.from(result.data),
-    ...(result.resultId ? { resultId: result.resultId } : {}),
+    ...(result.resultId === undefined || result.resultId === ''
+      ? {}
+      : { resultId: result.resultId }),
   };
 }
 

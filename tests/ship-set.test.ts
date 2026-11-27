@@ -101,7 +101,7 @@ function refusal({ mode, path }: Tracked): string | undefined {
 test('no tracked file is one the Orca plugin indexer refuses', () => {
   const refused = tracked.flatMap((file) => {
     const reason = refusal(file);
-    return reason ? [`${file.path}: ${reason}`] : [];
+    return reason === undefined || reason === '' ? [] : [`${file.path}: ${reason}`];
   });
   assert.deepEqual(refused, [], `refused by the indexer:\n${refused.join('\n')}`);
 });

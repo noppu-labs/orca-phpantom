@@ -34,6 +34,7 @@ import {
   capability,
   disposeAll,
   isRecord,
+  isTruthy,
   listOrUndefined,
   withSignal,
   type Disposable,
@@ -63,7 +64,7 @@ function registerReadingProviders(
   const edits = (list: LspTextEdit[]): monaco.languages.TextEdit[] => list.map(toMonacoEdit);
 
   // --- completion ---
-  if (capabilities.completionProvider) {
+  if (isTruthy(capabilities.completionProvider)) {
     // The server's own item for each suggestion shown: resolving it needs exactly what the server sent.
     const serverItems = new WeakMap<object, LspCompletionItem>();
     registered.push(
@@ -77,7 +78,9 @@ function registerReadingProviders(
               // Monaco counts trigger kinds from 0, LSP from 1, in the same order.
               context: {
                 triggerKind: context.triggerKind + 1,
-                ...(context.triggerCharacter ? { triggerCharacter: context.triggerCharacter } : {}),
+                ...(context.triggerCharacter === undefined || context.triggerCharacter === ''
+                  ? {}
+                  : { triggerCharacter: context.triggerCharacter }),
               },
             },
             token,
@@ -120,7 +123,7 @@ function registerReadingProviders(
                 range,
                 sortText: item.sortText,
                 tags:
-                  item.deprecated || item.tags?.includes(1)
+                  item.deprecated === true || item.tags?.includes(1) === true
                     ? [monaco.languages.CompletionItemTag.Deprecated]
                     : undefined,
               };
@@ -130,7 +133,9 @@ function registerReadingProviders(
           };
         },
         // Why: PHPantom sends the `use` import that goes with a class from another namespace only here.
-        resolveCompletionItem: capability(capabilities, 'completionProvider', 'resolveProvider')
+        resolveCompletionItem: isTruthy(
+          capability(capabilities, 'completionProvider', 'resolveProvider')
+        )
           ? async (suggestion, token) => {
               const raw = serverItems.get(suggestion);
               if (!raw) return suggestion;
@@ -150,7 +155,7 @@ function registerReadingProviders(
   }
 
   // --- hover and signature help ---
-  if (capabilities.hoverProvider) {
+  if (isTruthy(capabilities.hoverProvider)) {
     registered.push(
       monaco.languages.registerHoverProvider(language, {
         async provideHover(m, position, token) {
@@ -165,7 +170,7 @@ function registerReadingProviders(
       })
     );
   }
-  if (capabilities.signatureHelpProvider) {
+  if (isTruthy(capabilities.signatureHelpProvider)) {
     registered.push(
       monaco.languages.registerSignatureHelpProvider(language, {
         async provideSignatureHelp(m, position, token, context) {
@@ -178,7 +183,9 @@ function registerReadingProviders(
               context: {
                 isRetrigger: context.isRetrigger,
                 triggerKind: context.triggerKind,
-                ...(context.triggerCharacter ? { triggerCharacter: context.triggerCharacter } : {}),
+                ...(context.triggerCharacter === undefined || context.triggerCharacter === ''
+                  ? {}
+                  : { triggerCharacter: context.triggerCharacter }),
               },
             },
             token,
@@ -186,7 +193,10 @@ function registerReadingProviders(
             'passive'
           );
           const help = isSignatureHelp(result) ? result : undefined;
-          if (!help?.signatures?.length) return null;
+          const signatureCount = help?.signatures?.length;
+          if (help === undefined || signatureCount === undefined || signatureCount === 0) {
+            return null;
+          }
           return {
             dispose() {},
             value: {
@@ -221,7 +231,7 @@ function registerReadingProviders(
   const legend = capability(capabilities, 'semanticTokensProvider', 'legend');
   if (
     isSemanticTokensLegend(legend) &&
-    capability(capabilities, 'semanticTokensProvider', 'full')
+    isTruthy(capability(capabilities, 'semanticTokensProvider', 'full'))
   ) {
     const changed = new monaco.Emitter<void>();
     registered.push(
@@ -275,7 +285,7 @@ function registerReadingProviders(
   }
 
   // --- the outline ---
-  if (capabilities.documentSymbolProvider) {
+  if (isTruthy(capabilities.documentSymbolProvider)) {
     registered.push(
       monaco.languages.registerDocumentSymbolProvider(language, {
         displayName: SERVER_NAME,

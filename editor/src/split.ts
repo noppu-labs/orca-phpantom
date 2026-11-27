@@ -79,7 +79,8 @@ function splitOne(change: LspContentChange, budget: number): LspContentChange[] 
   // Why the smaller: a piece's raw UTF-8 bytes never exceed its JSON size, so JSON-bounding it bounds Orca's measure of the text too; this adds what Orca counts around it.
   const textBudget = Math.min(budget - 2 - ENVELOPE + 2, budget - ORCA_ENVELOPE + 2);
   const pieces = chunkText(change.text, Math.max(textBudget, 16));
-  const last = pieces.at(-1)!;
+  // There is always a last piece: chunkText gives at least one.
+  const [last] = pieces.slice(-1);
   const at = 'range' in change ? change.range.start : { character: 0, line: 0 };
   const out: LspContentChange[] = [
     'range' in change ? { range: change.range, text: last } : { text: last },

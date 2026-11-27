@@ -99,7 +99,15 @@ class PhpantomServer {
     const { stdin } = child;
     const { stdout } = child;
     const { stderr } = child;
-    if (!stdin || !stdout || !stderr) {
+    // Why compare: the types say the pipes are there, but a child that failed to spawn has none.
+    if (
+      stdin === null ||
+      stdin === undefined ||
+      stdout === null ||
+      stdout === undefined ||
+      stderr === null ||
+      stderr === undefined
+    ) {
       child.kill();
       throw new Error('could not open the language server pipes');
     }

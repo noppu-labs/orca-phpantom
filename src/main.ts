@@ -38,7 +38,11 @@ export default async function activate(orca: OrcaWorkerApi): Promise<void> {
   };
   const host: RouterHost = {
     async listWorkspaces(options) {
-      if (options?.fresh || !workspaces || Date.now() - workspaces.at > WORKSPACE_LIST_TTL_MS) {
+      if (
+        options?.fresh === true ||
+        !workspaces ||
+        Date.now() - workspaces.at > WORKSPACE_LIST_TTL_MS
+      ) {
         const rows = orca.host.call('workspace.list').then(({ workspaces: list }) =>
           list.map((row): WorkspaceRow => ({
             branch: row.branch,

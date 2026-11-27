@@ -197,7 +197,7 @@ async function locateCandidates(input: LocateInput, options: Options): Promise<L
       continue;
     }
     const info = await stat(path).catch(() => null);
-    if (!info?.isFile()) {
+    if (info?.isFile() !== true) {
       continue;
     }
     const text = (await readFile(path, 'utf8').catch(() => null))?.replace(/^﻿/u, '');
@@ -272,7 +272,7 @@ async function locateKnown(
         continue;
       }
       const info = await stat(path).catch(() => null);
-      if (!info?.isFile() || (info.size !== size && info.size !== size + BOM_BYTES)) {
+      if (info?.isFile() !== true || (info.size !== size && info.size !== size + BOM_BYTES)) {
         continue;
       }
       const text = (await readFile(path, 'utf8').catch(() => null))?.replace(/^\uFEFF/u, '');

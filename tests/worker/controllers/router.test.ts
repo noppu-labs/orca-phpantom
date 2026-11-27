@@ -510,7 +510,7 @@ test('a focused workspace missing from the cached list is looked up again', asyn
       fresh.push(options?.fresh === true);
       const a = { id: 'ws-a', name: 'a', branch: 'main', path: join(dir, 'a'), hostId: 'local' };
       const b = { id: 'ws-new', name: 'b', branch: 'feat', path: join(dir, 'b'), hostId: 'local' };
-      return options?.fresh ? [a, b] : [a];
+      return options?.fresh === true ? [a, b] : [a];
     },
   });
   const status = await openWhole(worker, {

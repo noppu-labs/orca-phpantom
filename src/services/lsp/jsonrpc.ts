@@ -62,7 +62,7 @@ class RpcConnection {
       }
       const length = LENGTH_HEADER.exec(this.buffer.subarray(0, headerEnd).toString('ascii'))
         ?.groups?.bytes;
-      if (!length) {
+      if (length === undefined || length === '') {
         // Why: a frame without a length cannot be skipped; drop the junk and wait for the next header.
         this.buffer = this.buffer.subarray(headerEnd + HEADER_END.length);
         continue;
@@ -86,7 +86,7 @@ class RpcConnection {
     if (this.closed) {
       throw new Error('the language server is not running');
     }
-    if (signal?.aborted) {
+    if (signal?.aborted === true) {
       throw new Error('cancelled');
     }
     const id = this.nextId++;

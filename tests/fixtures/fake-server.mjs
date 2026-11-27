@@ -6,7 +6,7 @@
 // FAKE_MODE=silent: never answers initialize. FAKE_MODE=stubborn: answers, then ignores shutdown, exit, stdin end.
 // Both ignore SIGTERM, so only SIGKILL removes them.
 const mode = process.env.FAKE_MODE ?? '';
-if (mode) {
+if (mode !== '') {
   process.on('SIGTERM', () => undefined);
   setInterval(() => undefined, 1000);
 }
@@ -59,17 +59,18 @@ function handle(message) {
       jsonrpc: '2.0',
       id,
       result: {
-        capabilities: process.env.FAKE_CAPABILITIES
-          ? JSON.parse(process.env.FAKE_CAPABILITIES)
-          : {
-              textDocumentSync: 2,
-              hoverProvider: true,
-              definitionProvider: true,
-              semanticTokensProvider: {
-                legend: { tokenTypes: ['parameter'], tokenModifiers: [] },
-                full: true,
+        capabilities:
+          process.env.FAKE_CAPABILITIES !== undefined && process.env.FAKE_CAPABILITIES !== ''
+            ? JSON.parse(process.env.FAKE_CAPABILITIES)
+            : {
+                textDocumentSync: 2,
+                hoverProvider: true,
+                definitionProvider: true,
+                semanticTokensProvider: {
+                  legend: { tokenTypes: ['parameter'], tokenModifiers: [] },
+                  full: true,
+                },
               },
-            },
       },
     });
   } else if (method === 'initialized') {
@@ -95,7 +96,7 @@ function handle(message) {
       params: { token: 'index', value: { kind: 'end' } },
     });
     send({ jsonrpc: '2.0', id: 9002, method: 'workspace/inlayHint/refresh', params: null });
-    if (process.env.FAKE_NULL_PARAMS) {
+    if (process.env.FAKE_NULL_PARAMS !== undefined && process.env.FAKE_NULL_PARAMS !== '') {
       for (const method of ['textDocument/publishDiagnostics', '$/progress', 'window/logMessage']) {
         send({ jsonrpc: '2.0', method, params: null });
       }
@@ -120,11 +121,12 @@ function handle(message) {
     publish();
   } else if (method === 'textDocument/didChange') {
     for (const change of params.contentChanges) {
-      text = change.range
-        ? text.slice(0, offsetAt(change.range.start)) +
-          change.text +
-          text.slice(offsetAt(change.range.end))
-        : change.text;
+      text =
+        change.range !== undefined && change.range !== null
+          ? text.slice(0, offsetAt(change.range.start)) +
+            change.text +
+            text.slice(offsetAt(change.range.end))
+          : change.text;
     }
     publish();
   } else if (method === 'textDocument/hover') {
@@ -195,6 +197,6 @@ process.stdin.on('data', (chunk) => {
     handle(JSON.parse(body));
   }
 });
-if (!mode) {
+if (mode === '') {
   process.stdin.on('end', () => process.exit(0));
 }

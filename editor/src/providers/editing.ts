@@ -41,6 +41,7 @@ import {
   capability,
   disposeAll,
   isRecord,
+  isTruthy,
   listOrUndefined,
   withSignal,
   type Disposable,
@@ -161,7 +162,7 @@ function registerEditingProviders(
     // Why after the previews: the note counts what is shown, and a query that was not cut clears the last one's.
     if (answer) {
       const cutNote = cutNoteFor(locations.length, answer.truncated);
-      if (cutNote) showNote('info', cutNote, `${NAVIGATION_NOTE}-cut`);
+      if (cutNote !== null && cutNote !== '') showNote('info', cutNote, `${NAVIGATION_NOTE}-cut`);
       else clearNote(`${NAVIGATION_NOTE}-cut`);
     }
     return locations.map((location): monaco.languages.Location => ({
@@ -170,7 +171,7 @@ function registerEditingProviders(
     }));
   };
 
-  if (capabilities.definitionProvider) {
+  if (isTruthy(capabilities.definitionProvider)) {
     registered.push(
       monaco.languages.registerDefinitionProvider(language, {
         provideDefinition: async (m, position, token) =>
@@ -178,7 +179,7 @@ function registerEditingProviders(
       })
     );
   }
-  if (capabilities.declarationProvider) {
+  if (isTruthy(capabilities.declarationProvider)) {
     registered.push(
       monaco.languages.registerDeclarationProvider(language, {
         provideDeclaration: async (m, position, token) =>
@@ -186,7 +187,7 @@ function registerEditingProviders(
       })
     );
   }
-  if (capabilities.typeDefinitionProvider) {
+  if (isTruthy(capabilities.typeDefinitionProvider)) {
     registered.push(
       monaco.languages.registerTypeDefinitionProvider(language, {
         provideTypeDefinition: async (m, position, token) =>
@@ -194,7 +195,7 @@ function registerEditingProviders(
       })
     );
   }
-  if (capabilities.implementationProvider) {
+  if (isTruthy(capabilities.implementationProvider)) {
     registered.push(
       monaco.languages.registerImplementationProvider(language, {
         provideImplementation: async (m, position, token) =>
@@ -202,7 +203,7 @@ function registerEditingProviders(
       })
     );
   }
-  if (capabilities.referencesProvider) {
+  if (isTruthy(capabilities.referencesProvider)) {
     registered.push(
       monaco.languages.registerReferenceProvider(language, {
         provideReferences: async (m, position, context, token) =>
@@ -219,7 +220,7 @@ function registerEditingProviders(
   ): { options: { tabSize: number; insertSpaces: boolean } } => ({
     options: { insertSpaces: options.insertSpaces, tabSize: options.tabSize },
   });
-  if (capabilities.documentFormattingProvider) {
+  if (isTruthy(capabilities.documentFormattingProvider)) {
     registered.push(
       monaco.languages.registerDocumentFormattingEditProvider(language, {
         displayName: SERVER_NAME,
@@ -234,7 +235,7 @@ function registerEditingProviders(
       })
     );
   }
-  if (capabilities.documentRangeFormattingProvider) {
+  if (isTruthy(capabilities.documentRangeFormattingProvider)) {
     registered.push(
       monaco.languages.registerDocumentRangeFormattingEditProvider(language, {
         displayName: SERVER_NAME,
@@ -254,7 +255,7 @@ function registerEditingProviders(
   }
 
   // --- rename, within this file only ---
-  if (capabilities.renameProvider) {
+  if (isTruthy(capabilities.renameProvider)) {
     const prepares = Boolean(capability(capabilities, 'renameProvider', 'prepareProvider'));
     registered.push(
       monaco.languages.registerRenameProvider(language, {
@@ -267,7 +268,7 @@ function registerEditingProviders(
             { ...atCursor(position), newName },
             token
           );
-          if (!result) return null;
+          if (!isTruthy(result)) return null;
           const split = splitWorkspaceEdit(isWorkspaceEdit(result) ? result : null, documentUri());
           if (split.otherFiles > 0) {
             const reason = renameReachesOtherFiles(split.otherFiles);
@@ -285,7 +286,7 @@ function registerEditingProviders(
               const result = await ask('textDocument/prepareRename', atCursor(position), token);
               if (token.isCancellationRequested) throw canceled();
               // Why reject: with nothing returned Monaco would offer to rename the word under the cursor.
-              if (!result) {
+              if (!isTruthy(result)) {
                 return {
                   range: new monaco.Range(
                     position.lineNumber,
@@ -298,7 +299,7 @@ function registerEditingProviders(
                 };
               }
               // The server either leaves the range to the client ...
-              if (isRecord(result) && result.defaultBehavior) return null;
+              if (isRecord(result) && isTruthy(result.defaultBehavior)) return null;
               // ... or sends a range, alone or with a placeholder. Why not show the placeholder: for a class PHPantom 1.1.0 sends the fully qualified name while the range and the new name are the short one.
               const range = fromLspRange(renameRange(result));
               return { range, text: m.getValueInRange(range) };
@@ -309,7 +310,7 @@ function registerEditingProviders(
   }
 
   // --- code actions ---
-  if (capabilities.codeActionProvider) {
+  if (isTruthy(capabilities.codeActionProvider)) {
     // The server's own action for each one shown, and the model version it was computed against: resolving needs exactly what the server sent, and an edit applies only to that version's text.
     const serverActions = new WeakMap<object, { raw: LspCodeAction; versionId: number }>();
     const kinds = listOrUndefined(
@@ -337,7 +338,9 @@ function registerEditingProviders(
                 context: {
                   // As PHPantom sent them: a fix finds its diagnostic by what Monaco's markers drop.
                   diagnostics: diagnosticsTouching(diagnosticsOf(model), lspRange),
-                  ...(context.only ? { only: [context.only] } : {}),
+                  ...(context.only === undefined || context.only === ''
+                    ? {}
+                    : { only: [context.only] }),
                   // Both number these the same way: 1 invoked, 2 automatic.
                   triggerKind: context.trigger,
                 },
@@ -355,9 +358,13 @@ function registerEditingProviders(
               if (converted.needsResolve && !resolves) continue;
               const action: monaco.languages.CodeAction = {
                 title: converted.title,
-                ...(converted.kind ? { kind: converted.kind } : {}),
-                ...(converted.isPreferred ? { isPreferred: true } : {}),
-                ...(converted.disabled ? { disabled: converted.disabled } : {}),
+                ...(converted.kind === undefined || converted.kind === ''
+                  ? {}
+                  : { kind: converted.kind }),
+                ...(converted.isPreferred === true ? { isPreferred: true } : {}),
+                ...(converted.disabled === undefined || converted.disabled === ''
+                  ? {}
+                  : { disabled: converted.disabled }),
                 // Why not when it reaches other files: Monaco resolves an action that has no edit, and resolving is where that case says why nothing happens.
                 ...(converted.edit && converted.otherFiles === 0
                   ? { edit: toMonacoWorkspaceEdit(converted.edit) }
@@ -379,7 +386,7 @@ function registerEditingProviders(
               return action;
             }
             const resolved = raw.edit ? raw : await ask('codeAction/resolve', raw, token);
-            if (!resolved) {
+            if (!isTruthy(resolved)) {
               if (token.isCancellationRequested) throw canceled();
               return action;
             }

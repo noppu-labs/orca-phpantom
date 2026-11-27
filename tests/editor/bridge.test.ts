@@ -42,7 +42,7 @@ type Answer = unknown | Promise<unknown>;
 
 /** Pending until the last chunk, then ready under the host's current session. */
 function readyOn(_when: 'last'): OpenHandler {
-  return (input, host) => (input.last ? host.ready() : { state: 'pending' });
+  return (input, host) => (input.last === true ? host.ready() : { state: 'pending' });
 }
 
 type FakeHost = BridgeHost & {
@@ -166,7 +166,7 @@ function fakeHost(
           }
           chunks.push(input.chunk);
           openedIn = input.workspaceId;
-          if (input.last) {
+          if (input.last === true) {
             assembled = chunks.join('');
             chunks = null;
           }
@@ -200,7 +200,9 @@ function fakeHost(
 const versions = (host: FakeHost): number[] =>
   host.calls('phpantom.change').map((call) => call.input.version);
 const fullOpens = (host: FakeHost) =>
-  host.calls('phpantom.open').filter((call) => call.input.index === 0 && !call.input.resync);
+  host
+    .calls('phpantom.open')
+    .filter((call) => call.input.index === 0 && call.input.resync !== true);
 
 test('sends a large document in chunks and attaches', async () => {
   const host = fakeHost({ open: readyOn('last') });
@@ -228,7 +230,7 @@ test('keeps edits typed while attach is in flight', async () => {
   const gate = new Promise<void>((resolve) => (release = resolve));
   const host = fakeHost({
     open: async (input, self) => {
-      if (!input.last) return { state: 'pending' };
+      if (input.last !== true) return { state: 'pending' };
       await gate;
       return self.ready();
     },
@@ -291,7 +293,7 @@ test('a paste larger than one request reaches the worker split and intact', asyn
   await until(() => host.mirror?.text === doc.text, 'the worker to hold the pasted text');
   assert.ok(host.calls('phpantom.change').length > 2);
   assert.ok(host.calls('phpantom.change').every((c) => encodedSize(c.input) <= 64 * 1024));
-  assert.equal(host.calls('phpantom.open').filter((c) => c.input.resync).length, 0);
+  assert.equal(host.calls('phpantom.open').filter((c) => c.input.resync === true).length, 0);
   assert.deepEqual(host.violations, []);
   bridge.dispose();
 });
@@ -467,7 +469,7 @@ test('never interleaves two chunk sequences for one document', async () => {
   const host = fakeHost({
     open: async (input, self) => {
       await wait(5);
-      return input.last ? self.ready() : { state: 'pending' };
+      return input.last === true ? self.ready() : { state: 'pending' };
     },
   });
   const text = 'y'.repeat(300_000);
@@ -665,7 +667,7 @@ test('retries a single-file attach after typing stops', async () => {
   let answers = 0;
   const host = fakeHost({
     open: (input, self) => {
-      if (!input.last) return { state: 'pending' };
+      if (input.last !== true) return { state: 'pending' };
       answers += 1;
       return answers === 1 ? { state: 'single-file', reason: 'no-file' } : self.ready();
     },
@@ -686,7 +688,7 @@ test('retries a single-file attach after typing stops', async () => {
 test('gives up retrying after maxRetries', async () => {
   const host = fakeHost({
     open: (input) =>
-      input.last ? { state: 'single-file', reason: 'ambiguous' } : { state: 'pending' },
+      input.last === true ? { state: 'single-file', reason: 'ambiguous' } : { state: 'pending' },
   });
   const bridge = new LspBridge(host, source('<?php\n'), {
     ...FAST,
@@ -707,7 +709,7 @@ test('a save retries a single-file attach, even with the typing budget spent', a
   let saved = false;
   const host = fakeHost({
     open: (input, self) =>
-      input.last
+      input.last === true
         ? saved
           ? self.ready()
           : { state: 'single-file', reason: 'no-file' }
@@ -736,7 +738,7 @@ test('an error answer retries when the settings change', async () => {
   let fixed = false;
   const host = fakeHost({
     open: (input, self) =>
-      input.last
+      input.last === true
         ? fixed
           ? self.ready()
           : { state: 'error', message: 'PHPantom is not installed' }
@@ -760,7 +762,7 @@ test('an error answer retries when the tab shows', async () => {
   let answers = 0;
   const host = fakeHost({
     open: (input, self) =>
-      input.last
+      input.last === true
         ? ++answers === 1
           ? { state: 'error', message: 'boom' }
           : self.ready()
@@ -775,7 +777,8 @@ test('an error answer retries when the tab shows', async () => {
 
 test('a remote file is not retried', async () => {
   const host = fakeHost({
-    open: (input) => (input.last ? { state: 'remote', host: 'box' } : { state: 'pending' }),
+    open: (input) =>
+      input.last === true ? { state: 'remote', host: 'box' } : { state: 'pending' },
   });
   const bridge = new LspBridge(host, source('<?php\n'), FAST);
   await bridge.attach();
@@ -795,7 +798,7 @@ test('a chunk sequence cut by a worker restart starts over', async () => {
         cut = true;
         return { state: 'error', message: `chunk 1 of ${input.docId} arrived out of order` };
       }
-      return input.last ? self.ready() : { state: 'pending' };
+      return input.last === true ? self.ready() : { state: 'pending' };
     },
   });
   const text = 'z'.repeat(200_000);
@@ -859,7 +862,8 @@ test('ignores events meant for another document', async () => {
 test('reveals the range a ready answer carries', async () => {
   const range = { start: { line: 3, character: 0 }, end: { line: 3, character: 4 } };
   const host = fakeHost({
-    open: (input, self) => (input.last ? { ...self.ready(), reveal: range } : { state: 'pending' }),
+    open: (input, self) =>
+      input.last === true ? { ...self.ready(), reveal: range } : { state: 'pending' },
   });
   const bridge = new LspBridge(host, source('<?php\n'), FAST);
   const reveals: unknown[] = [];
@@ -895,7 +899,8 @@ test('pings while attached, and stops after dispose', async () => {
 
 test('does not ping a document that never attached', async () => {
   const host = fakeHost({
-    open: (input) => (input.last ? { state: 'remote', host: 'ssh:box' } : { state: 'pending' }),
+    open: (input) =>
+      input.last === true ? { state: 'remote', host: 'ssh:box' } : { state: 'pending' },
   });
   const bridge = new LspBridge(host, source('<?php\n'), { ...FAST, pingMs: 10 });
   assert.equal((await bridge.attach()).state, 'remote');
@@ -996,7 +1001,7 @@ test('a change Orca refuses is sent again as it was, with no resync and no error
   host.refuse = refuseFirst('phpantom.change', 1);
   doc.edit(11, 12, '2');
   await until(() => host.mirror?.text === doc.text, 'the worker to catch up');
-  assert.equal(host.calls('phpantom.open').filter((call) => call.input.resync).length, 0);
+  assert.equal(host.calls('phpantom.open').filter((call) => call.input.resync === true).length, 0);
   assert.deepEqual(versions(host), [2, 2]);
   assert.deepEqual(states, ['ready']);
   assert.deepEqual(host.violations, []);

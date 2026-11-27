@@ -39,12 +39,14 @@ function findExecutable(
 /** Folders a Dock-launched app may lack on PATH but where PHPantom is commonly installed. */
 function wellKnownDirs(env: NodeJS.ProcessEnv, platform: string): string[] {
   if (platform === 'win32') {
-    return env.USERPROFILE ? [win32.join(env.USERPROFILE, '.cargo', 'bin')] : [];
+    const { USERPROFILE: profile } = env;
+    return profile === undefined || profile === '' ? [] : [win32.join(profile, '.cargo', 'bin')];
   }
+  const { HOME: home } = env;
   return [
     '/opt/homebrew/bin',
     '/usr/local/bin',
-    ...(env.HOME ? [posix.join(env.HOME, '.cargo', 'bin')] : []),
+    ...(home === undefined || home === '' ? [] : [posix.join(home, '.cargo', 'bin')]),
   ];
 }
 

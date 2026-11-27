@@ -64,6 +64,9 @@ function showStatus(status: AttachStatus): void {
       showNote('warning', status.message, NOTE);
       return;
     }
+    case 'pending': {
+      return;
+    }
     default: {
       return;
     }

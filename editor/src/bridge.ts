@@ -146,6 +146,12 @@ const messageOf = (error: unknown): string =>
 const isEmpty = (range: LspRange): boolean =>
   range.start.line === range.end.line && range.start.character === range.end.character;
 
+/**
+ * Whether `signal` has aborted; no signal never aborts.
+ * A function, so TypeScript does not keep `signal.aborted` narrowed to false across an await.
+ */
+const aborted = (signal: AbortSignal | undefined): boolean => signal?.aborted === true;
+
 /** Resolves after `ms`, or as soon as `signal` aborts. */
 async function sleep(ms: number, signal?: AbortSignal): Promise<void> {
   return new Promise((resolve) => {
@@ -374,13 +380,18 @@ class LspBridge {
     const kind = options.kind ?? 'user';
     const busy = (): void => {
       // oxlint-disable-next-line unicorn/no-useless-undefined -- emit() takes the payload as a required argument
-      if (!options.silent) this.emit('busy', undefined);
+      if (options.silent !== true) this.emit('busy', undefined);
     };
+    // A timeout of 0 or NaN is left out, so Orca's default applies.
+    const timeoutMs =
+      options.timeoutMs === undefined || options.timeoutMs === 0 || Number.isNaN(options.timeoutMs)
+        ? undefined
+        : options.timeoutMs;
     const requestOptions =
-      signal || options.timeoutMs
+      signal !== undefined || timeoutMs !== undefined
         ? {
             ...(signal ? { signal } : {}),
-            ...(options.timeoutMs ? { timeoutMs: options.timeoutMs } : {}),
+            ...(timeoutMs === undefined ? {} : { timeoutMs }),
           }
         : undefined;
     // Why: Monaco shifts a background answer by every edit made after it asked; one that holds them already would move twice.
@@ -389,7 +400,7 @@ class LspBridge {
     let reattached = false;
     let refused = false;
     for (;;) {
-      if (signal?.aborted || !this.attachedTo) return null;
+      if (aborted(signal) || this.attachedTo === null) return null;
       if (
         kind === 'user'
           ? !(await this.holdPassed(signal, options.silent))
@@ -400,8 +411,9 @@ class LspBridge {
       }
       await this.flush(true);
       const attachment = this.attachedTo;
-      const session = attachment?.session;
-      if (!attachment || !session || signal?.aborted) return null;
+      // Why compare with null: TypeScript still narrows `attachedTo` from before the flush, which can clear it.
+      if (attachment === null || attachment.session === '' || aborted(signal)) return null;
+      const { session } = attachment;
       // Why: changes Orca refused are not in the worker's copy yet, so an answer would be about older text.
       if (this.unsent.length > 0) {
         if (kind === 'user') busy();
@@ -418,7 +430,7 @@ class LspBridge {
           requestOptions
         );
       } catch (error) {
-        if (signal?.aborted) return null;
+        if (aborted(signal)) return null;
         if (isRateLimited(error)) {
           if (kind === 'background') this.refreshLater();
           if (kind !== 'user') return null;
@@ -432,7 +444,7 @@ class LspBridge {
         if (codeOf(error) !== 'unavailable') return null;
         answer = { detached: true };
       }
-      if (signal?.aborted) return null;
+      if (aborted(signal)) return null;
       if ('detached' in answer) {
         if (reattached) return null;
         reattached = true;
@@ -458,7 +470,7 @@ class LspBridge {
     range: LspRange
   ): Promise<PluginRequestOutput<'phpantom.navigate'> | null> {
     const session = this.attachedTo?.session;
-    if (!session) return null;
+    if (session === undefined || session === '') return null;
     return this.userCall(async () =>
       this.send('phpantom.navigate', { docId: this.docId, range, session, uri })
     );
@@ -470,7 +482,7 @@ class LspBridge {
     signal?: AbortSignal
   ): Promise<PluginRequestOutput<'phpantom.peek'> | null> {
     const session = this.attachedTo?.session;
-    if (!session || signal?.aborted) return null;
+    if (session === undefined || session === '' || aborted(signal)) return null;
     return this.userCall(
       async () =>
         this.send(
@@ -540,7 +552,7 @@ class LspBridge {
   /** The answer of `run`, or of whatever attempt superseded it. */
   private async settled(run: Promise<AttachStatus | null>): Promise<AttachStatus> {
     let status = await run;
-    while (status === null && !this.disposed && this.latest && this.latest !== run) {
+    while (status === null && !this.disposed && this.latest !== null && this.latest !== run) {
       run = this.latest;
       status = await run;
     }
@@ -858,12 +870,13 @@ class LspBridge {
         groups = this.unsent;
         this.unsent = [];
       } else {
-        if (this.queue.length === 0) return;
         // Every queued event in one go: their changes apply one after another, as LSP applies a list.
         const events = this.queue.splice(0);
+        const last = events.at(-1);
+        if (last === undefined) return;
         const split = groupsOf({
           changes: events.flatMap((event) => event.changes),
-          lengthAfter: events.at(-1)!.lengthAfter,
+          lengthAfter: last.lengthAfter,
         });
         // Why check the start: a length that does not chain on from the last one means the queue missed something.
         if (!split || split.lengthBefore !== this.sentLength) {
@@ -903,7 +916,7 @@ class LspBridge {
           this.resyncNext();
           break;
         }
-        if (generation !== this.generation || !this.attachedTo) return;
+        if (generation !== this.generation || this.attachedTo === null) return;
         if ('detached' in answer) {
           this.lost();
           return;
@@ -972,7 +985,7 @@ class LspBridge {
       return false;
     }
     await sleep(hold, signal);
-    return !signal?.aborted && !this.disposed;
+    return !aborted(signal) && !this.disposed;
   }
 
   /** A user call: after the hold, and once more if Orca refuses it; null when it fails. */
@@ -982,7 +995,7 @@ class LspBridge {
       try {
         return await run();
       } catch (error) {
-        if (!isRateLimited(error) || signal?.aborted) return null;
+        if (!isRateLimited(error) || aborted(signal)) return null;
         if (refused) {
           // oxlint-disable-next-line unicorn/no-useless-undefined -- emit() takes the payload as a required argument
           this.emit('busy', undefined);
@@ -999,7 +1012,9 @@ class LspBridge {
   private async typingPaused(version: number, signal?: AbortSignal): Promise<boolean> {
     const started = Date.now();
     for (;;) {
-      if (signal?.aborted || this.disposed || this.source.getVersion() !== version) return false;
+      if (aborted(signal) || this.disposed || this.source.getVersion() !== version) {
+        return false;
+      }
       const settledIn =
         Math.max(this.lastChangeAt + this.backgroundQuietMs, started + this.backgroundMinWaitMs) -
         Date.now();

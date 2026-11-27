@@ -22,7 +22,7 @@ function compile(grammar: Grammar, regex: RegExp): RegExp {
       `regex refers to @${attribute.groups?.name}, which this walker does not expand: /${regex.source}/`
     );
   }
-  const flags = grammar.language.ignoreCase ? 'i' : '';
+  const flags = grammar.language.ignoreCase === true ? 'i' : '';
   return new RegExp(`^(?:${source.replaceAll('\u0001', '@')})`, flags);
 }
 
@@ -41,7 +41,7 @@ function rulesOf(grammar: Grammar, state: string, seen: string[] = []): unknown[
   }
   const rules: unknown[] = [];
   for (const rule of tokenizer[name]) {
-    if (rule && typeof rule === 'object' && !Array.isArray(rule) && 'include' in rule) {
+    if (rule !== null && typeof rule === 'object' && !Array.isArray(rule) && 'include' in rule) {
       rules.push(
         ...rulesOf(grammar, String((rule as { include: string }).include).replace(/^@/u, ''), [
           ...seen,
@@ -83,11 +83,11 @@ function tokenizeLine(grammar: Grammar, line: string, stack: string[] = ['root']
     }
   };
   const move = (next: string | undefined, switchTo: string | undefined): void => {
-    if (switchTo) {
+    if (switchTo !== undefined && switchTo !== '') {
       rulesOf(grammar, switchTo.replace(/^@/u, ''));
       stack[stack.length - 1] = switchTo.replace(/^@/u, '');
     }
-    if (!next) {
+    if (next === undefined || next === '') {
       return;
     }
     if (next === '@pop') {

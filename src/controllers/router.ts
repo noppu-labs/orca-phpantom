@@ -324,7 +324,7 @@ class Router {
     }
     // Why check here: editor.open opens a missing file without complaint.
     const info = await stat(path).catch(() => null);
-    if (!info?.isFile()) {
+    if (info?.isFile() !== true) {
       return { opened: false, reason: 'failed' };
     }
     this.reveals.add(path, input.range);
@@ -408,7 +408,7 @@ class Router {
     this.failedAt = null;
     this.resolved = null;
     // Why clear the error: it described the old settings; the next open finds out about the new ones.
-    if (this.resolveError) {
+    if (this.resolveError !== null && this.resolveError !== '') {
       this.resolveError = null;
       this.updateStatus();
     }
@@ -417,17 +417,17 @@ class Router {
   public describe(): string {
     const lines: string[] = [];
     const { resolved } = this;
-    if (resolved?.ok) {
+    if (resolved?.ok === true) {
       lines.push(
         `PHPantom ${resolved.version} (${SOURCE_WORDS[resolved.source]}): ${resolved.path}`
       );
     }
-    if (this.resolveError) {
+    if (this.resolveError !== null && this.resolveError !== '') {
       lines.push(`PHPantom error: ${this.resolveError}`);
     }
     for (const entry of this.pool.values()) {
       const { phase, percent, message } = entry.state;
-      const detail = `${phase}${percent === undefined ? '' : ` ${percent}%`}${message ? ` (${message})` : ''}`;
+      const detail = `${phase}${percent === undefined ? '' : ` ${percent}%`}${message === undefined || message === '' ? '' : ` (${message})`}`;
       lines.push(`${entry.root}: ${detail}, ${entry.docs.size} open document(s)`);
       for (const docId of entry.docs) {
         const doc = this.docs.get(docId);
@@ -460,7 +460,7 @@ class Router {
     panel: string
   ): Promise<AttachStatus> {
     const known = this.docs.get(input.docId);
-    if (input.resync && known?.server.alive) {
+    if (input.resync === true && known?.server.alive === true) {
       known.mirror = new DocumentMirror(text);
       known.version = 1;
       known.needsResync = false;
@@ -661,7 +661,7 @@ class Router {
       const current = remaining
         .filter((other) => !other.needsResync)
         .sort((a, b) => b.lastSeen - a.lastSeen)[0];
-      if (current) {
+      if (current !== undefined) {
         this.sendFull(doc.server, file, current.mirror.text);
       }
     } else {
@@ -725,12 +725,15 @@ class Router {
     root: string
   ): Promise<{ entry: Entry; server: PhpantomServer } | { error: string }> {
     let entry = this.pool.get(root);
-    if (entry?.server?.alive) {
+    if (entry?.server?.alive === true) {
       return { entry, server: entry.server };
     }
+    let starting: Promise<PhpantomServer>;
     // Why everything up to `starting` is synchronous: two opens of one root must share one child.
-    if (!entry?.starting) {
-      if (entry?.crashed) {
+    if (entry !== undefined && entry.starting !== null) {
+      ({ starting } = entry);
+    } else {
+      if (entry?.crashed === true) {
         const now = Date.now();
         entry.restarts = entry.restarts.filter((at) => at > now - RESTART_WINDOW_MS);
         if (entry.restarts.length >= MAX_RESTARTS) {
@@ -755,14 +758,15 @@ class Router {
         };
         this.pool.set(root, entry);
       }
-      const starting = entry;
-      starting.crashed = false;
-      starting.starting = this.start(starting).finally(() => {
-        starting.starting = null;
+      const target = entry;
+      target.crashed = false;
+      starting = this.start(target).finally(() => {
+        target.starting = null;
       });
+      target.starting = starting;
     }
     try {
-      return { entry, server: await entry.starting! };
+      return { entry, server: await starting };
     } catch (error) {
       return { error: messageOf(error) };
     }
@@ -902,7 +906,7 @@ class Router {
     }
     entry.idle = setTimeout(() => {
       entry.idle = null;
-      if (entry.docs.size > 0 || this.pool.get(entry.root) !== entry || entry.starting) {
+      if (entry.docs.size > 0 || this.pool.get(entry.root) !== entry || entry.starting !== null) {
         return;
       }
       this.pool.delete(entry.root);
@@ -1057,11 +1061,11 @@ class Router {
     if (this.downloading) {
       states.push({ phase: 'downloading' });
     }
-    if (this.resolveError) {
+    if (this.resolveError !== null && this.resolveError !== '') {
       states.push({ message: this.resolveError, phase: 'error' });
     }
     const state = aggregate(states);
-    if (state.phase === 'ready' && this.resolved?.ok) {
+    if (state.phase === 'ready' && this.resolved?.ok === true) {
       state.version = this.resolved.version;
       state.source = this.resolved.source;
     }

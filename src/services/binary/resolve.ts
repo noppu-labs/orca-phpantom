@@ -22,7 +22,11 @@ function cacheDir(env: NodeJS.ProcessEnv, platform: string, home: string): strin
   if (platform === 'darwin') {
     return posix.join(home, 'Library', 'Caches', 'noppu-labs.phpantom');
   }
-  return posix.join(env.XDG_CACHE_HOME || posix.join(home, '.cache'), 'noppu-labs.phpantom');
+  const { XDG_CACHE_HOME: xdg } = env;
+  return posix.join(
+    xdg === undefined || xdg === '' ? posix.join(home, '.cache') : xdg,
+    'noppu-labs.phpantom'
+  );
 }
 
 interface ResolveOptions {
@@ -48,7 +52,7 @@ async function resolveBinary(options: ResolveOptions): Promise<Resolution> {
 
   if (options.settingPath) {
     const version = existsSync(options.settingPath) ? await read(options.settingPath) : null;
-    return version
+    return version !== null && version !== ''
       ? { ok: true, path: options.settingPath, source: 'setting', version }
       : {
           message: `phpantomPath is set to ${options.settingPath}, which is not a working phpantom_lsp.`,
@@ -67,11 +71,11 @@ async function resolveBinary(options: ResolveOptions): Promise<Resolution> {
     ),
   ];
   for (const candidate of new Set(candidates)) {
-    if (!candidate) {
+    if (candidate === null || candidate === '') {
       continue;
     }
     const version = await read(candidate);
-    if (version && atLeast(version, PHPANTOM_VERSION)) {
+    if (version !== null && version !== '' && atLeast(version, PHPANTOM_VERSION)) {
       return { ok: true, path: candidate, source: 'path', version };
     }
   }
@@ -89,7 +93,7 @@ async function resolveBinary(options: ResolveOptions): Promise<Resolution> {
   const marker = flavour.join(directory, 'verified');
   if (existsSync(target) && existsSync(marker)) {
     const version = await read(target);
-    if (version) {
+    if (version !== null && version !== '') {
       return { ok: true, path: target, source: 'cache', version };
     }
   }
@@ -102,7 +106,7 @@ async function resolveBinary(options: ResolveOptions): Promise<Resolution> {
     };
   }
   let pending = inFlight.get(target);
-  if (!pending) {
+  if (pending === undefined) {
     pending = download(options, asset, directory, target, marker, read).finally(() =>
       inFlight.delete(target)
     );
@@ -130,7 +134,7 @@ async function download(
     renameSync(temporary, target);
     writeFileSync(marker, PHPANTOM_VERSION);
     const version = await read(target);
-    if (!version) {
+    if (version === null || version === '') {
       return { message: `The downloaded ${asset.member} did not run.`, ok: false };
     }
     // Why only here: a PHPantom the user installed may serve other editors, so its config stays theirs.
