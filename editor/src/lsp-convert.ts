@@ -102,12 +102,9 @@ function toMarker(diagnostic: LspDiagnostic): MonacoRange & {
     message: diagnostic.message,
     severity: markerSeverity(diagnostic.severity),
     ...(code === undefined ? {} : { code: String(code) }),
-    ...(diagnostic.source === undefined || diagnostic.source === ''
-      ? {}
-      : { source: diagnostic.source }),
-    ...(diagnostic.tags === undefined || diagnostic.tags.length === 0
-      ? {}
-      : { tags: diagnostic.tags }),
+    // Why isTruthy: a server may send null where LSP leaves a field out, and null is left out too.
+    ...(isTruthy(diagnostic.source) ? { source: diagnostic.source } : {}),
+    ...(isTruthy(diagnostic.tags?.length) ? { tags: diagnostic.tags } : {}),
   };
 }
 
@@ -334,9 +331,9 @@ function toCodeAction(
   const reason = action.disabled?.reason;
   return {
     title: action.title,
-    ...(action.kind === undefined || action.kind === '' ? {} : { kind: action.kind }),
-    ...(action.isPreferred === true ? { isPreferred: true } : {}),
-    ...(reason === undefined || reason === '' ? {} : { disabled: reason }),
+    ...(isTruthy(action.kind) ? { kind: action.kind } : {}),
+    ...(isTruthy(action.isPreferred) ? { isPreferred: true } : {}),
+    ...(isTruthy(reason) ? { disabled: reason } : {}),
     ...(edit ? { edit } : {}),
     needsResolve: !action.edit,
     otherFiles: split?.otherFiles ?? 0,
@@ -464,11 +461,11 @@ function completionDetails(resolved: unknown): {
   }
   const documentation = markdownValue(resolved.documentation);
   return {
-    ...(resolved.detail === undefined || resolved.detail === '' ? {} : { detail: resolved.detail }),
+    ...(isTruthy(resolved.detail) ? { detail: resolved.detail } : {}),
     ...(documentation ? { documentation } : {}),
-    ...(resolved.additionalTextEdits === undefined || resolved.additionalTextEdits.length === 0
-      ? {}
-      : { additionalTextEdits: resolved.additionalTextEdits.map(toMonacoEdit) }),
+    ...(isTruthy(resolved.additionalTextEdits?.length)
+      ? { additionalTextEdits: resolved.additionalTextEdits?.map(toMonacoEdit) }
+      : {}),
   };
 }
 
@@ -478,8 +475,8 @@ function toCompletionLabel(item: {
   labelDetails?: { detail?: string; description?: string };
 }): string | { label: string; detail?: string; description?: string } {
   const { detail, description } = item.labelDetails ?? {};
-  const hasDetail = detail !== undefined && detail !== '';
-  const hasDescription = description !== undefined && description !== '';
+  const hasDetail = isTruthy(detail);
+  const hasDescription = isTruthy(description);
   if (!hasDetail && !hasDescription) {
     return item.label;
   }
@@ -526,8 +523,8 @@ function toInlayHint(hint: LspInlayHint): {
       : {
           tooltip: typeof hint.tooltip === 'string' ? hint.tooltip : { value: hint.tooltip.value },
         }),
-    ...(hint.paddingLeft === true ? { paddingLeft: true } : {}),
-    ...(hint.paddingRight === true ? { paddingRight: true } : {}),
+    ...(isTruthy(hint.paddingLeft) ? { paddingLeft: true } : {}),
+    ...(isTruthy(hint.paddingRight) ? { paddingRight: true } : {}),
   };
 }
 
@@ -550,9 +547,7 @@ function toSemanticTokens(result: unknown): { data: Uint32Array; resultId?: stri
   }
   return {
     data: Uint32Array.from(result.data),
-    ...(result.resultId === undefined || result.resultId === ''
-      ? {}
-      : { resultId: result.resultId }),
+    ...(isTruthy(result.resultId) ? { resultId: result.resultId } : {}),
   };
 }
 

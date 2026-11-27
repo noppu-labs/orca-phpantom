@@ -361,7 +361,7 @@ function registerEditingProviders(
                 ...(converted.kind === undefined || converted.kind === ''
                   ? {}
                   : { kind: converted.kind }),
-                ...(converted.isPreferred === true ? { isPreferred: true } : {}),
+                ...(isTruthy(converted.isPreferred) ? { isPreferred: true } : {}),
                 ...(converted.disabled === undefined || converted.disabled === ''
                   ? {}
                   : { disabled: converted.disabled }),

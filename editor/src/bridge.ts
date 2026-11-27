@@ -8,6 +8,7 @@ import type {
 } from 'orca';
 
 import type { AttachStatus, Language, LspContentChange, LspRange } from '../../src/protocol.ts';
+import { isTruthy } from '../../src/utils/json.ts';
 import { isRateLimited, Pacer } from './pacer.ts';
 import { chunkText, splitChanges } from './split.ts';
 
@@ -427,7 +428,8 @@ class LspBridge {
       await this.flush(true);
       const attachment = this.attachedTo;
       // Why compare with null: TypeScript still narrows `attachedTo` from before the flush, which can clear it.
-      if (attachment === null || attachment.session === '' || aborted(signal)) return null;
+      // Why isTruthy: the session comes from the worker's JSON, where a null one is no session either.
+      if (attachment === null || !isTruthy(attachment.session) || aborted(signal)) return null;
       const { session } = attachment;
       // Why: changes Orca refused are not in the worker's copy yet, so an answer would be about older text.
       if (this.unsent.length > 0) {
@@ -485,7 +487,7 @@ class LspBridge {
     range: LspRange
   ): Promise<PluginRequestOutput<'phpantom.navigate'> | null> {
     const session = this.attachedTo?.session;
-    if (session === undefined || session === '') return null;
+    if (session === undefined || !isTruthy(session)) return null;
     return this.userCall(async () =>
       this.send('phpantom.navigate', { docId: this.docId, range, session, uri })
     );
@@ -497,7 +499,7 @@ class LspBridge {
     signal?: AbortSignal
   ): Promise<PluginRequestOutput<'phpantom.peek'> | null> {
     const session = this.attachedTo?.session;
-    if (session === undefined || session === '' || aborted(signal)) return null;
+    if (session === undefined || !isTruthy(session) || aborted(signal)) return null;
     return this.userCall(
       async () =>
         this.send(

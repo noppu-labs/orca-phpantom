@@ -123,7 +123,7 @@ function registerReadingProviders(
                 range,
                 sortText: item.sortText,
                 tags:
-                  item.deprecated === true || item.tags?.includes(1) === true
+                  isTruthy(item.deprecated) || item.tags?.includes(1) === true
                     ? [monaco.languages.CompletionItemTag.Deprecated]
                     : undefined,
               };
@@ -193,10 +193,7 @@ function registerReadingProviders(
             'passive'
           );
           const help = isSignatureHelp(result) ? result : undefined;
-          const signatureCount = help?.signatures?.length;
-          if (help === undefined || signatureCount === undefined || signatureCount === 0) {
-            return null;
-          }
+          if (help === undefined || !isTruthy(help.signatures?.length)) return null;
           return {
             dispose() {},
             value: {
