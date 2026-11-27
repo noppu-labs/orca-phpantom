@@ -25,7 +25,7 @@ To try a branch, add it after an `@`, as in `orca plugin install noppu-labs/orca
 - Orca 1.4.259 or newer, desktop app. The plugin does not run in the web client.
 - Local workspaces. Files in SSH or other remote workspaces open with highlighting only.
 - PHPantom 1.1.0 or newer. You don't have to install it yourself (see below).
-- `php` on the `PATH` Orca starts with, Without it, PHPStan, PHPCS, PHPMD, Pint, PHP CS Fixer and phpcbf don't run, and nothing says why.
+- `php` on the `PATH` Orca starts with. Without it, PHPStan, PHPCS, PHPMD, Pint, PHP CS Fixer and phpcbf don't run, and nothing says why.
 
 ## Frameworks
 
