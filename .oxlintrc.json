@@ -228,7 +228,6 @@
         "unicorn/no-process-exit": "off",
         "unicorn/no-useless-collection-argument": "off",
         "unicorn/no-useless-spread": "off",
-        "unicorn/no-useless-undefined": "off",
         "unicorn/number-literal-case": "off",
         "unicorn/prefer-at": "off",
         "unicorn/prefer-code-point": "off",

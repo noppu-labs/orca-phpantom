@@ -710,8 +710,8 @@ export class Router {
     const previous = this.lanes.get(docId) ?? Promise.resolve();
     const run = previous.then(task);
     const settled = run.then(
-      () => undefined,
-      () => undefined
+      () => {},
+      () => {}
     );
     this.lanes.set(docId, settled);
     void settled.then(() => {
@@ -808,7 +808,7 @@ export class Router {
       throw error;
     }
     if (this.disposed || this.pool.get(entry.root) !== entry || entry.server !== server) {
-      await server.stop().catch(() => undefined);
+      await server.stop().catch(() => {});
       throw new Error('PHPantom was stopped');
     }
     this.host.log(`PHPantom ${resolution.version} started for ${entry.root}`);

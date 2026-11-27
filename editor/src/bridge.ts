@@ -346,6 +346,7 @@ export class LspBridge {
   ): Promise<{ result: unknown; truncated: number } | null> {
     const kind = options.kind ?? 'user';
     const busy = (): void => {
+      // oxlint-disable-next-line unicorn/no-useless-undefined -- emit() takes the payload as a required argument
       if (!options.silent) this.emit('busy', undefined);
     };
     const requestOptions =
@@ -490,7 +491,7 @@ export class LspBridge {
     clearTimeout(this.refreshTimer);
     this.stopPinging();
     for (const subscription of this.subscriptions) subscription.dispose();
-    this.send('phpantom.close', { docId: this.docId }).catch(() => undefined);
+    this.send('phpantom.close', { docId: this.docId }).catch(() => {});
   }
 
   // --- attaching ---
@@ -938,6 +939,7 @@ export class LspBridge {
     const hold = this.pacer.wait();
     if (hold === 0) return true;
     if (hold > this.userMaxWaitMs) {
+      // oxlint-disable-next-line unicorn/no-useless-undefined -- emit() takes the payload as a required argument
       if (!silent) this.emit('busy', undefined);
       return false;
     }
@@ -954,6 +956,7 @@ export class LspBridge {
       } catch (error) {
         if (!isRateLimited(error) || signal?.aborted) return null;
         if (refused) {
+          // oxlint-disable-next-line unicorn/no-useless-undefined -- emit() takes the payload as a required argument
           this.emit('busy', undefined);
           return null;
         }
@@ -981,7 +984,7 @@ export class LspBridge {
 
   private async inLane<T>(job: () => Promise<T>): Promise<T> {
     const run = this.lane.then(job, job);
-    this.lane = run.catch(() => undefined);
+    this.lane = run.catch(() => {});
     return run;
   }
 

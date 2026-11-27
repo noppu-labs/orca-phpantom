@@ -60,7 +60,7 @@ export class PhpantomServer {
   private finished = false;
   private stopping = false;
   private exitInfo = 'stopped (code unknown)';
-  private resolveExited: () => void = () => undefined;
+  private resolveExited: () => void = () => {};
   private exited: Promise<void> = Promise.resolve();
 
   constructor(options: PhpantomServerOptions) {
@@ -105,7 +105,7 @@ export class PhpantomServer {
       this.stderrTail.splice(0, Math.max(0, this.stderrTail.length - STDERR_LINES_KEPT));
     });
     // Why: writing to a child that just died raises EPIPE here; that is the exit, not a second failure.
-    stdin.on('error', () => undefined);
+    stdin.on('error', () => {});
     this.exited = new Promise((resolve) => {
       this.resolveExited = resolve;
     });
@@ -186,10 +186,7 @@ export class PhpantomServer {
     }
     this.stopping = true;
     if (this.alive) {
-      await Promise.race([
-        rpc.request('shutdown', null).catch(() => undefined),
-        delay(SHUTDOWN_WAIT_MS),
-      ]);
+      await Promise.race([rpc.request('shutdown', null).catch(() => {}), delay(SHUTDOWN_WAIT_MS)]);
       rpc.notify('exit', null);
     }
     await this.terminate();

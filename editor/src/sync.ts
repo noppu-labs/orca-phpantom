@@ -49,7 +49,7 @@ export async function bindDocument(
     /** Sends a pending edit now instead of after Orca's debounce. Fire and forget: it never throws or waits. */
     flush() {
       try {
-        session.flush().catch(() => undefined);
+        session.flush().catch(() => {});
       } catch {
         // A session already gone has nothing to send.
       }
