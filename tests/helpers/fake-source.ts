@@ -22,6 +22,7 @@ function source(initial: string, language: Language = 'php'): FakeSource {
   };
   const emit = (changes: SourceChange[], isFlush: boolean) => {
     version += 1;
+    // oxlint-disable-next-line unicorn/no-useless-spread -- a snapshot, so a listener that unsubscribes while it runs does not skip the next one
     for (const listener of [...listeners]) listener(changes, isFlush);
   };
   return {

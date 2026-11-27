@@ -1090,6 +1090,7 @@ class LspBridge {
   }
 
   private emit<Kind extends keyof Events>(kind: Kind, value: Events[Kind]): void {
+    // oxlint-disable-next-line unicorn/no-useless-spread -- a snapshot, so a listener that unsubscribes or subscribes while it runs does not change who hears this event
     for (const listener of [...this.listeners[kind]]) {
       try {
         listener(value);

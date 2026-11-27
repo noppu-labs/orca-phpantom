@@ -66,6 +66,7 @@ function harness(options: { leaseMs?: number; sweepMs?: number } = {}) {
     openEditor: async () => undefined,
     // Every frame of the editor hears every post.
     post: (event, payload) => {
+      // oxlint-disable-next-line unicorn/no-useless-spread -- a snapshot, so a listener that unsubscribes while it runs does not skip the next one
       for (const listener of [...(listeners.get(event) ?? [])]) listener(payload);
     },
     status: () => undefined,

@@ -91,6 +91,7 @@ function fakeHost(
     };
   };
   const emit = (event: string, payload?: unknown) => {
+    // oxlint-disable-next-line unicorn/no-useless-spread -- a snapshot, so a listener that unsubscribes while it runs does not skip the next one
     for (const listener of [...(listeners.get(event) ?? [])]) listener(payload);
   };
   const inFlight: Record<string, number> = {};

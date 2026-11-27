@@ -414,6 +414,7 @@ class Router {
   /** Stops every server; open editors are told `restarting` and re-attach, which starts them again. */
   public async restartAll(): Promise<string> {
     const entries = [...this.pool.values()];
+    // oxlint-disable-next-line unicorn/no-useless-spread -- a snapshot: forget() deletes each doc from this.docs while the loop runs
     for (const doc of [...this.docs.values()]) {
       this.forget(doc.docId);
       this.outbox.send(doc.panel, `status:${doc.docId}`, 'phpantom.status', {
