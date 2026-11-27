@@ -82,17 +82,17 @@ function attachLanguageServer(ctx: EditorContext): LspBridge {
   const unregister = (): void => {
     for (const registered of providers.splice(0)) registered.dispose();
   };
+  // Each on its own: a failure in one set leaves the others working.
+  const register = (what: string, run: () => { dispose: () => void }): void => {
+    try {
+      providers.push(run());
+    } catch (error) {
+      // oxlint-disable-next-line eslint/no-console -- last resort for a provider that failed to register: Orca copies a frame's console errors into orca plugin logs
+      console.error(`PHPantom ${what} failed to register`, error);
+    }
+  };
   bridge.onReady((status) => {
     unregister();
-    // Each on its own: a failure in one set leaves the others working.
-    const register = (what: string, run: () => { dispose: () => void }): void => {
-      try {
-        providers.push(run());
-      } catch (error) {
-        // oxlint-disable-next-line eslint/no-console -- last resort for a provider that failed to register: Orca copies a frame's console errors into orca plugin logs
-        console.error(`PHPantom ${what} failed to register`, error);
-      }
-    };
     register('language features', () => registerReadingProviders(ctx, bridge, status.capabilities));
     register('navigation and edits', () =>
       registerEditingProviders(ctx, bridge, status.capabilities)

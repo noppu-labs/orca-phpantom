@@ -42,6 +42,12 @@ import {
   type Model,
 } from './shared.ts';
 
+const atCursor = (position: monaco.Position): { position: LspPosition } => ({
+  position: toLspPosition(position),
+});
+const edits = (list: LspTextEdit[]): monaco.languages.TextEdit[] =>
+  list.map((edit) => toMonacoEdit(edit));
+
 function registerReadingProviders(
   ctx: EditorContext,
   bridge: LspBridge,
@@ -59,11 +65,6 @@ function registerReadingProviders(
     silent = false
   ): Promise<unknown> =>
     withSignal(token, async (signal) => bridge.ask(method, params, signal, { kind, silent }));
-  const atCursor = (position: monaco.Position): { position: LspPosition } => ({
-    position: toLspPosition(position),
-  });
-  const edits = (list: LspTextEdit[]): monaco.languages.TextEdit[] =>
-    list.map((edit) => toMonacoEdit(edit));
 
   // --- completion ---
   if (isTruthy(capabilities.completionProvider)) {

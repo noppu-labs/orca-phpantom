@@ -60,6 +60,17 @@ const renameReachesOtherFiles = (count: number): string =>
 /** Blade or PHP by the file name, as PHPantom tells them apart. */
 const languageOfUri = (uri: string): string => (/\.blade\.php$/iu.test(uri) ? 'blade' : 'php');
 
+const atCursor = (position: monaco.Position): { position: LspPosition } => ({
+  position: toLspPosition(position),
+});
+const edits = (list: unknown): monaco.languages.TextEdit[] | null =>
+  isTextEditList(list) ? list.map((edit) => toMonacoEdit(edit)) : null;
+const formatting = (
+  options: monaco.languages.FormattingOptions
+): { options: { tabSize: number; insertSpaces: boolean } } => ({
+  options: { insertSpaces: options.insertSpaces, tabSize: options.tabSize },
+});
+
 function registerEditingProviders(
   ctx: EditorContext,
   bridge: LspBridge,
@@ -81,11 +92,6 @@ function registerEditingProviders(
     withSignal(token, async (signal) =>
       bridge.ask(method, params, signal, { kind: 'user', ...options })
     );
-  const atCursor = (position: monaco.Position): { position: LspPosition } => ({
-    position: toLspPosition(position),
-  });
-  const edits = (list: unknown): monaco.languages.TextEdit[] | null =>
-    isTextEditList(list) ? list.map((edit) => toMonacoEdit(edit)) : null;
 
   // --- definitions and references ---
   const peekModels = new PeekModels((uri, text) => {
@@ -216,11 +222,6 @@ function registerEditingProviders(
   }
 
   // --- formatting ---
-  const formatting = (
-    options: monaco.languages.FormattingOptions
-  ): { options: { tabSize: number; insertSpaces: boolean } } => ({
-    options: { insertSpaces: options.insertSpaces, tabSize: options.tabSize },
-  });
   if (isTruthy(capabilities.documentFormattingProvider)) {
     registered.push(
       monaco.languages.registerDocumentFormattingEditProvider(language, {

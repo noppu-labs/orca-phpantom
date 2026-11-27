@@ -163,6 +163,9 @@ function typographyOptions(t: EditorTypography): {
   };
 }
 
+/** Whether `value` is a CSS colour the frame can paint. */
+const isColour = (value: string): boolean => value !== '' && CSS.supports('color', value);
+
 /**
  * Reads Orca's frame variables as `#rrggbb`, whatever CSS colour syntax they use, by painting each on
  * a 1×1 canvas. A translucent colour is painted over the background first, as the page shows it.
@@ -185,13 +188,12 @@ function readOrcaVars(): Record<string, string> {
     const [red, green, blue] = context.getImageData(0, 0, 1, 1).data;
     return `#${[red, green, blue].map((channel) => channel.toString(HEX).padStart(2, '0')).join('')}`;
   };
-  const valid = (value: string): boolean => value !== '' && CSS.supports('color', value);
   const background = style.getPropertyValue('--orca-background').trim();
-  const under = valid(background) ? [background] : [];
+  const under = isColour(background) ? [background] : [];
   const vars: Record<string, string> = {};
   for (const [variable] of FRAME_COLOURS) {
     const value = style.getPropertyValue(variable).trim();
-    if (valid(value)) {
+    if (isColour(value)) {
       vars[variable] = paint([...under, value]);
     }
   }
