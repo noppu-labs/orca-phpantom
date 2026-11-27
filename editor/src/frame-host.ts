@@ -19,16 +19,16 @@ function frameHost(): BridgeHost {
   return {
     on: (event, handler) => orca.plugin.on(event, handler),
     onFirstInput(listener) {
-      // Capture on window: Monaco stops some events, and editor.focus() at start is not input.
+      // Capture on the window (globalThis in the frame): Monaco stops some events, and editor.focus() at start is not input.
       const handler = (): void => {
         listener();
       };
-      window.addEventListener('pointerdown', handler, true);
-      window.addEventListener('keydown', handler, true);
+      globalThis.addEventListener('pointerdown', handler, true);
+      globalThis.addEventListener('keydown', handler, true);
       return {
         dispose() {
-          window.removeEventListener('pointerdown', handler, true);
-          window.removeEventListener('keydown', handler, true);
+          globalThis.removeEventListener('pointerdown', handler, true);
+          globalThis.removeEventListener('keydown', handler, true);
         },
       };
     },
