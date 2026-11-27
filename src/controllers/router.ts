@@ -29,7 +29,7 @@ import {
 } from '../services/status.ts';
 import { isRecord } from '../utils/json.ts';
 import { fitsIn, leadingThatFit, orcaSize } from '../utils/size.ts';
-import { sameUri, uriKey } from '../utils/uri.ts';
+import { isFileUri, sameUri, uriKey } from '../utils/uri.ts';
 
 interface RouterHost {
   /** May answer from a short cache; `fresh` asks Orca again. */
@@ -301,7 +301,7 @@ class Router {
     if (!doc) {
       return { opened: false, reason: 'failed' };
     }
-    if (!/^file:/i.test(input.uri)) {
+    if (!isFileUri(input.uri)) {
       return { opened: false, reason: 'not-a-file' };
     }
     let path: string;
@@ -359,7 +359,7 @@ class Router {
       if (files.length >= PEEK_MAX_FILES) {
         break;
       }
-      if (!/^file:/i.test(uri)) {
+      if (!isFileUri(uri)) {
         continue;
       }
       let text: string;

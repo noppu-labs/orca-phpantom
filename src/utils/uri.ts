@@ -16,4 +16,7 @@ function uriKey(uri: string): string {
 
 const sameUri = (a: string, b: string): boolean => uriKey(a) === uriKey(b);
 
-export { uriKey, sameUri };
+/** Whether `uri` names a file on disk, by its `file:` scheme in any case. */
+const isFileUri = (uri: string): boolean => /^file:/i.test(uri);
+
+export { isFileUri, uriKey, sameUri };
