@@ -25,7 +25,11 @@ and `.engine`).
     command made a single-file component, `resources/views/components/⚡counter.blade.php`, not a
     class (Livewire 4's default). Added files: `tests/Unit/NarrowTest.php`,
     `tests/Feature/PestSmokeTest.php`, `resources/views/smoke-livewire.blade.php`,
-    `resources/views/pages/posts/index.blade.php` and `app/Smoke/Links.php`, as written in the plan.
+    `resources/views/pages/posts/index.blade.php` and `app/Smoke/Links.php`. The two tests are
+    short: `NarrowTest` narrows a nullable `DateTimeImmutable` after `assertInstanceOf` and has a
+    `#[DataProvider('cases')]`; `PestSmokeTest` is one `it()` that calls `$this->get('/')`. The Livewire
+    view holds `<livewire:counter />`, the Folio page names its route `posts.index`, and `Links` has one
+    method that returns `route('posts.index')`.
     Made during the run: `resources/views/smoke.blade.php` (LV3), and for the extra row L1-class
     `php artisan make:livewire ClassCounter --class` plus `resources/views/smoke-livewire-class.blade.php`.
   - `<fw>/phpantom-fw-analysis`: a second copy of `examples/symfony`, then
@@ -61,7 +65,9 @@ and `.engine`).
 - Polling `phpantom.smoke` every 0.5 s (D0) made the editor log `too many panel requests`, and an
   editor shot taken then showed the note `PHPantom did not answer: too many panel requests`. Later
   polls were 5 s apart and the note did not come back.
-- Raw answers were kept beside the run's notes, and none of them is committed. Two gaps: one first answer was overwritten (W2-attach says which), and the attach timings in D0, T1 and X1 come from the terminal and exist only in those notes.
+- Raw answers were kept beside the run's notes, and none of them is committed. Two gaps: one first
+  answer was overwritten (W2-attach says which), and the attach timings in D0, T1 and X1 come from
+  the terminal and exist only in those notes.
 
 ## Gate
 
@@ -75,7 +81,7 @@ in 94 files (before this document was added).
 ## Results
 
 Lines and characters are 1-based. `<fw>` is the folder holding the fixtures. Rows whose ID ends in
-`-attach`, `-shot` or `-class` are extra rows that split a check; the plan's checks keep their
+`-attach`, `-shot` or `-class` are extra rows that split a check; the planned checks keep their
 own IDs.
 
 | ID | Project | Claim | Where | Request | Result | Evidence |
@@ -92,7 +98,7 @@ own IDs.
 | D0 | drupal | `.module` and `.theme` files open in PHPantom's editor and attach to the project's server | `web/modules/custom/acme/acme.module`, `web/themes/custom/acme_theme/acme_theme.theme`, core installed under `web/core` | `orca file open --focus` for each, then `phpantom.smoke` | Pass | After a plain open each was listed as attached, root `<fw>/phpantom-fw-drupal`, server `ready`. Time from `orca file open` to the first `phpantom.smoke` that listed it (polled every 0.5 s, CLI start-up included): 1.6 s for `acme.module`, 1.7 s for `acme_theme.theme`. The highlighting half is in D0-shot. |
 | D0-shot | drupal | The same files are highlighted as PHP | the same two files | `orca plugin shot --editor` | Fail | Both shots answered `editorId: php` and show the files with bracket-pair colours only: no keyword, string or comment colours. This is not specific to Drupal. Shots of `GreetingController.php` (`.php`) and `welcome.blade.php` (Blade) taken the same way show no token colours either, while the v1 smoke on Orca 1.4.277 saw Blade directives coloured in the same kind of shot. Not established: whether the editor stopped colouring on Orca 1.4.278, or only these shots catch it before the colours load. Code: the editor builds every model with the language `php` whatever the extension (`editor/src/editor.ts`, `createModel('', language, ...)`), so `.module` and `.theme` get the same highlighting as `.php`. The first pair of shots also showed the note `PHPantom did not answer: too many panel requests`, likely from this run's 0.5 s polling; it was gone from shots taken after 20 quiet seconds. |
 | D1 | drupal | Core interfaces type a procedural hook's parameters | `acme.module:33-36`, `        $route_match->` inserted as line 37 inside `acme_help()` | completion | Pass | 6 items: `getParameter($parameter_name)`, `getParameters()`, `getRawParameter($parameter_name)`, `getRawParameters()`, `getRouteName()`, `getRouteObject()`, 0.12 s. |
-| D2 | drupal | A service ID resolves to the services file | `acme.module:42` (the brief's 39-41 are the comment above it), inside `'acme.greeter'` | definition, then navigate | Pass | Definition: `web/modules/custom/acme/acme.services.yml` line 5 (`  acme.greeter:`), 0.13 s. Navigate: `opened: true` (a YAML target does not attach; no CLI lists editor tabs). |
+| D2 | drupal | A service ID resolves to the services file | `acme.module:42` (the expected 39-41 are the comment above it), inside `'acme.greeter'` | definition, then navigate | Pass | Definition: `web/modules/custom/acme/acme.services.yml` line 5 (`  acme.greeter:`), 0.13 s. Navigate: `opened: true` (a YAML target does not attach; no CLI lists editor tabs). |
 | D3 | drupal | A method on an injected service resolves | `web/modules/custom/acme/src/Controller/GreetingController.php:38`, on `greet` in `$this->greeter->greet(` | definition | Pass | `web/modules/custom/acme/src/Greeter.php` line 23, `public function greet(string $name): string`, 0.13 s. |
 | D4 | drupal | Core classes resolve into `web/core` and open there without a second server | `GreetingController.php:16`, on `ControllerBase` | definition, navigate, `phpantom.smoke`, `pgrep -fl phpantom_lsp` | Fail | Definition: `web/core/lib/Drupal/Core/Controller/ControllerBase.php` line 35 (`abstract class ControllerBase implements ContainerInjectionInterface {`). Navigate: `opened: true`, and the tab attached within 5 s once the Drupal worktree was shown. It attached to a second server: describe listed `<fw>/phpantom-fw-drupal/web/core: ready, 1 open document(s)` beside `<fw>/phpantom-fw-drupal`, and `pgrep` showed a new `phpantom_lsp --stdio` whose working folder is `web/core` (core ships its own `composer.json`). That server reported `unknown_class` for `Symfony\Component\HttpFoundation\RedirectResponse` and `Symfony\Component\DependencyInjection\ContainerInterface` in `ControllerBase.php`, since those live in the project's `vendor/`. |
 | Y1 | yii | A route's action resolves to the controller method | `config/common/routes.php:32`, inside `'view'` | definition | Pass | `src/Web/Blog/PostController.php` line 60, `public function view(#[RouteArgument('slug')] string $slug): ResponseInterface`, 0.16 s. |
@@ -108,7 +114,7 @@ own IDs.
 | U2 | laravel fixture | A `#[DataProvider]` name resolves to its method | same file, line 15, inside `'cases'` | definition | Pass | Same file, line 10, character 28: the `cases` in `public static function cases(): array`, 0.17 s. |
 | P1 | laravel fixture | Pest closures bind `$this` to the configured test case | `tests/Feature/PestSmokeTest.php:4`, on `$this`; then `get('/')->assertOk();` removed | hover, then completion after `$this->` | Pass | Hover: `namespace Tests;` `$this = TestCase` (`Tests\TestCase`, from `pest()->extend(TestCase::class)->in('Feature')` in `tests/Pest.php`). Completion: 347 items, including `get($uri, $headers = ...)` with detail `TestResponse`. |
 | L1 | laravel fixture | A `<livewire:...>` tag resolves to the component and completes | `resources/views/smoke-livewire.blade.php`, on `counter` in `<livewire:counter />`; then `counter />` removed | definition; then completion after `<livewire:` | Fail | `make:livewire Counter` (Livewire 4.4.10) made a single-file component, `resources/views/components/⚡counter.blade.php`, not a class. Definition answered `null`; completion after `<livewire:` answered 0 items. PHPantom 1.1.0's own `docs/todo/laravel.md` (L29) lists this gap: "Volt and Livewire v4 single-file components ... are not indexed, so `<livewire:…>` naming one resolves to nothing." |
-| L1-class | laravel fixture | The same with a class component (extra row, not in the plan) | `php artisan make:livewire ClassCounter --class` (made `app/Livewire/ClassCounter.php`), new `resources/views/smoke-livewire-class.blade.php` holding `<div><livewire:class-counter /></div>` | definition; then completion after `<livewire:` | Pass | Definition: `app/Livewire/ClassCounter.php` line 7, 0.12 s. Completion: 1 item, `class-counter`, detail `\App\Livewire\ClassCounter`. |
+| L1-class | laravel fixture | The same with a class component (extra row, not in the planned checks) | `php artisan make:livewire ClassCounter --class` (made `app/Livewire/ClassCounter.php`), new `resources/views/smoke-livewire-class.blade.php` holding `<div><livewire:class-counter /></div>` | definition; then completion after `<livewire:` | Pass | Definition: `app/Livewire/ClassCounter.php` line 7, 0.12 s. Completion: 1 item, `class-counter`, detail `\App\Livewire\ClassCounter`. |
 | F1 | laravel fixture | A Folio page's route name resolves and is not reported unknown | `app/Smoke/Links.php:9`, inside `'posts.index'` | definition, then `phpantom.smoke` | Pass | Definition: `resources/views/pages/posts/index.blade.php` line 1, 0.13 s. `phpantom.smoke` 4 s later: `published: true`, held text `return route('posts.index');`, no diagnostics. Control: changed to `'posts.indexx'`, the same smoke reported `invalid_laravel_route`, `Unknown route 'posts.indexx'`; changed back, it was gone. |
 | A1 | analysis fixture | PHPStan's diagnostics reach the editor | `src/Smoke/Analysed.php` (`phpstan.neon`: level 6, `paths: [src]`; `phpstan/phpstan` 2.3.7 in `require-dev`) | `phpantom.smoke`, polled for up to 90 s | Pass | A plain `orca file open --focus` of the file, on a server that had been running for several minutes, gave within 5 s: source `phpstan`, code `missingType.iterableValue`, severity 1, line 6, `Method App\Smoke\Analysed::size() has parameter $items with no value type specified in iterable type array.` But the first open of the same file, sent while its server was starting, got no PHPStan or PHPCS diagnostic in 90 s of polling, and neither did the first open after a restart (A3). A standalone run of `phpantom_lsp --stdio` outside Orca showed the same: nothing after `didOpen` in 45 s, then both tools within 1 s of a `didSave`. The plugin never sends `didSave` (`synchronization: { didSave: false }` in `src/lsp/capabilities.ts`). So the diagnostic was seen on a re-open of the file on a server that was already running; the first open while the server was starting got none in 90 s. |
 | A2 | analysis fixture | PHPCS's diagnostics reach the editor | same file (`phpcs.xml` with `<rule ref="PSR12"/>`; `squizlabs/php_codesniffer` 4.0.4 in `require-dev`) | same | Pass | Same answer as A1: source `phpcs`, code `PSR2.Classes.ClassDeclaration.OpenBraceNewLine`, severity 1, line 5, `Opening brace of a class must be on the line after the definition`. The same first-open gap as A1 applies. |
@@ -143,14 +149,16 @@ own IDs.
    of the editor. Close the tab, open the file again, and note whether Orca remembers Source.
 2. After installing, look at the plugin's name in Settings → Plugins at a narrow and at a wide
    window. Note whether it is cut off.
+3. On Orca 1.4.278, open a `.php`, a `.blade.php` and a `.module` file by hand in PHPantom's editor
+   and note whether keywords, strings and comments are coloured. The D0 shot showed no token colours
+   in screenshots; the v1 run on 1.4.277 did.
 
 ## Cleanup
 
 The temporary handlers and accessor were removed from `src/` before this document was committed
 (`git diff --exit-code -- src/` exits 0), and `orca plugin dev unload .` removed the development
-copy. Then the seven fixture projects are removed from Orca with
-`orca project setup-delete --setup <id> --force`, one call each, as for v1. Their folders and the
-examples clone are deleted, and `pgrep -fl phpantom_lsp` is checked for any server left rooted at a
-fixture. After the unload, the installed `noppu-labs.phpantom` took over the fixture tabs still open
-and started three servers for them (Laravel, Tempest and Drupal's `web/core`). They stop when those
-tabs close and the idle timer runs out, or when that plugin's worker is restarted.
+copy. The seven fixture projects were removed from Orca with
+`orca project setup-delete --setup <id> --force`, one call each, and their folders and the examples
+clone were deleted. After the unload, the installed `noppu-labs.phpantom` took over the fixture tabs
+still open and started three servers for them (Laravel, Tempest and Drupal's `web/core`). They had
+stopped by the final review: `pgrep -fl phpantom_lsp` listed none rooted at a fixture.

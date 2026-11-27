@@ -25,7 +25,7 @@ To try a branch, add it after an `@`, as in `orca plugin install noppu-labs/orca
 - Orca 1.4.259 or newer, desktop app. The plugin does not run in the web client.
 - Local workspaces. Files in SSH or other remote workspaces open with highlighting only.
 - PHPantom 1.1.0 or newer. You don't have to install it yourself (see below).
-- `php` on the `PATH` Orca starts with, for PHPStan, PHPCS, PHPMD and formatting with Pint, PHP CS Fixer or phpcbf.
+- `php` on the `PATH` Orca starts with, Without it, PHPStan, PHPCS, PHPMD, Pint, PHP CS Fixer and phpcbf don't run, and nothing says why.
 
 ## Frameworks
 
@@ -130,12 +130,12 @@ All the keys are in [PHPantom's configuration reference](https://phpantom-dev.gi
 | --- | --- | --- |
 | `.php` | PHPantom's editor | Includes Tempest's `.view.php` views |
 | `.blade.php` | PHPantom's Blade editor | |
-| `.module`, `.install`, `.theme`, `.profile`, `.inc`, `.engine` | PHPantom's editor | Drupal's PHP files, opened here in every project. One that isn't PHP shows as plain text, and PHPCS, if present, reports `Internal.NoCodeFound` on it; pick Source in the view toggle to use Orca's editor |
+| `.module`, `.install`, `.theme`, `.profile`, `.inc`, `.engine` | PHPantom's editor | Drupal's PHP files, opened here in every project. One that isn't PHP (a Debian `.install`, say) shows as plain text, and PHPCS, if present, reports `Internal.NoCodeFound` on it; pick Source in the view toggle to use Orca's editor |
 | `.twig` | Orca's editor | Not supported yet, see [issue #3](https://github.com/noppu-labs/orca-phpantom/issues/3) |
 | `.yaml`, `.yml`, `.xml`, `.env` | Orca's editor | This plugin doesn't open them |
 
-Outside a Drupal site, list the extensions, without the dot, under `[indexing]` `extensions` in
-`.phpantom.toml` so PHPantom also indexes the files you haven't opened.
+Outside a Drupal site, list Drupal's extensions without the dot (`module`, `inc` and so on) under
+`[indexing]` `extensions` in `.phpantom.toml` so PHPantom also indexes the files you haven't opened.
 
 ## Finding the PHPantom binary
 
