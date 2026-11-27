@@ -238,7 +238,6 @@
         "unicorn/prefer-number-properties": "off",
         "unicorn/prefer-query-selector": "off",
         "unicorn/prefer-top-level-await": "off",
-        "unicorn/relative-url-style": "off",
         "unicorn/require-module-specifiers": "off"
       }
     }

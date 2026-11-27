@@ -11,6 +11,7 @@ import { bladeGrammar } from './blade.ts';
 
 // Monaco's background worker sits beside the bundle in editor/dist.
 globalThis.MonacoEnvironment = {
+  // oxlint-disable-next-line unicorn/relative-url-style -- esbuild and Orca's editor check read this literal
   getWorker: () => new Worker(new URL('./editor.worker.js', import.meta.url), { type: 'module' }),
 };
 
