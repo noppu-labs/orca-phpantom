@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import { gzipSync } from 'node:zlib';
 
 import { extractSingleFile } from '../../src/services/binary/extract.ts';
-import { oneTarGz, oneZip, tarGz, zip } from '../helpers/archives.ts';
+import { oneTarGz, oneZip, tar, tarGz, zip } from '../helpers/archives.ts';
 import { fc } from './setup.ts';
 
 type Kind = 'tar.gz' | 'zip';
@@ -18,26 +18,54 @@ function attempt(archive: Buffer, kind: Kind, member: string): Buffer | Error {
   }
 }
 
-const kind = fc.constantFrom<Kind>('tar.gz', 'zip');
 const member = fc.constantFrom('phpantom_lsp', 'phpantom_lsp.exe', 'other');
 
-// Arbitrary bytes are almost never valid gzip, so the gzipped copy is what reaches the tar reader.
+const memberBytes = fc.uint8Array({ minLength: 1 }).map((array) => Buffer.from(array));
+const zipMethod = fc.constantFrom<'stored' | 'deflate'>('stored', 'deflate');
+
+/** A copy of `archive` with some bytes overwritten, so the parsers read headers that are almost right. */
+const corrupted = (archive: Buffer, edits: { at: number; byte: number }[]): Buffer => {
+  const copy = Buffer.from(archive);
+  for (const { at, byte } of edits) copy[at % copy.length] = byte;
+  return copy;
+};
+const edits = fc.array(fc.record({ at: fc.nat(), byte: fc.integer({ min: 0, max: 0xff }) }), {
+  minLength: 1,
+});
+
+// Arbitrary bytes are too short and never valid gzip, so they stop before either parser's loop.
+// Corrupted copies of real archives are what reach the tar header walk and the zip directory scan.
 const bytes = fc.uint8Array().map((array) => Buffer.from(array));
 const archiveLike = fc.oneof(
-  bytes,
-  bytes.map((raw) => gzipSync(raw))
+  fc.tuple(bytes, fc.constantFrom<Kind>('tar.gz', 'zip')),
+  fc.tuple(
+    bytes.map((raw) => gzipSync(raw)),
+    fc.constant<Kind>('tar.gz')
+  ),
+  fc.tuple(
+    fc
+      .tuple(memberBytes, edits)
+      .map(([data, changes]) => gzipSync(corrupted(tar({ phpantom_lsp: data }), changes))),
+    fc.constant<Kind>('tar.gz')
+  ),
+  fc.tuple(
+    fc
+      .tuple(memberBytes, zipMethod, edits)
+      .map(([data, method, changes]) =>
+        corrupted(zip({ 'phpantom_lsp.exe': data }, { method }), changes)
+      ),
+    fc.constant<Kind>('zip')
+  )
 );
 
 test('extractSingleFile throws an Error or returns a Buffer for arbitrary bytes', () => {
   fc.assert(
-    fc.property(archiveLike, kind, member, (archive, which, name) => {
+    fc.property(archiveLike, member, ([archive, which], name) => {
       const result = attempt(archive, which, name);
       assert.ok(result instanceof Error || Buffer.isBuffer(result));
     })
   );
 });
-
-const memberBytes = fc.uint8Array({ minLength: 1 }).map((array) => Buffer.from(array));
 
 interface ValidArchive {
   archive: Buffer;
@@ -66,7 +94,7 @@ const archive = fc.oneof(
   fc.constant(zipHolding(Buffer.from('fake-exe'), oneZip())),
   memberBytes.map((data) => tarHolding(data)),
   fc
-    .tuple(memberBytes, fc.constantFrom<'stored' | 'deflate'>('stored', 'deflate'))
+    .tuple(memberBytes, zipMethod)
     .map(([data, method]) => zipHolding(data, zip({ 'phpantom_lsp.exe': data }, { method })))
 );
 
