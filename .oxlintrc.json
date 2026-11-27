@@ -166,7 +166,6 @@
         "eslint/max-depth": "off",
         "eslint/no-bitwise": "off",
         "eslint/no-console": "off",
-        "eslint/no-control-regex": "off",
         "eslint/no-div-regex": "off",
         "eslint/no-duplicate-imports": "off",
         "eslint/no-empty-function": "off",
