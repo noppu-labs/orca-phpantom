@@ -3,6 +3,7 @@
 import { attachLanguageServer } from './attach.ts';
 import { startEditor } from './editor.ts';
 
+// oxlint-disable-next-line unicorn/prefer-top-level-await -- awaiting here would hold the entry module's evaluation open until the editor starts; then() keeps the start-failure handler apart from the attach
 startEditor().then(
   (ctx) => {
     // Why its own catch: without PHPantom the editor still edits, so a failure here must not blank the tab.

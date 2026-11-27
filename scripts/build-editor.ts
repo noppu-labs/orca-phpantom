@@ -60,5 +60,5 @@ const problems = [
 if (problems.length > 0) {
   // oxlint-disable-next-line eslint/no-console -- the build script names the files over Orca's limits before it exits 1
   console.error(problems.join('\n'));
-  process.exit(1);
+  process.exitCode = 1;
 }

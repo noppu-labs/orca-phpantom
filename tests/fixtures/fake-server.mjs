@@ -44,6 +44,7 @@ function publish() {
   send({ jsonrpc: '2.0', method: 'textDocument/publishDiagnostics', params: { uri, diagnostics } });
   if (text.includes('CRASH')) {
     process.stderr.write('fake server crashed on purpose\n');
+    // oxlint-disable-next-line unicorn/no-process-exit -- the fake crashes at once with code 3, before it reads another message
     process.exit(3);
   }
 }
@@ -216,6 +217,7 @@ const handlers = new Map([
   [
     'exit',
     () => {
+      // oxlint-disable-next-line unicorn/no-process-exit -- LSP's exit notification ends the server at once, with stdin still open
       process.exit(0);
     },
   ],
@@ -263,5 +265,6 @@ process.stdin.on('data', (chunk) => {
   }
 });
 if (mode === '') {
+  // oxlint-disable-next-line unicorn/no-process-exit -- the fake ends with code 0 as soon as its client closes stdin, whatever else is pending
   process.stdin.on('end', () => process.exit(0));
 }
