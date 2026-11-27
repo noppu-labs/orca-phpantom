@@ -88,6 +88,20 @@ test('remote and WSL workspaces are not local', () => {
   );
 });
 
+test('a WSL path is recognised in any case of its host name', () => {
+  for (const path of [
+    String.raw`\\WSL.LOCALHOST\Ubuntu\app`,
+    '//Wsl.LocalHost/Ubuntu/app',
+    String.raw`\\wSl$\Ubuntu\app`,
+  ]) {
+    assert.equal(isLocal({ id: '7', name: 'x', branch: null, path, hostId: 'local' }), false, path);
+  }
+  assert.equal(
+    isLocal({ id: '8', name: 'x', branch: null, path: '//wsl.local/Ubuntu/app', hostId: 'local' }),
+    true
+  );
+});
+
 test('the composer root is the nearest composer.json inside the workspace', () => {
   const ws = '/w/app';
   const has = new Set([join(ws, 'composer.json'), join(ws, 'packages/api/composer.json')]);

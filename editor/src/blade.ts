@@ -164,13 +164,11 @@ function bladeGrammar<C extends object, L extends MonarchLanguage>(html: {
       // Monarch matches every rule at the current position anyway; the `^` inside the group says so, so an unanchored search cannot restart inside a run of `:`s.
       // A `^` as the very first character would instead make Monarch try the rule only at the start of a line.
       [
-        // oxlint-disable-next-line eslint/prefer-named-capture-group -- Monarch maps each group to the action at its position
-        /(^:[\w\-.:]+)(\s*)(=)(\s*)(")/u,
+        /(?<name>^:[\w\-.:]+)(?<before>\s*)(?<equals>=)(?<after>\s*)(?<quote>")/u,
         ['attribute.name', '', 'delimiter', '', { next: '@bladeBoundDouble', token: 'delimiter' }],
       ],
       [
-        // oxlint-disable-next-line eslint/prefer-named-capture-group -- Monarch maps each group to the action at its position
-        /(^:[\w\-.:]+)(\s*)(=)(\s*)(')/u,
+        /(?<name>^:[\w\-.:]+)(?<before>\s*)(?<equals>=)(?<after>\s*)(?<quote>')/u,
         ['attribute.name', '', 'delimiter', '', { next: '@bladeBoundSingle', token: 'delimiter' }],
       ],
       ...componentAttributes,
