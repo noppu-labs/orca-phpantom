@@ -141,7 +141,7 @@ test('what a server resolves for a completion item is turned into what Monaco ap
   const resolved = {
     detail: 'class Money',
     documentation: { kind: 'markdown', value: 'An amount.' },
-    additionalTextEdits: [{ range, newText: "import { Money } from '../../editor/src/money'\n" }],
+    additionalTextEdits: [{ range, newText: "import { Money } from './money'\n" }],
   };
   assert.deepEqual(completionDetails(resolved), {
     detail: 'class Money',
@@ -149,7 +149,7 @@ test('what a server resolves for a completion item is turned into what Monaco ap
     additionalTextEdits: [
       {
         range: { startLineNumber: 1, startColumn: 1, endLineNumber: 1, endColumn: 1 },
-        text: "import { Money } from '../../editor/src/money'\n",
+        text: "import { Money } from './money'\n",
       },
     ],
   });
