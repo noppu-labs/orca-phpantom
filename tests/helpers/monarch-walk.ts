@@ -6,7 +6,7 @@
 type Action = string | { token?: string; next?: string; switchTo?: string; [key: string]: unknown };
 type Grammar = {
   language: {
-    tokenizer: { [state: string]: readonly unknown[] };
+    tokenizer: Record<string, readonly unknown[]>;
     ignoreCase?: boolean;
     defaultToken?: string;
   };

@@ -5,7 +5,7 @@
 // Lookbehind past it), `@name` in a regex expands a grammar attribute so a literal `@` is written
 // `@@`, and the first matching rule of a state wins.
 
-export type MonarchLanguage = { tokenizer: { [state: string]: unknown[] } };
+export type MonarchLanguage = { tokenizer: Record<string, unknown[]> };
 type Rule = unknown;
 
 const PHP_KEYWORDS = [

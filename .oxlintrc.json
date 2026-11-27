@@ -192,7 +192,6 @@
         "import/no-unassigned-import": "off",
         "import/unambiguous": "off",
         "oxc/no-barrel-file": "off",
-        "typescript/consistent-indexed-object-style": "off",
         "typescript/consistent-return": "off",
         "typescript/consistent-type-definitions": "off",
         "typescript/explicit-function-return-type": "off",
