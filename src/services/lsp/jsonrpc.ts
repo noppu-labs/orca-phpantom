@@ -160,7 +160,7 @@ export class RpcConnection {
       this.send({
         jsonrpc: '2.0',
         id,
-        error: { code: -32603, message: error instanceof Error ? error.message : String(error) },
+        error: { code: -32_603, message: error instanceof Error ? error.message : String(error) },
       });
     }
   }

@@ -36,8 +36,8 @@ function cString(bytes: Buffer): string {
 
 function fromZip(zip: Buffer, member: string): Buffer | null {
   let eocd = -1;
-  for (let i = zip.length - 22; i >= Math.max(0, zip.length - 22 - 0xffff); i--) {
-    if (zip.readUInt32LE(i) === 0x06054b50) {
+  for (let i = zip.length - 22; i >= Math.max(0, zip.length - 22 - 0xff_ff); i--) {
+    if (zip.readUInt32LE(i) === 0x06_05_4b_50) {
       eocd = i;
       break;
     }
@@ -48,7 +48,7 @@ function fromZip(zip: Buffer, member: string): Buffer | null {
   const entries = zip.readUInt16LE(eocd + 10);
   let at = zip.readUInt32LE(eocd + 16);
   for (let n = 0; n < entries; n++) {
-    if (zip.readUInt32LE(at) !== 0x02014b50) {
+    if (zip.readUInt32LE(at) !== 0x02_01_4b_50) {
       throw new Error('corrupt zip directory');
     }
     const method = zip.readUInt16LE(at + 10);
@@ -59,7 +59,7 @@ function fromZip(zip: Buffer, member: string): Buffer | null {
     const localOffset = zip.readUInt32LE(at + 42);
     const name = zip.subarray(at + 46, at + 46 + nameLength).toString('utf8');
     if (name === member) {
-      if (zip.readUInt32LE(localOffset) !== 0x04034b50) {
+      if (zip.readUInt32LE(localOffset) !== 0x04_03_4b_50) {
         throw new Error('corrupt zip entry');
       }
       const dataStart =

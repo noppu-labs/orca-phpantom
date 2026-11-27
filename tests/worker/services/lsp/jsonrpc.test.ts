@@ -33,7 +33,7 @@ test('an error response rejects with its message', async () => {
   const { connection } = connect();
   const answer = connection.request('x', {});
   connection.feed(
-    frame({ jsonrpc: '2.0', id: 1, error: { code: -32601, message: 'no such method' } })
+    frame({ jsonrpc: '2.0', id: 1, error: { code: -32_601, message: 'no such method' } })
   );
   await assert.rejects(answer, /no such method/);
 });

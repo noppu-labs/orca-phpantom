@@ -85,7 +85,7 @@ export function zip(files: ArchiveFiles, options: ZipOptions = {}): Buffer {
     const crc = crc32(raw);
 
     const header = Buffer.alloc(30);
-    header.writeUInt32LE(0x04034b50, 0);
+    header.writeUInt32LE(0x04_03_4b_50, 0);
     header.writeUInt16LE(method === 8 ? 20 : 10, 4);
     header.writeUInt16LE(method, 8);
     header.writeUInt32LE(crc, 14);
@@ -95,15 +95,15 @@ export function zip(files: ArchiveFiles, options: ZipOptions = {}): Buffer {
     local.push(header, nameBytes, body);
 
     const entry = Buffer.alloc(46);
-    entry.writeUInt32LE(0x02014b50, 0);
-    entry.writeUInt16LE(0x031e, 4);
+    entry.writeUInt32LE(0x02_01_4b_50, 0);
+    entry.writeUInt16LE(0x03_1e, 4);
     entry.writeUInt16LE(method === 8 ? 20 : 10, 6);
     entry.writeUInt16LE(method, 10);
     entry.writeUInt32LE(crc, 16);
     entry.writeUInt32LE(body.length, 20);
     entry.writeUInt32LE(raw.length, 24);
     entry.writeUInt16LE(nameBytes.length, 28);
-    entry.writeUInt32LE((0o100644 << 16) >>> 0, 38);
+    entry.writeUInt32LE((0o10_0644 << 16) >>> 0, 38);
     entry.writeUInt32LE(offset, 42);
     central.push(entry, nameBytes);
 
@@ -112,7 +112,7 @@ export function zip(files: ArchiveFiles, options: ZipOptions = {}): Buffer {
   const directory = Buffer.concat(central);
   const count = Object.keys(files).length;
   const end = Buffer.alloc(22);
-  end.writeUInt32LE(0x06054b50, 0);
+  end.writeUInt32LE(0x06_05_4b_50, 0);
   end.writeUInt16LE(count, 8);
   end.writeUInt16LE(count, 10);
   end.writeUInt32LE(directory.length, 12);

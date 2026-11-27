@@ -20,8 +20,8 @@ function jsonCost(unit: number, pairedWith: number | null): number {
   if (unit < 0x20)
     return unit === 8 || unit === 9 || unit === 10 || unit === 12 || unit === 13 ? 2 : 6;
   if (unit < 0x80) return 1;
-  if (unit < 0x800) return 2;
-  if (unit >= 0xd800 && unit <= 0xdfff) return pairedWith !== null ? 4 : 6;
+  if (unit < 0x8_00) return 2;
+  if (unit >= 0xd8_00 && unit <= 0xdf_ff) return pairedWith !== null ? 4 : 6;
   return 3;
 }
 
@@ -34,7 +34,7 @@ export function chunkText(text: string, budget: number = REQUEST_BUDGET_BYTES): 
   while (i < text.length) {
     const unit = text.charCodeAt(i);
     const next = i + 1 < text.length ? text.charCodeAt(i + 1) : 0;
-    const paired = unit >= 0xd800 && unit <= 0xdbff && next >= 0xdc00 && next <= 0xdfff;
+    const paired = unit >= 0xd8_00 && unit <= 0xdb_ff && next >= 0xdc_00 && next <= 0xdf_ff;
     const width = paired ? 2 : 1;
     const cost = jsonCost(unit, paired ? next : null);
     if (size + cost > budget && i > start) {
@@ -42,7 +42,8 @@ export function chunkText(text: string, budget: number = REQUEST_BUDGET_BYTES): 
       let cut = i;
       const unsafe = (c: number) => {
         const u = text.charCodeAt(c);
-        const midPair = u >= 0xdc00 && u <= 0xdfff && (text.charCodeAt(c - 1) & 0xfc00) === 0xd800;
+        const midPair =
+          u >= 0xdc_00 && u <= 0xdf_ff && (text.charCodeAt(c - 1) & 0xfc_00) === 0xd8_00;
         return u === 0x0a || midPair;
       };
       while (cut > start + 1 && unsafe(cut)) cut -= 1;
@@ -60,7 +61,7 @@ export function chunkText(text: string, budget: number = REQUEST_BUDGET_BYTES): 
   return pieces;
 }
 
-const MAX = 4294967295;
+const MAX = 4_294_967_295;
 const EMPTY_CHANGE = {
   range: { start: { line: MAX, character: MAX }, end: { line: MAX, character: MAX } },
   text: '',

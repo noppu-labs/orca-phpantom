@@ -1425,7 +1425,7 @@ test('a failed binary lookup is kept for two minutes, and forgotten when the set
   clock += 119_000;
   assert.equal((await open()).state, 'error');
   assert.equal(lookups, 1);
-  clock += 2_000;
+  clock += 2000;
   assert.equal((await open()).state, 'error');
   assert.equal(lookups, 2);
   router.forgetBinary();

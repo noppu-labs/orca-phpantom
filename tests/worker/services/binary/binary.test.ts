@@ -104,8 +104,8 @@ test('generated archives carry real gzip and zip framing', () => {
   const gz = oneTarGz();
   assert.equal(gz[0], 0x1f);
   assert.equal(gz[1], 0x8b);
-  assert.equal(oneZip().readUInt32LE(0), 0x04034b50);
-  assert.equal(oneZip().readUInt32LE(oneZip().length - 22), 0x06054b50);
+  assert.equal(oneZip().readUInt32LE(0), 0x04_03_4b_50);
+  assert.equal(oneZip().readUInt32LE(oneZip().length - 22), 0x06_05_4b_50);
 });
 test('generated tar has valid ustar headers and an end marker', () => {
   const archive = tar({ a: 'x', b: 'y'.repeat(600) });

@@ -3,7 +3,7 @@
 
 export type Splice = { start: number; end: number; text: string };
 
-const isHighSurrogate = (code: number): boolean => code >= 0xd800 && code <= 0xdbff;
+const isHighSurrogate = (code: number): boolean => code >= 0xd8_00 && code <= 0xdb_ff;
 
 /**
  * The smallest single edit that turns `before` into `after`, or null when they are the same.
