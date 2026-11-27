@@ -33,6 +33,23 @@ const edits = fc.array(fc.record({ at: fc.nat(), byte: fc.integer({ min: 0, max:
   minLength: 1,
 });
 
+// The size field is 12 bytes of octal text at offset 124: negative, not octal at all, or far past the archive.
+// Sizes within two blocks matter most: from -512 to -1023 the walk's next offset would be the one it is on.
+const size = fc.oneof(fc.nat({ max: 2 * 512 }), fc.nat());
+const sizeField = fc.oneof(
+  size.map((bytes) => `-${bytes.toString(8)}`),
+  size.map((bytes) => bytes.toString(8)),
+  fc.string({ maxLength: 12 })
+);
+
+/** A tar whose first entry, before the member, has its size field replaced by `field`. */
+function withSizeField(data: Buffer, field: string): Buffer {
+  const raw = tar({ other: data, phpantom_lsp: 'x' });
+  raw.fill(0, 124, 136);
+  raw.write(field, 124, 12, 'ascii');
+  return raw;
+}
+
 // Arbitrary bytes are too short and never valid gzip, so they stop before either parser's loop.
 // Corrupted copies of real archives are what reach the tar header walk and the zip directory scan.
 const bytes = fc.uint8Array().map((array) => Buffer.from(array));
@@ -48,6 +65,13 @@ const archiveLike = fc.oneof(
       .map(([data, changes]) => gzipSync(corrupted(tar({ phpantom_lsp: data }), changes))),
     fc.constant<Kind>('tar.gz')
   ),
+  {
+    arbitrary: fc.tuple(
+      fc.tuple(memberBytes, sizeField).map(([data, field]) => gzipSync(withSizeField(data, field))),
+      fc.constant<Kind>('tar.gz')
+    ),
+    weight: 2,
+  },
   fc.tuple(
     fc
       .tuple(memberBytes, zipMethod, edits)
