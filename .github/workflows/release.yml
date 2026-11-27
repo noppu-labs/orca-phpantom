@@ -136,7 +136,10 @@ jobs:
           [ "$(git rev-parse "refs/tags/$RELEASE_TAG^{}")" = "$(git rev-parse HEAD)" ]
           git merge-base --is-ancestor HEAD origin/main
           pkg_version=$(jq -r .version orca-plugin.json)
-          [ "$(jq -r .version package.json)" = "$pkg_version" ]
+          if [ "$(jq -r .version package.json)" != "$pkg_version" ]; then
+            echo "::error::package.json version does not match orca-plugin.json version $pkg_version"
+            exit 1
+          fi
           if [ "$RELEASE_TAG" != "v$pkg_version" ]; then
             echo "Tag $RELEASE_TAG is not v + orca-plugin.json version $pkg_version"
             exit 1
@@ -156,7 +159,10 @@ jobs:
             exit 1
           fi
           pkg_version=$(jq -r .version orca-plugin.json)
-          [ "$(jq -r .version package.json)" = "$pkg_version" ]
+          if [ "$(jq -r .version package.json)" != "$pkg_version" ]; then
+            echo "::error::package.json version does not match orca-plugin.json version $pkg_version"
+            exit 1
+          fi
           if [ "$RELEASE_TAG" != "v$pkg_version" ]; then
             echo "Tag $RELEASE_TAG is not v + orca-plugin.json version $pkg_version"
             exit 1

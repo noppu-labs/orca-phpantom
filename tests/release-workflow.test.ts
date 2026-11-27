@@ -20,7 +20,7 @@ function splitJobs(source: string): Map<string, string> {
   const start = source.search(/^jobs:$/mu);
   assert.ok(start !== -1, 'no jobs: block');
   const jobs = new Map<string, string>();
-  const headers = [...source.slice(start).matchAll(/^ {2}(?<id>[a-z-]+):$/gmu)];
+  const headers = [...source.slice(start).matchAll(/^ {2}(?<id>[\w-]+):$/gmu)];
   for (const [index, header] of headers.entries()) {
     const from = start + (header.index ?? 0);
     const to = index + 1 < headers.length ? start + (headers[index + 1]?.index ?? 0) : undefined;
@@ -36,23 +36,56 @@ const job = (name: string): string => {
   return body;
 };
 
+/** A job's `permissions:`, as a map when it is a plain block, else the raw inline value. */
+function permissionsOf(body: string): Record<string, string> | string {
+  const match = /^ {4}permissions:(?<inline>.*)\n(?<block>(?: {6}\S.*\n)*)/mu.exec(body);
+  if (match === null) return 'none';
+  const inline = match.groups?.inline?.trim() ?? '';
+  if (inline !== '') return inline;
+  const lines = (match.groups?.block ?? '').trim().split('\n');
+  return Object.fromEntries(lines.map((line) => line.trim().split(/:\s*/u)));
+}
+
+/** A permission set to write in any spelling: write-all, quoted, or in an inline map. */
+const WRITES = /permissions:\s*write-all|:\s*['"]?write['"]?\s*(?:[,}]|$)/mu;
+/** Anything that installs or runs the repository's own code. */
+const RUNS_REPO_CODE =
+  /\b(?:npm (?:ci|install|i|run|exec|rebuild)|npx|pnpm|yarn|node)\b|uses: \.\//u;
+
 test('the workflow has the pending, quality, build, tag and publish jobs', () => {
   assert.deepEqual([...jobs.keys()], ['pending', 'quality', 'build', 'tag', 'publish']);
 });
 
 test('runs on v* tags and on every push to main', () => {
-  assert.match(code, /^on:\n {2}push:\n {4}branches: \[main\]\n {4}tags:\n {6}- 'v\*'$/mu);
+  assert.match(
+    code,
+    /^on:\n {2}push:\n {4}branches: \[main\]\n {4}tags:\n {6}- 'v\*'\n {2}workflow_dispatch:$/mu
+  );
 });
 
 test('top-level permissions are empty', () => {
   assert.match(code, /^permissions: \{\}$/mu);
 });
 
-test('jobs that hold a write permission never install dependencies', () => {
-  const writers = [...jobs].filter(([, body]) => /: write$/mu.test(body));
+test('each job holds exactly the permissions it needs', () => {
+  const read = { contents: 'read' };
+  assert.deepEqual(
+    Object.fromEntries([...jobs].map(([name, body]) => [name, permissionsOf(body)])),
+    {
+      build: read,
+      pending: read,
+      publish: { 'attestations': 'write', 'contents': 'write', 'id-token': 'write' },
+      quality: read,
+      tag: { actions: 'write', contents: 'write' },
+    }
+  );
+});
+
+test('jobs that hold a write permission never install dependencies or run repository code', () => {
+  const writers = [...jobs].filter(([, body]) => WRITES.test(body));
   assert.ok(writers.length > 0, 'no job holds a write permission');
   for (const [name, body] of writers) {
-    assert.ok(!/\bnpm (?:ci|install|i)\b/u.test(body), `${name} installs dependencies`);
+    assert.ok(!RUNS_REPO_CODE.test(body), `${name} installs dependencies or runs repository code`);
   }
 });
 
@@ -81,5 +114,5 @@ test('every action is pinned to a 40-character SHA', () => {
 });
 
 test('nothing publishes to npm', () => {
-  assert.ok(!/\bnpm publish\b/u.test(code), 'the workflow runs npm publish');
+  assert.ok(!/\b(?:p?npm|yarn)\b[^\n]*\bpublish\b/u.test(code), 'the workflow publishes to npm');
 });
