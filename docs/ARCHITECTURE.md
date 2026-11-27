@@ -112,4 +112,4 @@ The worker writes nothing in workspaces. Edits reach disk through Orca's documen
 
 ### Logs
 
-The worker writes to Orca's plugin log: which binary it uses, server starts and stops, released documents, PHPantom's error and warning log messages, and its stderr tail when it exits.
+The worker writes to Orca's plugin log: which binary it uses, server starts and stops, released documents, PHPantom's error and warning log messages, messages from PHPantom it could not use, and its stderr tail when it exits.
