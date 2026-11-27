@@ -26,10 +26,14 @@ function listTracked(): Tracked[] {
 
 const tracked = listTracked();
 const paths = tracked.map((file) => file.path);
-const read = (path: string): string => readFileSync(new URL(path, `file://${root}`), 'utf8');
+const read = (path: string): string => readFileSync(root + path, 'utf8');
 const sizeOf = (path: string): number => statSync(root + path).size;
-const json = (path: string): { version: string; main?: string; contributes?: any } =>
-  JSON.parse(read(path));
+interface Manifest {
+  version: string;
+  main?: string;
+  contributes?: { customEditors: { entry: string }[] };
+}
+const json = (path: string): Manifest => JSON.parse(read(path));
 
 test('the plugin folder stays inside Orca install limits', () => {
   assert.ok(paths.length <= 2000, `${paths.length} tracked files, limit 2000`);
@@ -100,9 +104,7 @@ test('no tracked file is one the Orca plugin indexer refuses', () => {
 test('every path the manifest names exists', () => {
   const manifest = json('orca-plugin.json');
   assert.equal(manifest.main, 'src/main.ts');
-  const entries: string[] = manifest.contributes.customEditors.map(
-    (editor: { entry: string }) => editor.entry
-  );
+  const entries = (manifest.contributes?.customEditors ?? []).map((editor) => editor.entry);
   assert.ok(entries.length > 0, 'no custom editor entries');
   for (const path of [manifest.main, ...entries]) {
     assert.ok(existsSync(root + path), `${path} is missing`);
