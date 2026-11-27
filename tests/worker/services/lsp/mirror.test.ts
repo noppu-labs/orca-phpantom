@@ -40,3 +40,9 @@ test('positions past the end clamp, and ranges replace', () => {
   ]);
   assert.equal(m.text, 'a-dZ');
 });
+
+test('a surrogate pair beside a line end counts as two code units and never as a line end', () => {
+  const m = new DocumentMirror('a😀\r\n😀b\r😀');
+  m.apply([ins(1, 2, '!'), ins(2, 9, '?'), ins(0, 3, '>')]);
+  assert.equal(m.text, 'a😀>\r\n😀!b\r😀?');
+});

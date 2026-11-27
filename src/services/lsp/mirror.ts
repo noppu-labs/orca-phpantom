@@ -51,7 +51,7 @@ class DocumentMirror {
     }
     let lineEnd = start;
     while (lineEnd < text.length) {
-      const code = text.charCodeAt(lineEnd);
+      const code = text.codePointAt(lineEnd);
       if (code === LINE_FEED || code === CARRIAGE_RETURN) break;
       lineEnd++;
     }
@@ -62,7 +62,7 @@ class DocumentMirror {
     const text = this.content;
     let start = offset;
     while (start > 0) {
-      const code = text.charCodeAt(start - 1);
+      const code = text.codePointAt(start - 1);
       if (code === LINE_FEED || code === CARRIAGE_RETURN) break;
       start--;
     }
@@ -72,10 +72,10 @@ class DocumentMirror {
   private nextLineStart(from: number): number {
     const text = this.content;
     for (let index = from; index < text.length; index++) {
-      const code = text.charCodeAt(index);
+      const code = text.codePointAt(index);
       if (code === LINE_FEED) return index + 1;
       if (code === CARRIAGE_RETURN) {
-        return text.charCodeAt(index + 1) === LINE_FEED ? index + 2 : index + 1;
+        return text.codePointAt(index + 1) === LINE_FEED ? index + 2 : index + 1;
       }
     }
     return -1;

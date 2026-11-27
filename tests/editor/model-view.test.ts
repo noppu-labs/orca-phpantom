@@ -93,6 +93,13 @@ test('mixed line endings unify the way Monaco would and never add lines', () => 
   const { view } = outsideWrite('a\nb\nc', 'a\r\nb\nc\r\nd\re');
   assert.equal(view.getValue(), 'a\r\nb\r\nc\r\nd\r\ne');
 });
+test('emoji beside the line ends do not change which line ending wins', () => {
+  assert.equal(
+    outsideWrite('😀\n😀', '😀\r\n😀\r\n😀\n😀').view.getValue(),
+    '😀\r\n😀\r\n😀\r\n😀'
+  );
+  assert.equal(outsideWrite('😀\r\n😀', '😀\n😀\n😀\r\n😀').view.getValue(), '😀\n😀\n😀\n😀');
+});
 test('an outside write is its own undo step', () => {
   const { fake } = outsideWrite('a\nb\n', 'a\nB\n');
   const after = fake.calls.slice(fake.calls.indexOf('setText') + 1);

@@ -35,11 +35,11 @@ function monacoEol(text: string, fallback: Eol): Eol {
   let breaks = 0;
   let withCr = 0;
   for (let index = 0; index < text.length; index++) {
-    const code = text.charCodeAt(index);
+    const code = text.codePointAt(index);
     if (code === CARRIAGE_RETURN) {
       breaks += 1;
       withCr += 1;
-      if (text.charCodeAt(index + 1) === LINE_FEED) index += 1;
+      if (text.codePointAt(index + 1) === LINE_FEED) index += 1;
     } else if (code === LINE_FEED) {
       breaks += 1;
     }

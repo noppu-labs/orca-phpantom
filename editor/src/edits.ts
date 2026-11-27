@@ -22,6 +22,7 @@ function smallestEdit(before: string, after: string): Splice | null {
   }
   const shortest = Math.min(before.length, after.length);
   let start = 0;
+  // oxlint-disable-next-line unicorn/prefer-code-point -- compares UTF-16 code units, and the surrogate check below fixes up a cut through a pair
   while (start < shortest && before.charCodeAt(start) === after.charCodeAt(start)) {
     start += 1;
   }
@@ -30,18 +31,21 @@ function smallestEdit(before: string, after: string): Splice | null {
   while (
     endBefore > start &&
     endAfter > start &&
+    // oxlint-disable-next-line unicorn/prefer-code-point -- compares UTF-16 code units, and the surrogate check below fixes up a cut through a pair
     before.charCodeAt(endBefore - 1) === after.charCodeAt(endAfter - 1)
   ) {
     endBefore -= 1;
     endAfter -= 1;
   }
   // Why: never cut through a surrogate pair; an emoji is one character to the person.
+  // oxlint-disable-next-line unicorn/prefer-code-point -- tests one UTF-16 code unit for a high surrogate, which codePointAt would merge with its pair
   if (start > 0 && isHighSurrogate(before.charCodeAt(start - 1))) {
     start -= 1;
   }
   if (
     endAfter < after.length &&
     endAfter > start &&
+    // oxlint-disable-next-line unicorn/prefer-code-point -- tests one UTF-16 code unit for a high surrogate, which codePointAt would merge with its pair
     isHighSurrogate(after.charCodeAt(endAfter - 1))
   ) {
     endBefore += 1;

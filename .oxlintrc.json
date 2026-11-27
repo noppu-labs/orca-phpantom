@@ -191,7 +191,6 @@
         "unicorn/no-process-exit": "off",
         "unicorn/no-useless-collection-argument": "off",
         "unicorn/no-useless-spread": "off",
-        "unicorn/prefer-code-point": "off",
         "unicorn/prefer-export-from": "off",
         "unicorn/prefer-global-this": "off",
         "unicorn/prefer-top-level-await": "off"

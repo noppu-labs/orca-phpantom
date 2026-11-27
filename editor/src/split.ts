@@ -70,7 +70,9 @@ function chunkText(text: string, budget: number = REQUEST_BUDGET_BYTES): string[
   let size = 2;
   let index = 0;
   while (index < text.length) {
+    // oxlint-disable-next-line unicorn/prefer-code-point -- sizes the JSON one UTF-16 code unit at a time and pairs surrogates itself
     const unit = text.charCodeAt(index);
+    // oxlint-disable-next-line unicorn/prefer-code-point -- sizes the JSON one UTF-16 code unit at a time and pairs surrogates itself
     const next = index + 1 < text.length ? text.charCodeAt(index + 1) : 0;
     const paired =
       unit >= HIGH_SURROGATE_MIN &&
@@ -83,11 +85,12 @@ function chunkText(text: string, budget: number = REQUEST_BUDGET_BYTES): string[
       // A piece starting with LF would fuse with a lone CR before the insertion point and move that point.
       let cut = index;
       const unsafe = (position: number): boolean => {
+        // oxlint-disable-next-line unicorn/prefer-code-point -- reads one UTF-16 code unit to find a cut between the halves of a pair
         const code = text.charCodeAt(position);
         const midPair =
           code >= LOW_SURROGATE_MIN &&
           code <= LOW_SURROGATE_MAX &&
-          // oxlint-disable-next-line eslint/no-bitwise -- masks a UTF-16 code unit to test for a high surrogate
+          // oxlint-disable-next-line eslint/no-bitwise, unicorn/prefer-code-point -- masks a UTF-16 code unit to test for a high surrogate
           (text.charCodeAt(position - 1) & HIGH_SURROGATE_MASK) === HIGH_SURROGATE_MIN;
         return code === LINE_FEED || midPair;
       };

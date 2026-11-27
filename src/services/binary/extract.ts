@@ -51,7 +51,7 @@ function fromTar(tar: Buffer, member: string): Buffer | null {
       cString(header.subarray(TAR_SIZE_START, TAR_SIZE_END)).trim() || '0',
       8
     );
-    const type = String.fromCharCode(header[TAR_TYPE_AT] || TAR_FILE_TYPE);
+    const type = String.fromCodePoint(header[TAR_TYPE_AT] || TAR_FILE_TYPE);
     const start = offset + TAR_BLOCK;
     const base = name.replace(/^\.\//u, '');
     if (type === '0' && base === member) {
