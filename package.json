@@ -6,12 +6,19 @@
   "scripts": {
     "build": "node editor/build.mjs",
     "test": "orca plugin test .",
-    "typecheck": "tsc -p ."
+    "typecheck": "tsc -p .",
+    "lint": "oxlint",
+    "lint:fix": "oxlint --fix",
+    "fmt": "oxfmt",
+    "fmt:check": "oxfmt --check"
   },
   "devDependencies": {
     "@types/node": "22.20.7",
     "esbuild": "0.28.2",
     "monaco-editor": "0.57.0",
-    "typescript": "5.9.3"
+    "oxfmt": "^0.80.0",
+    "oxlint": "^1.95.0",
+    "oxlint-tsgolint": "^7.0.2009",
+    "typescript": "^7.0.2"
   }
 }

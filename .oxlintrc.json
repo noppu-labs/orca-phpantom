@@ -1,0 +1,150 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": ["typescript", "unicorn", "oxc", "import", "jsdoc", "promise"],
+  "categories": {
+    "correctness": "error",
+    "suspicious": "error",
+    "pedantic": "error",
+    "style": "error",
+    "restriction": "error"
+  },
+  "env": {
+    "builtin": true
+  },
+  "options": {
+    "typeAware": true
+  },
+  "rules": {
+    "typescript/prefer-readonly-parameter-types": "off",
+    "eslint/max-lines-per-function": "off",
+    "eslint/max-lines": "off",
+    "import/max-dependencies": "off",
+    "eslint/sort-imports": "off",
+    "import/no-named-export": "off",
+    "import/no-default-export": "off",
+    "import/prefer-default-export": "off",
+    "eslint/no-ternary": "off",
+    "unicorn/no-nested-ternary": "off",
+    "unicorn/no-null": "off",
+    "import/no-nodejs-modules": "off",
+    "typescript/parameter-properties": "off",
+    "eslint/max-statements": "off",
+    "eslint/max-params": "off",
+    "unicorn/max-nested-calls": "off",
+    "eslint/no-continue": "off",
+    "import/consistent-type-specifier-style": "off",
+    "eslint/init-declarations": "off",
+    "oxc/no-async-await": "off",
+    "eslint/no-undefined": "off",
+    "oxc/no-optional-chaining": "off",
+    "oxc/no-rest-spread-properties": "off",
+    "eslint/no-plusplus": "off",
+    "unicorn/import-style": "off",
+    "import/no-relative-parent-imports": "off",
+    "eslint/class-methods-use-this": "off",
+    "eslint/require-await": "off",
+    "typescript/explicit-function-return-type": [
+      "error",
+      {
+        "allowExpressions": true,
+        "allowHigherOrderFunctions": true,
+        "allowIIFEs": true,
+        "allowTypedFunctionExpressions": true
+      }
+    ],
+    "eslint/no-void": ["error", { "allowAsStatement": true }],
+    "eslint/no-empty-function": ["error", { "allow": ["arrowFunctions"] }],
+    "eslint/no-use-before-define": ["error", { "functions": false }],
+    "eslint/curly": ["error", "multi-line"],
+    "eslint/no-magic-numbers": [
+      "error",
+      {
+        "ignore": [-1, 0, 1, 2]
+      }
+    ],
+    "eslint/id-length": [
+      "error",
+      {
+        "exceptions": ["_", "t"],
+        "properties": "never"
+      }
+    ],
+    "eslint/one-var": ["error", "never"],
+    "eslint/func-style": [
+      "error",
+      "declaration",
+      {
+        "allowArrowFunctions": true
+      }
+    ],
+    "eslint/sort-keys": [
+      "error",
+      "asc",
+      {
+        "allowLineSeparatedGroups": true,
+        "natural": true
+      }
+    ],
+    "eslint/prefer-destructuring": [
+      "error",
+      {
+        "array": false,
+        "object": true
+      }
+    ],
+    "import/no-cycle": "error",
+    "jsdoc/require-param": "off",
+    "jsdoc/require-returns": "off",
+    "jsdoc/require-param-type": "off",
+    "jsdoc/require-returns-type": "off",
+    "jsdoc/require-throws-type": "off",
+    "jsdoc/require-yields-type": "off",
+    "promise/no-return-in-finally": "error",
+    "jsdoc/check-tag-names": "error",
+    "promise/prefer-await-to-then": "off",
+    "promise/avoid-new": "off",
+    "promise/prefer-await-to-callbacks": "off",
+    "promise/catch-or-return": "off",
+    "promise/always-return": "off",
+    "promise/prefer-catch": "off"
+  },
+  "overrides": [
+    {
+      "files": ["**/*.test.ts", "**/*.test-helper.ts", "**/fixtures/**"],
+      "rules": {
+        "typescript/no-floating-promises": "off",
+        "import/no-named-as-default-member": "off",
+        "typescript/await-thenable": "off",
+        "typescript/no-unsafe-type-assertion": "off",
+        "unicorn/consistent-function-scoping": "off",
+        "typescript/no-unsafe-member-access": "off",
+        "typescript/no-unsafe-call": "off",
+        "typescript/no-unsafe-assignment": "off",
+        "typescript/no-unsafe-return": "off",
+        "typescript/no-unsafe-argument": "off",
+        "eslint/require-await": "off",
+        "typescript/require-await": "off",
+        "unicorn/no-useless-undefined": "off",
+        "typescript/no-confusing-void-expression": "off",
+        "typescript/strict-void-return": "off",
+        "eslint/no-promise-executor-return": "off",
+        "eslint/no-magic-numbers": "off",
+        "eslint/sort-keys": "off",
+        "eslint/id-length": "off",
+        "unicorn/no-await-expression-member": "off",
+        "typescript/no-explicit-any": "off",
+        "typescript/explicit-function-return-type": "off",
+        "typescript/promise-function-async": "off",
+        "typescript/no-non-null-assertion": "off",
+        "typescript/explicit-module-boundary-types": "off"
+      }
+    }
+  ],
+  "ignorePatterns": [
+    "editor/dist/**",
+    "editor/src/vendor/**",
+    ".orca/**",
+    "docs/superpowers/**",
+    ".superpowers/**"
+  ]
+}
