@@ -23,15 +23,15 @@ interface WorkspaceContext {
 }
 
 interface BridgeHost {
-  request: <K extends keyof PluginRequests>(
-    name: K,
-    input: PluginRequestInput<K>,
+  request: <Key extends keyof PluginRequests>(
+    name: Key,
+    input: PluginRequestInput<Key>,
     options?: { timeoutMs?: number; signal?: AbortSignal }
-  ) => Promise<PluginRequestOutput<K>>;
+  ) => Promise<PluginRequestOutput<Key>>;
   /** What the worker posts to this editor's panel; every frame of the editor hears every post. */
-  on: <K extends keyof PluginPanelEvents>(
-    event: K,
-    handler: (payload: PluginPanelEvents[K]) => void
+  on: <Key extends keyof PluginPanelEvents>(
+    event: Key,
+    handler: (payload: PluginPanelEvents[Key]) => void
   ) => Disposable;
   /** The focused workspace, which is not always this frame's: see the R2 notes on LspBridge. */
   readContext: () => Promise<WorkspaceContext | null>;
@@ -196,9 +196,9 @@ function groupsOf(event: QueuedEvent): { groups: Group[]; lengthBefore: number }
   );
   const out: Group[] = [];
   let length = event.lengthAfter;
-  for (let i = groups.length - 1; i >= 0; i--) {
-    out[i] = { changes: groups[i], length };
-    for (const change of groups[i]) {
+  for (let index = groups.length - 1; index >= 0; index--) {
+    out[index] = { changes: groups[index], length };
+    for (const change of groups[index]) {
       if (!('range' in change)) {
         return null;
       }
@@ -234,7 +234,7 @@ class LspBridge {
   private readonly userMaxWaitMs: number;
   private readonly pacer: Pacer;
   private readonly subscriptions: Disposable[] = [];
-  private readonly listeners: { [K in keyof Events]: Set<(value: Events[K]) => void> } = {
+  private readonly listeners: { [Kind in keyof Events]: Set<(value: Events[Kind]) => void> } = {
     busy: new Set(),
     diagnostics: new Set(),
     ready: new Set(),
@@ -961,11 +961,11 @@ class LspBridge {
   // --- pacing ---
 
   /** Every call to the worker goes through here, so the pacer sees each one and every refusal. */
-  private async send<K extends keyof PluginRequests>(
-    name: K,
-    input: PluginRequestInput<K>,
+  private async send<Key extends keyof PluginRequests>(
+    name: Key,
+    input: PluginRequestInput<Key>,
     options?: { timeoutMs?: number; signal?: AbortSignal }
-  ): Promise<PluginRequestOutput<K>> {
+  ): Promise<PluginRequestOutput<Key>> {
     try {
       const output = await this.host.request(name, input, options);
       this.pacer.succeeded();
@@ -1004,7 +1004,10 @@ class LspBridge {
   }
 
   /** A user call: after the hold, and once more if Orca refuses it; null when it fails. */
-  private async userCall<T>(run: () => Promise<T>, signal?: AbortSignal): Promise<T | null> {
+  private async userCall<Result>(
+    run: () => Promise<Result>,
+    signal?: AbortSignal
+  ): Promise<Result | null> {
     for (let refused = false; ; refused = true) {
       if (!(await this.holdPassed(signal))) return null;
       try {
@@ -1041,7 +1044,7 @@ class LspBridge {
   // --- plumbing ---
 
   // oxlint-disable-next-line typescript/promise-function-async -- returns the lane promise itself; an async wrapper lets the next lane job run before the caller resumes
-  private inLane<T>(job: () => Promise<T>): Promise<T> {
+  private inLane<Result>(job: () => Promise<Result>): Promise<Result> {
     const run = this.lane.then(job, job);
     this.lane = run.catch(() => {});
     return run;
@@ -1052,16 +1055,16 @@ class LspBridge {
     this.emit('status', status);
   }
 
-  private listen<K extends keyof Events>(
-    kind: K,
-    listener: (value: Events[K]) => void
+  private listen<Kind extends keyof Events>(
+    kind: Kind,
+    listener: (value: Events[Kind]) => void
   ): Disposable {
     const set = this.listeners[kind];
     set.add(listener);
     return { dispose: () => void set.delete(listener) };
   }
 
-  private emit<K extends keyof Events>(kind: K, value: Events[K]): void {
+  private emit<Kind extends keyof Events>(kind: Kind, value: Events[Kind]): void {
     for (const listener of [...this.listeners[kind]]) {
       try {
         listener(value);

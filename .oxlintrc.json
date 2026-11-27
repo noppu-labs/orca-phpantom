@@ -160,7 +160,6 @@
       "rules": {
         "eslint/complexity": "off",
         "eslint/default-case": "off",
-        "eslint/id-length": "off",
         "eslint/max-classes-per-file": "off",
         "eslint/max-depth": "off",
         "eslint/no-bitwise": "off",

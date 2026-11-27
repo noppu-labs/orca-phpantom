@@ -70,12 +70,12 @@ function cString(bytes: Buffer): string {
 function fromZip(zip: Buffer, member: string): Buffer | null {
   let eocd = -1;
   for (
-    let i = zip.length - ZIP_END_SIZE;
-    i >= Math.max(0, zip.length - ZIP_END_SIZE - ZIP_MAX_COMMENT);
-    i--
+    let candidate = zip.length - ZIP_END_SIZE;
+    candidate >= Math.max(0, zip.length - ZIP_END_SIZE - ZIP_MAX_COMMENT);
+    candidate--
   ) {
-    if (zip.readUInt32LE(i) === ZIP_END_SIGNATURE) {
-      eocd = i;
+    if (zip.readUInt32LE(candidate) === ZIP_END_SIGNATURE) {
+      eocd = candidate;
       break;
     }
   }
@@ -84,7 +84,7 @@ function fromZip(zip: Buffer, member: string): Buffer | null {
   }
   const entries = zip.readUInt16LE(eocd + ZIP_END_ENTRIES_AT);
   let at = zip.readUInt32LE(eocd + ZIP_END_DIRECTORY_AT);
-  for (let n = 0; n < entries; n++) {
+  for (let index = 0; index < entries; index++) {
     if (zip.readUInt32LE(at) !== ZIP_ENTRY_SIGNATURE) {
       throw new Error('corrupt zip directory');
     }

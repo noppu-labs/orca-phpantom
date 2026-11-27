@@ -57,8 +57,8 @@ interface RouterOptions {
   now?: () => number;
 }
 
-type Input<K extends keyof PluginRequests> = PluginRequests[K]['input'];
-type Output<K extends keyof PluginRequests> = PluginRequests[K]['output'];
+type Input<Name extends keyof PluginRequests> = PluginRequests[Name]['input'];
+type Output<Name extends keyof PluginRequests> = PluginRequests[Name]['output'];
 
 interface Entry {
   root: string;
@@ -672,7 +672,7 @@ class Router {
       // One waiting for its resync has a copy that is not its editor's text, and sends the whole text soon anyway.
       const current = remaining
         .filter((other) => !other.needsResync)
-        .sort((a, b) => b.lastSeen - a.lastSeen)[0];
+        .sort((left, right) => right.lastSeen - left.lastSeen)[0];
       if (current !== undefined) {
         this.sendFull(doc.server, file, current.mirror.text);
       }
@@ -717,7 +717,7 @@ class Router {
   }
 
   // oxlint-disable-next-line typescript/promise-function-async -- returns the lane promise itself, as LspBridge.inLane does, so lane timing stays as it was
-  private inLane<T>(docId: string, task: () => Promise<T>): Promise<T> {
+  private inLane<Result>(docId: string, task: () => Promise<Result>): Promise<Result> {
     const previous = this.lanes.get(docId) ?? Promise.resolve();
     const run = previous.then(task);
     const settled = run.then(
@@ -834,8 +834,8 @@ class Router {
   private eventsFor(entry: Entry, current: () => PhpantomServer | null): ServerEvents {
     // Why a guard: these run inside the server's stdout handler, where a throw would end the worker.
     const guard =
-      <A extends unknown[]>(name: string, handler: (...args: A) => void) =>
-      (...args: A): void => {
+      <Args extends unknown[]>(name: string, handler: (...args: Args) => void) =>
+      (...args: Args): void => {
         try {
           if (name === 'log' || (current() !== null && current() === entry.server)) {
             handler(...args);

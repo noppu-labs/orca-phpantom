@@ -68,10 +68,10 @@ function chunkText(text: string, budget: number = REQUEST_BUDGET_BYTES): string[
   const pieces: string[] = [];
   let start = 0;
   let size = 2;
-  let i = 0;
-  while (i < text.length) {
-    const unit = text.charCodeAt(i);
-    const next = i + 1 < text.length ? text.charCodeAt(i + 1) : 0;
+  let index = 0;
+  while (index < text.length) {
+    const unit = text.charCodeAt(index);
+    const next = index + 1 < text.length ? text.charCodeAt(index + 1) : 0;
     const paired =
       unit >= HIGH_SURROGATE_MIN &&
       unit <= HIGH_SURROGATE_MAX &&
@@ -79,27 +79,27 @@ function chunkText(text: string, budget: number = REQUEST_BUDGET_BYTES): string[
       next <= LOW_SURROGATE_MAX;
     const width = paired ? 2 : 1;
     const cost = jsonCost(unit, paired ? next : null);
-    if (size + cost > budget && i > start) {
+    if (size + cost > budget && index > start) {
       // A piece starting with LF would fuse with a lone CR before the insertion point and move that point.
-      let cut = i;
-      const unsafe = (c: number): boolean => {
-        const u = text.charCodeAt(c);
+      let cut = index;
+      const unsafe = (position: number): boolean => {
+        const code = text.charCodeAt(position);
         const midPair =
-          u >= LOW_SURROGATE_MIN &&
-          u <= LOW_SURROGATE_MAX &&
-          (text.charCodeAt(c - 1) & HIGH_SURROGATE_MASK) === HIGH_SURROGATE_MIN;
-        return u === LINE_FEED || midPair;
+          code >= LOW_SURROGATE_MIN &&
+          code <= LOW_SURROGATE_MAX &&
+          (text.charCodeAt(position - 1) & HIGH_SURROGATE_MASK) === HIGH_SURROGATE_MIN;
+        return code === LINE_FEED || midPair;
       };
       while (cut > start + 1 && unsafe(cut)) cut -= 1;
-      if (unsafe(cut)) cut = i;
+      if (unsafe(cut)) cut = index;
       pieces.push(text.slice(start, cut));
       start = cut;
-      i = cut;
+      index = cut;
       size = 2;
       continue;
     }
     size += cost;
-    i += width;
+    index += width;
   }
   pieces.push(text.slice(start));
   return pieces;
@@ -129,8 +129,8 @@ function splitOne(change: LspContentChange, budget: number): LspContentChange[] 
   const out: LspContentChange[] = [
     'range' in change ? { range: change.range, text: last } : { text: last },
   ];
-  for (let i = pieces.length - 2; i >= 0; i--) {
-    out.push({ range: { end: at, start: at }, text: pieces[i] });
+  for (let index = pieces.length - 2; index >= 0; index--) {
+    out.push({ range: { end: at, start: at }, text: pieces[index] });
   }
   return out;
 }

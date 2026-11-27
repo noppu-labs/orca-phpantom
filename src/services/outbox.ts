@@ -159,7 +159,7 @@ class Outbox {
     const earlier = original.truncated ?? 0;
     const ranked = original.diagnostics
       .map((diagnostic, index) => ({ diagnostic, index, severity: severityOf(diagnostic) }))
-      .sort((a, b) => a.severity - b.severity || a.index - b.index);
+      .sort((left, right) => left.severity - right.severity || left.index - right.index);
     // Why the largest count: a number is 8 bytes to Orca whatever its value.
     const shell = orcaSize({
       ...original,
@@ -181,7 +181,7 @@ class Outbox {
       objects += size.objects;
       kept.push(entry);
     }
-    kept.sort((a, b) => a.index - b.index);
+    kept.sort((left, right) => left.index - right.index);
     return {
       ...original,
       diagnostics: kept.map((entry) => entry.diagnostic),

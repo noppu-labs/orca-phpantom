@@ -69,8 +69,8 @@ function registerReadingProviders(
     const serverItems = new WeakMap<object, LspCompletionItem>();
     registered.push(
       monaco.languages.registerCompletionItemProvider(language, {
-        async provideCompletionItems(m, position, context, token) {
-          if (!ours(m)) return { suggestions: [] };
+        async provideCompletionItems(textModel, position, context, token) {
+          if (!ours(textModel)) return { suggestions: [] };
           const result = await ask(
             'textDocument/completion',
             {
@@ -88,7 +88,7 @@ function registerReadingProviders(
             'passive'
           );
           const items = completionItems(result);
-          const word = m.getWordUntilPosition(position);
+          const word = textModel.getWordUntilPosition(position);
           const fallback = new monaco.Range(
             position.lineNumber,
             word.startColumn,
@@ -158,8 +158,8 @@ function registerReadingProviders(
   if (isTruthy(capabilities.hoverProvider)) {
     registered.push(
       monaco.languages.registerHoverProvider(language, {
-        async provideHover(m, position, token) {
-          if (!ours(m)) return null;
+        async provideHover(textModel, position, token) {
+          if (!ours(textModel)) return null;
           const result = await ask('textDocument/hover', atCursor(position), token, 'passive');
           const hover = isHover(result) ? result : undefined;
           const contents = toMarkdown(hover?.contents).map((value) => ({ value }));
@@ -173,8 +173,8 @@ function registerReadingProviders(
   if (isTruthy(capabilities.signatureHelpProvider)) {
     registered.push(
       monaco.languages.registerSignatureHelpProvider(language, {
-        async provideSignatureHelp(m, position, token, context) {
-          if (!ours(m)) return null;
+        async provideSignatureHelp(textModel, position, token, context) {
+          if (!ours(textModel)) return null;
           const result = await ask(
             'textDocument/signatureHelp',
             {
@@ -242,8 +242,8 @@ function registerReadingProviders(
       monaco.languages.registerDocumentSemanticTokensProvider(language, {
         getLegend: () => legend,
         onDidChange: changed.event,
-        async provideDocumentSemanticTokens(m, _lastResultId, token) {
-          if (!ours(m)) return null;
+        async provideDocumentSemanticTokens(textModel, _lastResultId, token) {
+          if (!ours(textModel)) return null;
           const tokens = toSemanticTokens(
             await ask('textDocument/semanticTokens/full', {}, token, 'background')
           );
@@ -268,8 +268,8 @@ function registerReadingProviders(
       monaco.languages.registerInlayHintsProvider(language, {
         displayName: SERVER_NAME,
         onDidChangeInlayHints: changed.event,
-        async provideInlayHints(m, range, token) {
-          if (!ours(m)) return null;
+        async provideInlayHints(textModel, range, token) {
+          if (!ours(textModel)) return null;
           const result = await ask(
             'textDocument/inlayHint',
             { range: toLspRange(range) },
@@ -289,8 +289,8 @@ function registerReadingProviders(
     registered.push(
       monaco.languages.registerDocumentSymbolProvider(language, {
         displayName: SERVER_NAME,
-        async provideDocumentSymbols(m, token) {
-          if (!ours(m)) return null;
+        async provideDocumentSymbols(textModel, token) {
+          if (!ours(textModel)) return null;
           const result = await ask('textDocument/documentSymbol', {}, token, 'background');
           return isSymbolList(result) ? toDocumentSymbols(result) : null;
         },

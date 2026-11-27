@@ -90,9 +90,9 @@ function meaningfulLines(text: string): string[] {
  * How much two texts share, by whole lines: 1 for the same lines, 0 for none in common. A line that
  * appears twice counts twice, so a file of repeated braces does not look like every other file.
  */
-function sharedLines(a: string, b: string): number {
-  const linesA = meaningfulLines(a);
-  const linesB = meaningfulLines(b);
+function sharedLines(textA: string, textB: string): number {
+  const linesA = meaningfulLines(textA);
+  const linesB = meaningfulLines(textB);
   if (linesA.length < ALIKE_MIN_LINES || linesB.length < ALIKE_MIN_LINES) {
     return 0;
   }
@@ -136,7 +136,7 @@ async function locateAlike(
         file.size <= size * ALIKE_SIZE_RATIO
     )
     // Why nearest in size first: a few edits barely change the size, so the right file is read early.
-    .sort((a, b) => Math.abs(a.size - size) - Math.abs(b.size - size))
+    .sort((left, right) => Math.abs(left.size - size) - Math.abs(right.size - size))
     .slice(0, ALIKE_MAX_FILES);
   let best: { file: Candidate; score: number } | null = null;
   let second = 0;

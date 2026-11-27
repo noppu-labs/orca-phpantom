@@ -11,10 +11,10 @@ type Model = monaco.editor.ITextModel;
 const SERVER_NAME = 'PHPantom';
 
 /** Monaco's cancellation token as an AbortSignal for one request. */
-async function withSignal<T>(
+async function withSignal<Result>(
   token: monaco.CancellationToken,
-  run: (signal: AbortSignal) => Promise<T>
-): Promise<T> {
+  run: (signal: AbortSignal) => Promise<Result>
+): Promise<Result> {
   const controller = new AbortController();
   if (token.isCancellationRequested) controller.abort();
   const listener = token.onCancellationRequested(() => {

@@ -54,10 +54,10 @@ const fitsIn = (size: Size, limit: Size): boolean =>
   size.bytes <= limit.bytes && size.objects <= limit.objects;
 
 /** The leading `items` that fit in `limit` beside `envelope`, the answer measured with an empty list. */
-function leadingThatFit<T>(items: T[], envelope: Size, limit: Size): T[] {
+function leadingThatFit<Item>(items: Item[], envelope: Size, limit: Size): Item[] {
   let { bytes } = envelope;
   let { objects } = envelope;
-  const kept: T[] = [];
+  const kept: Item[] = [];
   for (const item of items) {
     const size = orcaSize(item);
     if (

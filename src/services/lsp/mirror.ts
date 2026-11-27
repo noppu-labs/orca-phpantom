@@ -38,43 +38,45 @@ class DocumentMirror {
   private offsetAt(pos: LspPosition, from = 0, fromPos?: LspPosition): number {
     const text = this.content;
     let line = 0;
-    let i = 0;
+    let start = 0;
     if (fromPos && fromPos.line <= pos.line) {
       ({ line } = fromPos);
-      i = this.lineStart(from);
+      start = this.lineStart(from);
     }
     while (line < pos.line) {
-      const next = this.nextLineStart(i);
+      const next = this.nextLineStart(start);
       if (next < 0) return text.length;
-      i = next;
+      start = next;
       line++;
     }
-    let lineEnd = i;
+    let lineEnd = start;
     while (lineEnd < text.length) {
-      const c = text.charCodeAt(lineEnd);
-      if (c === LINE_FEED || c === CARRIAGE_RETURN) break;
+      const code = text.charCodeAt(lineEnd);
+      if (code === LINE_FEED || code === CARRIAGE_RETURN) break;
       lineEnd++;
     }
-    return Math.min(i + Math.max(pos.character, 0), lineEnd);
+    return Math.min(start + Math.max(pos.character, 0), lineEnd);
   }
 
   private lineStart(offset: number): number {
     const text = this.content;
-    let i = offset;
-    while (i > 0) {
-      const c = text.charCodeAt(i - 1);
-      if (c === LINE_FEED || c === CARRIAGE_RETURN) break;
-      i--;
+    let start = offset;
+    while (start > 0) {
+      const code = text.charCodeAt(start - 1);
+      if (code === LINE_FEED || code === CARRIAGE_RETURN) break;
+      start--;
     }
-    return i;
+    return start;
   }
 
   private nextLineStart(from: number): number {
     const text = this.content;
-    for (let i = from; i < text.length; i++) {
-      const c = text.charCodeAt(i);
-      if (c === LINE_FEED) return i + 1;
-      if (c === CARRIAGE_RETURN) return text.charCodeAt(i + 1) === LINE_FEED ? i + 2 : i + 1;
+    for (let index = from; index < text.length; index++) {
+      const code = text.charCodeAt(index);
+      if (code === LINE_FEED) return index + 1;
+      if (code === CARRIAGE_RETURN) {
+        return text.charCodeAt(index + 1) === LINE_FEED ? index + 2 : index + 1;
+      }
     }
     return -1;
   }

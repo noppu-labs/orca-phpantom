@@ -8,26 +8,26 @@ const terminated = (chunk: string[]): string => {
 
 const MAX_DIFF_LINES = 500;
 
-const sameLines = (x: string[], y: string[]): boolean =>
-  x.length === y.length && x.every((line, at) => line === y[at]);
+const sameLines = (left: string[], right: string[]): boolean =>
+  left.length === right.length && left.every((line, at) => line === right[at]);
 
 /** Positions of the longest strictly increasing run of `values` (patience sorting, O(n log n)). */
 function longestIncreasing(values: number[]): number[] {
   const tails: number[] = [];
   const previous = new Array<number>(values.length).fill(-1);
-  for (let i = 0; i < values.length; i += 1) {
+  for (let index = 0; index < values.length; index += 1) {
     let low = 0;
     let high = tails.length;
     while (low < high) {
       const mid = (low + high) >> 1;
-      if (values[tails[mid]] < values[i]) {
+      if (values[tails[mid]] < values[index]) {
         low = mid + 1;
       } else {
         high = mid;
       }
     }
-    previous[i] = low > 0 ? tails[low - 1] : -1;
-    tails[low] = i;
+    previous[index] = low > 0 ? tails[low - 1] : -1;
+    tails[low] = index;
   }
   const run: number[] = [];
   for (let at = tails.at(-1) ?? -1; at !== -1; at = previous[at]) {
@@ -52,15 +52,23 @@ function anchors(mine: string[], base: string[], outside: string[]): [number, nu
   const inOutside = occurrences(outside);
   const found: [number, number, number][] = [];
   occurrences(base).forEach((at, line) => {
-    const m = inMine.get(line);
-    const o = inOutside.get(line);
-    if (at >= 0 && m !== undefined && m >= 0 && o !== undefined && o >= 0) {
-      found.push([m, at, o]);
+    const mineAt = inMine.get(line);
+    const outsideAt = inOutside.get(line);
+    if (
+      at >= 0 &&
+      mineAt !== undefined &&
+      mineAt >= 0 &&
+      outsideAt !== undefined &&
+      outsideAt >= 0
+    ) {
+      found.push([mineAt, at, outsideAt]);
     }
   });
-  found.sort((x, y) => x[1] - y[1]);
-  const byMine = longestIncreasing(found.map((entry) => entry[0])).map((i) => found[i]);
-  return longestIncreasing(byMine.map((entry) => entry[2])).map((i) => byMine[i]);
+  found.sort((left, right) => left[1] - right[1]);
+  const byMine = longestIncreasing(found.map((entry) => entry[0])).map(
+    (position) => found[position]
+  );
+  return longestIncreasing(byMine.map((entry) => entry[2])).map((position) => byMine[position]);
 }
 
 /**
@@ -83,28 +91,30 @@ function mergeText(
   const outsideLines = lines(outside);
   let text = '';
   let conflicts = 0;
-  const conflict = (m: string[], o: string[]): void => {
+  const conflict = (mineChunk: string[], outsideChunk: string[]): void => {
     conflicts += 1;
-    text += `<<<<<<< your unsaved edits\n${terminated(m)}=======\n${terminated(o)}>>>>>>> file on disk\n`;
+    text += `<<<<<<< your unsaved edits\n${terminated(mineChunk)}=======\n${terminated(outsideChunk)}>>>>>>> file on disk\n`;
   };
-  const mergeStretch = (m: string[], b: string[], o: string[]): void => {
-    if (m.length === 0 && b.length === 0 && o.length === 0) {
+  const mergeStretch = (mineChunk: string[], baseChunk: string[], outsideChunk: string[]): void => {
+    if (mineChunk.length === 0 && baseChunk.length === 0 && outsideChunk.length === 0) {
       return;
     }
-    if (sameLines(m, b)) {
-      text += o.join('');
+    if (sameLines(mineChunk, baseChunk)) {
+      text += outsideChunk.join('');
       return;
     }
-    if (sameLines(o, b) || sameLines(m, o)) {
-      text += m.join('');
+    if (sameLines(outsideChunk, baseChunk) || sameLines(mineChunk, outsideChunk)) {
+      text += mineChunk.join('');
       return;
     }
     // Why: diff3's LCS grows roughly cubically on repeated lines and runs on the editor's thread, so a stretch with no anchors that is too big to diff within budget keeps both sides whole.
-    if (Math.max(m.length, b.length, o.length) > MAX_DIFF_LINES) {
-      conflict(m, o);
+    if (Math.max(mineChunk.length, baseChunk.length, outsideChunk.length) > MAX_DIFF_LINES) {
+      conflict(mineChunk, outsideChunk);
       return;
     }
-    for (const region of diff3Merge(m, b, o, { excludeFalseConflicts: true })) {
+    for (const region of diff3Merge(mineChunk, baseChunk, outsideChunk, {
+      excludeFalseConflicts: true,
+    })) {
       if (region.ok) {
         text += region.ok.join('');
       } else if (region.conflict) {
@@ -113,14 +123,14 @@ function mergeText(
     }
   };
   let [fromMine, fromBase, fromOutside] = [0, 0, 0];
-  for (const [m, b, o] of anchors(mineLines, baseLines, outsideLines)) {
+  for (const [mineAt, baseAt, outsideAt] of anchors(mineLines, baseLines, outsideLines)) {
     mergeStretch(
-      mineLines.slice(fromMine, m),
-      baseLines.slice(fromBase, b),
-      outsideLines.slice(fromOutside, o)
+      mineLines.slice(fromMine, mineAt),
+      baseLines.slice(fromBase, baseAt),
+      outsideLines.slice(fromOutside, outsideAt)
     );
-    text += baseLines[b];
-    [fromMine, fromBase, fromOutside] = [m + 1, b + 1, o + 1];
+    text += baseLines[baseAt];
+    [fromMine, fromBase, fromOutside] = [mineAt + 1, baseAt + 1, outsideAt + 1];
   }
   mergeStretch(
     mineLines.slice(fromMine),

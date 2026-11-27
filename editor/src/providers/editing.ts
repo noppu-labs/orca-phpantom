@@ -143,13 +143,13 @@ function registerEditingProviders(
 
   const locate = async (
     method: string,
-    m: Model,
+    textModel: Model,
     position: monaco.Position,
     token: monaco.CancellationToken,
     keepUnread: boolean,
     extra: Record<string, unknown> = {}
   ): Promise<monaco.languages.Location[] | null> => {
-    if (!ours(m)) return null;
+    if (!ours(textModel)) return null;
     const answer = await withSignal(token, async (signal) =>
       bridge.askDetailed(method, { ...atCursor(position), ...extra }, signal, { kind: 'user' })
     );
@@ -174,40 +174,40 @@ function registerEditingProviders(
   if (isTruthy(capabilities.definitionProvider)) {
     registered.push(
       monaco.languages.registerDefinitionProvider(language, {
-        provideDefinition: async (m, position, token) =>
-          locate('textDocument/definition', m, position, token, true),
+        provideDefinition: async (textModel, position, token) =>
+          locate('textDocument/definition', textModel, position, token, true),
       })
     );
   }
   if (isTruthy(capabilities.declarationProvider)) {
     registered.push(
       monaco.languages.registerDeclarationProvider(language, {
-        provideDeclaration: async (m, position, token) =>
-          locate('textDocument/declaration', m, position, token, true),
+        provideDeclaration: async (textModel, position, token) =>
+          locate('textDocument/declaration', textModel, position, token, true),
       })
     );
   }
   if (isTruthy(capabilities.typeDefinitionProvider)) {
     registered.push(
       monaco.languages.registerTypeDefinitionProvider(language, {
-        provideTypeDefinition: async (m, position, token) =>
-          locate('textDocument/typeDefinition', m, position, token, true),
+        provideTypeDefinition: async (textModel, position, token) =>
+          locate('textDocument/typeDefinition', textModel, position, token, true),
       })
     );
   }
   if (isTruthy(capabilities.implementationProvider)) {
     registered.push(
       monaco.languages.registerImplementationProvider(language, {
-        provideImplementation: async (m, position, token) =>
-          locate('textDocument/implementation', m, position, token, false),
+        provideImplementation: async (textModel, position, token) =>
+          locate('textDocument/implementation', textModel, position, token, false),
       })
     );
   }
   if (isTruthy(capabilities.referencesProvider)) {
     registered.push(
       monaco.languages.registerReferenceProvider(language, {
-        provideReferences: async (m, position, context, token) =>
-          locate('textDocument/references', m, position, token, false, {
+        provideReferences: async (textModel, position, context, token) =>
+          locate('textDocument/references', textModel, position, token, false, {
             context: { includeDeclaration: context.includeDeclaration },
           }),
       })
@@ -224,8 +224,8 @@ function registerEditingProviders(
     registered.push(
       monaco.languages.registerDocumentFormattingEditProvider(language, {
         displayName: SERVER_NAME,
-        async provideDocumentFormattingEdits(m, options, token) {
-          if (!ours(m)) return null;
+        async provideDocumentFormattingEdits(textModel, options, token) {
+          if (!ours(textModel)) return null;
           return edits(
             await ask('textDocument/formatting', formatting(options), token, {
               timeoutMs: FORMAT_TIMEOUT_MS,
@@ -239,8 +239,8 @@ function registerEditingProviders(
     registered.push(
       monaco.languages.registerDocumentRangeFormattingEditProvider(language, {
         displayName: SERVER_NAME,
-        async provideDocumentRangeFormattingEdits(m, range, options, token) {
-          if (!ours(m)) return null;
+        async provideDocumentRangeFormattingEdits(textModel, range, options, token) {
+          if (!ours(textModel)) return null;
           return edits(
             await ask(
               'textDocument/rangeFormatting',
@@ -259,8 +259,8 @@ function registerEditingProviders(
     const prepares = Boolean(capability(capabilities, 'renameProvider', 'prepareProvider'));
     registered.push(
       monaco.languages.registerRenameProvider(language, {
-        async provideRenameEdits(m, position, newName, token) {
-          if (!ours(m)) return null;
+        async provideRenameEdits(textModel, position, newName, token) {
+          if (!ours(textModel)) return null;
           // The bridge drops an answer the text moved under; the stamp makes Monaco refuse it if it moves later.
           const versionId = model.getVersionId();
           const result = await ask(
@@ -281,8 +281,8 @@ function registerEditingProviders(
           };
         },
         resolveRenameLocation: prepares
-          ? async (m, position, token) => {
-              if (!ours(m)) return null;
+          ? async (textModel, position, token) => {
+              if (!ours(textModel)) return null;
               const result = await ask('textDocument/prepareRename', atCursor(position), token);
               if (token.isCancellationRequested) throw canceled();
               // Why reject: with nothing returned Monaco would offer to rename the word under the cursor.
@@ -302,7 +302,7 @@ function registerEditingProviders(
               if (isRecord(result) && isTruthy(result.defaultBehavior)) return null;
               // ... or sends a range, alone or with a placeholder. Why not show the placeholder: for a class PHPantom 1.1.0 sends the fully qualified name while the range and the new name are the short one.
               const range = fromLspRange(renameRange(result));
-              return { range, text: m.getValueInRange(range) };
+              return { range, text: textModel.getValueInRange(range) };
             }
           : undefined,
       })
@@ -327,8 +327,8 @@ function registerEditingProviders(
       monaco.languages.registerCodeActionProvider(
         language,
         {
-          async provideCodeActions(m, range, context, token) {
-            if (!ours(m)) return { actions: [], dispose() {} };
+          async provideCodeActions(textModel, range, context, token) {
+            if (!ours(textModel)) return { actions: [], dispose() {} };
             const lspRange = toLspRange(range);
             // Why: the lightbulb outlives typing, so an action must not carry an edit for older text.
             const versionId = model.getVersionId();

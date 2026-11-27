@@ -34,12 +34,12 @@ type ModelView = TextView & {
 function monacoEol(text: string, fallback: Eol): Eol {
   let breaks = 0;
   let withCr = 0;
-  for (let i = 0; i < text.length; i++) {
-    const code = text.charCodeAt(i);
+  for (let index = 0; index < text.length; index++) {
+    const code = text.charCodeAt(index);
     if (code === CARRIAGE_RETURN) {
       breaks += 1;
       withCr += 1;
-      if (text.charCodeAt(i + 1) === LINE_FEED) i += 1;
+      if (text.charCodeAt(index + 1) === LINE_FEED) index += 1;
     } else if (code === LINE_FEED) {
       breaks += 1;
     }

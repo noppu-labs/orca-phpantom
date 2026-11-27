@@ -180,8 +180,8 @@ function readOrcaVars(): Record<string, string> {
       context.fillStyle = colour;
       context.fillRect(0, 0, 1, 1);
     }
-    const [r, g, b] = context.getImageData(0, 0, 1, 1).data;
-    return `#${[r, g, b].map((n) => n.toString(HEX).padStart(2, '0')).join('')}`;
+    const [red, green, blue] = context.getImageData(0, 0, 1, 1).data;
+    return `#${[red, green, blue].map((channel) => channel.toString(HEX).padStart(2, '0')).join('')}`;
   };
   const valid = (value: string): boolean => value !== '' && CSS.supports('color', value);
   const background = style.getPropertyValue('--orca-background').trim();

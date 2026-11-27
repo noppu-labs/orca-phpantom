@@ -112,10 +112,10 @@ function quotedValue(rule: Rule): '"' | "'" | null {
   return null;
 }
 
-function bladeGrammar<C extends object, L extends MonarchLanguage>(html: {
-  conf: C;
-  language: L;
-}): { conf: C; language: L } {
+function bladeGrammar<Conf extends object, Lang extends MonarchLanguage>(html: {
+  conf: Conf;
+  language: Lang;
+}): { conf: Conf; language: Lang } {
   const language = structuredClone(html.language);
   const { tokenizer } = language;
   for (const [state, rules] of Object.entries(tokenizer)) {

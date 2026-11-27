@@ -343,14 +343,14 @@ function toCodeAction(
   };
 }
 
-const before = (a: LspPosition, b: LspPosition): boolean =>
-  a.line < b.line || (a.line === b.line && a.character < b.character);
+const before = (left: LspPosition, right: LspPosition): boolean =>
+  left.line < right.line || (left.line === right.line && left.character < right.character);
 
 /** The diagnostics that overlap or touch `range`, untouched: a code action request sends them back as sent. */
-function diagnosticsTouching<T extends { range: LspRange }>(
-  diagnostics: T[],
+function diagnosticsTouching<Diagnostic extends { range: LspRange }>(
+  diagnostics: Diagnostic[],
   range: LspRange
-): T[] {
+): Diagnostic[] {
   return diagnostics.filter(
     (diagnostic) =>
       !before(diagnostic.range.end, range.start) && !before(range.end, diagnostic.range.start)

@@ -60,13 +60,13 @@ const VERSION_PARTS = 3;
 const VERSION_TIMEOUT_MS = 5000;
 
 function atLeast(version: string, minimum: string): boolean {
-  const a = version.split('.').map(Number);
-  const b = minimum.split('.').map(Number);
-  for (let i = 0; i < VERSION_PARTS; i++) {
-    const x = a[i] ?? 0;
-    const y = b[i] ?? 0;
-    if (x !== y) {
-      return x > y;
+  const versionParts = version.split('.').map(Number);
+  const minimumParts = minimum.split('.').map(Number);
+  for (let index = 0; index < VERSION_PARTS; index++) {
+    const part = versionParts[index] ?? 0;
+    const minimumPart = minimumParts[index] ?? 0;
+    if (part !== minimumPart) {
+      return part > minimumPart;
     }
   }
   return true;

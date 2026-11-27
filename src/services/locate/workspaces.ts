@@ -73,9 +73,13 @@ function composerRoot(
     directory = parent;
   }
   // Why outermost first: the project's own vendor folder is the one nearest the workspace.
-  for (let i = chain.length - 1; i >= 0; i--) {
-    const parent = dirname(chain[i]);
-    if (basename(chain[i]) === 'vendor' && contains(workspacePath, parent) && hasComposer(parent)) {
+  for (let index = chain.length - 1; index >= 0; index--) {
+    const parent = dirname(chain[index]);
+    if (
+      basename(chain[index]) === 'vendor' &&
+      contains(workspacePath, parent) &&
+      hasComposer(parent)
+    ) {
       return parent;
     }
   }

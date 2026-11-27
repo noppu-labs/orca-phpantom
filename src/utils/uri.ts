@@ -14,7 +14,7 @@ function uriKey(uri: string): string {
   return /^\/[A-Za-z]:/u.test(path) ? path.toLowerCase() : path;
 }
 
-const sameUri = (a: string, b: string): boolean => uriKey(a) === uriKey(b);
+const sameUri = (left: string, right: string): boolean => uriKey(left) === uriKey(right);
 
 /** Whether `uri` names a file on disk, by its `file:` scheme in any case. */
 const isFileUri = (uri: string): boolean => /^file:/iu.test(uri);
