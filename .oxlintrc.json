@@ -184,7 +184,6 @@
         "eslint/no-void": "off",
         "eslint/prefer-destructuring": "off",
         "eslint/prefer-named-capture-group": "off",
-        "eslint/prefer-template": "off",
         "eslint/require-unicode-regexp": "off",
         "eslint/sort-keys": "off",
         "import/exports-last": "off",

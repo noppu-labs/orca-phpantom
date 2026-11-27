@@ -61,7 +61,7 @@ test('keeps everything in a file of mostly repeated lines', () => {
   const base = big(() => '    $x = 1;                      \n');
   const mine = base.replace('$x = 1;', '$x = mine;');
   const at = base.lastIndexOf('$x = 1;');
-  const outside = base.slice(0, at) + '$x = outside;' + base.slice(at + 7);
+  const outside = `${base.slice(0, at)}$x = outside;${base.slice(at + 7)}`;
   const merged = timed(base, outside, mine);
   assert.ok(merged.text.includes('$x = mine;') && merged.text.includes('$x = outside;'));
 });

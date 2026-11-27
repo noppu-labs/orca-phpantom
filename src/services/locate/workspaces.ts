@@ -45,7 +45,7 @@ function contains(root: string, path: string): boolean {
   return (
     path === root ||
     path.startsWith(root.endsWith(sep) || root.endsWith('/') ? root : root + sep) ||
-    path.startsWith(root + '/')
+    path.startsWith(`${root}/`)
   );
 }
 
@@ -60,7 +60,7 @@ export function composerRoot(
   exists: (path: string) => boolean = existsSync
 ): string {
   const hasComposer = (directory: string) =>
-    exists((directory.endsWith(sep) ? directory : directory + sep) + 'composer.json');
+    exists(`${directory.endsWith(sep) ? directory : directory + sep}composer.json`);
   const chain: string[] = [];
   let directory = dirname(filePath);
   while (contains(workspacePath, directory)) {

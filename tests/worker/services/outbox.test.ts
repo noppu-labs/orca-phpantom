@@ -40,7 +40,7 @@ test('keeps posts under the rate limit and delivers the last set', async () => {
       posts.filter((p) => p.panel === panel).at(-1)?.payload;
 
     for (let i = 0; i < 500; i++) {
-      outbox.send('p' + (i % 300), 'diag:' + (i % 300), 'phpantom.diagnostics', { n: i });
+      outbox.send(`p${i % 300}`, `diag:${i % 300}`, 'phpantom.diagnostics', { n: i });
       t += 5;
     }
     await flushTimers();
@@ -102,7 +102,7 @@ test('a diagnostics post under 240 KiB of JSON is still cut when Orca measures i
   const diagnostics = Array.from({ length: 2000 }, (_, i) => ({
     range: { start: { line: i, character: 0 }, end: { line: i, character: 5 } },
     severity: 1 + (i % 4),
-    message: 'm' + i,
+    message: `m${i}`,
   }));
   const whole = { docId: 'd1', diagnostics, truncated: 0 };
   assert.ok(Buffer.byteLength(JSON.stringify(whole)) < 240 * 1024);

@@ -99,9 +99,9 @@ test('a pending reveal path wins even inside vendor', async () => {
 
 test('a pending reveal path with edited text is found by likeness', async () => {
   const lines = Array.from({ length: 20 }, (_, i) => `$line${i} = ${i};`);
-  const a = await tree({ 'vendor/V.php': ['<?php', ...lines].join('\n') + '\n' });
+  const a = await tree({ 'vendor/V.php': `${['<?php', ...lines].join('\n')}\n` });
   const path = join(a, 'vendor/V.php');
-  const edited = ['<?php', ...lines.map((l, i) => (i < 2 ? `${l} // x` : l))].join('\n') + '\n';
+  const edited = `${['<?php', ...lines.map((l, i) => (i < 2 ? `${l} // x` : l))].join('\n')}\n`;
   try {
     assert.deepEqual(
       await locateFile({ tiers: [[a]], candidates: [path], language: 'php', content: edited }),
@@ -160,8 +160,8 @@ test('vendor and storage beside composer.json are skipped by the walk', async ()
 
 test('an edited document is found by likeness', async () => {
   const lines = Array.from({ length: 20 }, (_, i) => `$line${i} = ${i};`);
-  const original = ['<?php', ...lines].join('\n') + '\n';
-  const edited = ['<?php', ...lines.map((l, i) => (i < 2 ? `${l} // x` : l))].join('\n') + '\n';
+  const original = `${['<?php', ...lines].join('\n')}\n`;
+  const edited = `${['<?php', ...lines.map((l, i) => (i < 2 ? `${l} // x` : l))].join('\n')}\n`;
   const a = await tree({ 'a.php': original, 'b.php': '<?php\necho "unrelated";\n' });
   try {
     assert.deepEqual(
@@ -179,7 +179,7 @@ test('an edited document is found by likeness', async () => {
 });
 
 test('a byte order mark does not stop an exact match', async () => {
-  const a = await tree({ 'bom.php': '﻿' + SRC });
+  const a = await tree({ 'bom.php': `﻿${SRC}` });
   try {
     assert.deepEqual(
       await locateFile({ tiers: [[a]], candidates: [], language: 'php', content: SRC }),
@@ -302,7 +302,7 @@ test('a remembered path the walk cannot reach is found when its text matches exa
         candidates: [],
         known,
         language: 'php',
-        content: SRC + '// edited\n',
+        content: `${SRC}// edited\n`,
       }),
       { status: 'none' }
     );

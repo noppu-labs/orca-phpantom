@@ -176,7 +176,7 @@ test('integration: a paste over 64 KiB reaches PHPantom split into groups, and a
   ]);
   await until(async () => (await world.holds()) === doc.text, 'PHPantom to hold the pasted text');
   // A whole-text replace goes as a resync; typing after it goes on as changes.
-  doc.replaceAll(SAVED + '// replaced\n');
+  doc.replaceAll(`${SAVED}// replaced\n`);
   doc.edit(0, 0, '// top\n');
   await until(async () => (await world.holds()) === doc.text, 'PHPantom to hold the resynced text');
   assert.equal(

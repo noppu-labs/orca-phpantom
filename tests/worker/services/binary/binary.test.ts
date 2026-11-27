@@ -118,7 +118,7 @@ test('generated tar has valid ustar headers and an end marker', () => {
   assert.ok(archive.subarray(-1024).every((byte) => byte === 0));
 });
 test('round-trips content through every archive shape', () => {
-  const body = Buffer.from('z'.repeat(2000) + 'tail');
+  const body = Buffer.from(`${'z'.repeat(2000)}tail`);
   const files = { 'other.txt': 'skip me', 'phpantom_lsp': body };
   assert.equal(extractSingleFile(tarGz(files), 'tar.gz', 'phpantom_lsp').equals(body), true);
   assert.equal(

@@ -171,7 +171,7 @@ function rootOf(path: string, tiers: readonly (readonly string[])[]): string {
   let best = '';
   for (const root of tiers.flat()) {
     const prefix = root.endsWith(sep) || root.endsWith('/') ? root : root + sep;
-    if ((path.startsWith(prefix) || path.startsWith(root + '/')) && root.length > best.length) {
+    if ((path.startsWith(prefix) || path.startsWith(`${root}/`)) && root.length > best.length) {
       best = root;
     }
   }

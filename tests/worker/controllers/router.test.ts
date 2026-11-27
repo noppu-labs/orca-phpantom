@@ -1280,7 +1280,7 @@ test("three holders: the first expiring hands PHPantom the most recently seen te
     docId: 'f3',
     language: 'php',
     workspaceId: 'ws-a',
-    text: 'X' + saved,
+    text: `X${saved}`,
     panel: 'panel-3',
   });
   assert.deepEqual(
@@ -1293,12 +1293,12 @@ test("three holders: the first expiring hands PHPantom the most recently seen te
     }),
     { ok: true }
   );
-  assert.equal(await serverText(started), 'YX' + saved);
+  assert.equal(await serverText(started), `YX${saved}`);
   // F1 last seen 61 s ago, f2 51 s, f3 31 s: only f1 is past its lease.
   clock += 31_000;
   await router.sweep();
   assert.match(router.describe(), /2 open document\(s\)/);
-  assert.equal(await serverText(started), 'YX' + saved);
+  assert.equal(await serverText(started), `YX${saved}`);
 });
 
 test('a departing holder skips a holder waiting for its resync', async () => {
@@ -1340,7 +1340,7 @@ test('a departing holder skips a holder waiting for its resync', async () => {
     docId: 'f3',
     language: 'php',
     workspaceId: 'ws-a',
-    text: 'X' + saved,
+    text: `X${saved}`,
     panel: 'panel-3',
   });
   // F3's copy breaks (a wrong length) just before f1 leaves: its mirror is not the editor's text.
@@ -1357,7 +1357,7 @@ test('a departing holder skips a holder waiting for its resync', async () => {
   clock += 31_000;
   await router.sweep();
   assert.match(router.describe(), /2 open document\(s\)/);
-  assert.equal(await serverText(started), 'X' + saved);
+  assert.equal(await serverText(started), `X${saved}`);
 });
 
 test('a vendor file opened by navigation is found again after its document was released', async () => {

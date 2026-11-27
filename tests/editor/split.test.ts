@@ -39,7 +39,7 @@ test('split changes rebuild the same text', () => {
 });
 
 test('split full-text and lone-CR changes rebuild the same text', () => {
-  for (const big of ['line\r'.repeat(30_000) + 'é', 'a\r\n'.repeat(30_000)]) {
+  for (const big of [`${'line\r'.repeat(30_000)}é`, 'a\r\n'.repeat(30_000)]) {
     for (const change of [
       { text: big },
       { range: { start: { line: 1, character: 0 }, end: { line: 1, character: 1 } }, text: big },
@@ -101,7 +101,7 @@ test('chunkText pieces fit the budget and join back', () => {
 });
 
 test('an insertion after a lone CR whose text starts with LF rebuilds exactly', () => {
-  const change = ins(1, 0, '\n' + 'x\n'.repeat(3000));
+  const change = ins(1, 0, `\n${'x\n'.repeat(3000)}`);
   const expected = new DocumentMirror('a\rb\rc');
   expected.apply([change]);
   const actual = new DocumentMirror('a\rb\rc');
