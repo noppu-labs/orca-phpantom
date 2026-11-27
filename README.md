@@ -4,11 +4,11 @@ This plugin opens PHP files, Blade templates and Drupal's PHP files (`.module`, 
 rest) in [Orca](https://github.com/stablyai/orca) with an editor backed by the
 [PHPantom](https://github.com/PHPantom-dev/phpantom_lsp) language server. PHPantom understands
 Laravel, Symfony, WordPress, Drupal, Yii 3, Tempest, PHPUnit and Pest, and detects each one from
-the project, so there is nothing to set up. The editor follows Orca's theme, font and save
+the project, with nothing to switch on. The editor follows Orca's theme, font and save
 behaviour, and adds:
 
 - errors and warnings as you type, and completion that adds the `use` line for a class
-- hover, signature help, inlay hints, and go to definition (also into `vendor/`) and references
+- hover, signature help, inlay hints, go to definition (also into `vendor/`), find references
 - quick fixes, code actions, formatting, rename within the file, colouring and an outline
 
 ## Install
@@ -25,7 +25,7 @@ To try a branch, add it after an `@`, as in `orca plugin install noppu-labs/orca
 - Orca 1.4.259 or newer, desktop app. The plugin does not run in the web client.
 - Local workspaces. Files in SSH or other remote workspaces open with highlighting only.
 - PHPantom 1.1.0 or newer. You don't have to install it yourself (see below).
-- `php` on the `PATH` Orca starts with, needed only for PHPStan, PHPCS and PHPMD.
+- `php` on the `PATH` Orca starts with, for PHPStan, PHPCS, PHPMD and formatting with Pint, PHP CS Fixer or phpcbf.
 
 ## Frameworks
 
@@ -108,7 +108,7 @@ gaps. PHPMD, Mago and the settings below are PHPantom's documented behaviour, no
 | PHPStan | `vendor/bin/phpstan` (then `PATH`) exists and the project has a PHPStan config file or requires `phpstan/phpstan` or a Laravel PHPStan extension such as Larastan directly. A Laravel app with neither such an extension nor a config file is left alone | `[phpstan]` `command`, `memory-limit` (default `"1G"`), `timeout` (default `60000`) |
 | PHPCS | `vendor/bin/phpcs` or `phpcs` on `PATH` exists | `[phpcs]` `command`, `standard` (such as `"PSR12"`), `timeout` (default `30000`) |
 | PHPMD | PHPMD 3 is installed and the project has a PHPMD config file, or `ruleset` is set | `[phpmd]` `command`, `ruleset`, `timeout` (default `30000`) |
-| Mago | `mago.toml` is at the project root: `lint` runs when it has a `[linter]` table, `analyze` when it has `[analyzer]` | `[mago]` `command`, `lint`, `analyze` |
+| Mago | `mago.toml` is at the project root: `lint` runs when it has a `[linter]` table, `analyze` when it has `[analyzer]` (on a Laravel project, only if `mago.toml` also wires up an extension) | `[mago]` `command`, `lint`, `analyze` |
 
 PHPantom documents that `command = ""` switches a tool off and `command = "path/to/tool"` uses
 another binary, and that `[diagnostics]` `workspace = true` also checks unopened files in the
@@ -130,9 +130,12 @@ All the keys are in [PHPantom's configuration reference](https://phpantom-dev.gi
 | --- | --- | --- |
 | `.php` | PHPantom's editor | Includes Tempest's `.view.php` views |
 | `.blade.php` | PHPantom's Blade editor | |
-| `.module`, `.install`, `.theme`, `.profile`, `.inc`, `.engine` | PHPantom's editor | Drupal's PHP files. They open here in every project, and one that isn't PHP still shows as plain text; to see it in Orca's editor, pick Source with the view toggle. Outside a Drupal site, add them, without the dot, to `[indexing]` `extensions` in `.phpantom.toml` so PHPantom also indexes the ones you haven't opened |
+| `.module`, `.install`, `.theme`, `.profile`, `.inc`, `.engine` | PHPantom's editor | Drupal's PHP files, opened here in every project. One that isn't PHP shows as plain text, and PHPCS, if present, reports `Internal.NoCodeFound` on it; pick Source in the view toggle to use Orca's editor |
 | `.twig` | Orca's editor | Not supported yet, see [issue #3](https://github.com/noppu-labs/orca-phpantom/issues/3) |
 | `.yaml`, `.yml`, `.xml`, `.env` | Orca's editor | This plugin doesn't open them |
+
+Outside a Drupal site, list the extensions, without the dot, under `[indexing]` `extensions` in
+`.phpantom.toml` so PHPantom also indexes the files you haven't opened.
 
 ## Finding the PHPantom binary
 
@@ -144,15 +147,13 @@ The plugin uses the first `phpantom_lsp` it finds here:
 3. A copy it downloaded earlier.
 4. A fresh download of PHPantom 1.1.0 from GitHub, checked against its SHA-256, if `allowDownload` is on.
 
-If `phpantomPath` doesn't point at a working `phpantom_lsp`, the plugin shows an error and doesn't
-try the other places. A copy on `PATH` older than 1.1.0 is skipped. Downloads go to the plugin's
-cache folder (on macOS, `~/Library/Caches/noppu-labs.phpantom`). Hover the PHPantom item in the
-status bar to see which binary is in use.
+If `phpantomPath` doesn't point at a working `phpantom_lsp`, the plugin shows an error and stops
+there. A copy on `PATH` older than 1.1.0 is skipped. Downloads go to the plugin's cache folder (on
+macOS, `~/Library/Caches/noppu-labs.phpantom`); hover the status bar item for the version and its source.
 
 ## Commands
 
-- `PHPantom: Show status` (or a click on the status bar item) lists the binary, the running servers
-  and the open files with their error counts.
+- `PHPantom: Show status` (or a click on the status bar item) lists the binary, servers and open files.
 - `PHPantom: Restart language servers` stops every PHPantom the plugin started, and open editors
   start them again within seconds. Run it after installing PHPantom or after a failed download.
 
@@ -174,10 +175,9 @@ mode = "full"
 
 ## Using it with Autocomplete
 
-[Autocomplete](https://github.com/actus7/orca-autocomplete) also opens `.php` files in its own
-editor, so with both plugins on, only one of them opens a PHP file. Which one wins is not confirmed
-yet; see [docs/smoke/v1-smoke.md](docs/smoke/v1-smoke.md). To switch a file to PHPantom, use the
-view toggle at the top right of the editor tab, beside Source.
+[Autocomplete](https://github.com/actus7/orca-autocomplete) also opens `.php` files, so with both on
+only one of them opens a PHP file, and which one is not confirmed yet ([details](docs/smoke/v1-smoke.md)).
+To switch a file to PHPantom, use the view toggle at the top right of the editor tab, beside Source.
 
 ## Known gaps
 
@@ -211,8 +211,8 @@ view toggle at the top right of the editor tab, beside Source.
   `PHPantom: Restart language servers` retries at once.
 - A tab that was already open when the plugin loaded may not attach until you open it again.
 - A file changed on disk while its workspace is in the background updates only when you switch back.
-- Errors and warnings appear a moment after a file opens. In a big project the first completions
-  wait for indexing, which the status bar shows as `indexing`.
+- Errors and warnings appear a moment after a file opens. In a big project the first completions wait
+  for indexing, shown as `indexing` in the status bar.
 - PHPantom lets go of a file about three minutes after you close its tab or switch away from it.
 
 The test runs behind this README, with checklists for what needs a person at the keyboard, are in
