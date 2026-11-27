@@ -98,8 +98,8 @@ interface ValidArchive {
   kind: Kind;
   member: string;
   content: Buffer;
-  /** A copy cut short inside the archive, past the gzip framing a plain prefix dies at; `inData` cuts within the member's bytes. */
-  cutInside?: (at: number, inData: boolean) => Buffer;
+  /** A copy cut short inside the archive, past the first gate (gzip framing, the zip end record) that a plain prefix dies at; `inData` cuts within the member's bytes. */
+  cutInside: (at: number, inData: boolean) => Buffer;
 }
 
 const tarHolding = (content: Buffer, archive = tarGz({ phpantom_lsp: content })): ValidArchive => {
@@ -116,12 +116,25 @@ const tarHolding = (content: Buffer, archive = tarGz({ phpantom_lsp: content }))
   };
 };
 
-const zipHolding = (content: Buffer, archive: Buffer): ValidArchive => ({
-  archive,
-  kind: 'zip',
-  member: 'phpantom_lsp.exe',
-  content,
-});
+const zipHolding = (content: Buffer, archive: Buffer): ValidArchive => {
+  // One entry: a 30-byte local header, its name and extra field, then its data up to the central directory.
+  const dataAt = 30 + archive.readUInt16LE(26) + archive.readUInt16LE(28);
+  // The 22-byte end record holds the directory offset at its byte 16.
+  const directoryAt = archive.readUInt32LE(archive.length - 22 + 16);
+  return {
+    archive,
+    kind: 'zip',
+    member: 'phpantom_lsp.exe',
+    content,
+    cutInside: (at, inData) => {
+      // The local data is cut short; the directory and end record are kept, the end record pointing at the new offset.
+      const keep = inData ? dataAt + (at % (directoryAt - dataAt)) : at % directoryAt;
+      const shortened = Buffer.concat([archive.subarray(0, keep), archive.subarray(directoryAt)]);
+      shortened.writeUInt32LE(keep, shortened.length - 22 + 16);
+      return shortened;
+    },
+  };
+};
 
 /** A valid archive with one member, of either kind and either zip method. */
 const archive = fc.oneof(
@@ -139,9 +152,9 @@ test('a truncated copy of a valid archive never returns different bytes', () => 
     fc.property(archive, fc.nat(), cut, (valid, at, where) => {
       assert.deepEqual(extractSingleFile(valid.archive, valid.kind, valid.member), valid.content);
       const truncated =
-        where !== 'prefix' && valid.cutInside !== undefined
-          ? valid.cutInside(at, where === 'in-member-data')
-          : valid.archive.subarray(0, at % valid.archive.length);
+        where === 'prefix'
+          ? valid.archive.subarray(0, at % valid.archive.length)
+          : valid.cutInside(at, where === 'in-member-data');
       const result = attempt(truncated, valid.kind, valid.member);
       if (!(result instanceof Error)) assert.deepEqual(result, valid.content);
     })
