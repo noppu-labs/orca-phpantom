@@ -2,7 +2,7 @@ import type { DocumentSource, SourceChange } from '../../editor/src/bridge.ts';
 // A DocumentSource over a plain string, reporting edits the way Monaco does, for bridge tests.
 import type { Language, LspPosition } from '../../src/protocol.ts';
 
-export type FakeSource = DocumentSource & {
+type FakeSource = DocumentSource & {
   readonly text: string;
   /** One edit, in offsets of the current text. */
   edit(start: number, end: number, insert: string): void;
@@ -11,7 +11,7 @@ export type FakeSource = DocumentSource & {
   replaceAll(text: string): void;
 };
 
-export function source(initial: string, language: Language = 'php'): FakeSource {
+function source(initial: string, language: Language = 'php'): FakeSource {
   let value = initial;
   let version = 1;
   const listeners = new Set<(changes: SourceChange[], isFlush: boolean) => void>();
@@ -63,3 +63,6 @@ export function source(initial: string, language: Language = 'php'): FakeSource 
     },
   };
 }
+
+export { source };
+export type { FakeSource };

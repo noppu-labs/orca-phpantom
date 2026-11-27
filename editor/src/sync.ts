@@ -1,14 +1,14 @@
 import { smallestEdit, type Splice } from './edits.ts';
 import { mergeText } from './merge.ts';
 
-export interface TextView {
+interface TextView {
   getValue(): string;
   applyOutside(splice: Splice): void;
   onUserChange(listener: () => void): { dispose(): void };
 }
 
 /** Keeps `view` and the Orca document in sync; resolves once the first document is in. */
-export async function bindDocument(
+async function bindDocument(
   view: TextView,
   options: { onConflicts?(count: number): void } = {}
 ): Promise<{ readOnly: boolean; initial: string; flush(): void; dispose(): void }> {
@@ -68,7 +68,7 @@ type VisibilityTarget = EventTarget & { readonly visibilityState: DocumentVisibi
  * Calls `flush` when the page hides or goes away. Why: Orca may tear the frame down on a tab switch, and an
  * edit still inside the session's debounce (250 ms) would never reach Orca.
  */
-export function flushWhenHidden(
+function flushWhenHidden(
   flush: () => void,
   win: EventTarget,
   page: VisibilityTarget
@@ -92,3 +92,6 @@ export function flushWhenHidden(
     },
   };
 }
+
+export { bindDocument, flushWhenHidden };
+export type { TextView };

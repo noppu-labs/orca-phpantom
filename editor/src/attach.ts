@@ -72,7 +72,7 @@ function showStatus(status: AttachStatus): void {
   }
 }
 
-export function attachLanguageServer(ctx: EditorContext): LspBridge {
+function attachLanguageServer(ctx: EditorContext): LspBridge {
   const { editor, docId } = ctx;
   const bridge = new LspBridge(frameHost(), modelSource(ctx), { docId });
   showDiagnostics(ctx, bridge);
@@ -128,3 +128,5 @@ export function attachLanguageServer(ctx: EditorContext): LspBridge {
   });
   return bridge;
 }
+
+export { attachLanguageServer };

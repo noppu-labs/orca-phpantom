@@ -1,7 +1,7 @@
 // Adapted from actus7/orca-autocomplete editor/src/edits.ts @ da5a680 (MIT). See THIRD_PARTY_NOTICES.md.
 // Pure text helpers for the editor; no Monaco here so Node can test them.
 
-export interface Splice {
+interface Splice {
   start: number;
   end: number;
   text: string;
@@ -14,7 +14,7 @@ const isHighSurrogate = (code: number): boolean => code >= 0xd8_00 && code <= 0x
  * Applying it instead of replacing everything keeps the cursor, the scroll position and the undo
  * stack when the file changes underneath the editor.
  */
-export function smallestEdit(before: string, after: string): Splice | null {
+function smallestEdit(before: string, after: string): Splice | null {
   if (before === after) {
     return null;
   }
@@ -47,3 +47,6 @@ export function smallestEdit(before: string, after: string): Splice | null {
   }
   return { start, end: endBefore, text: after.slice(start, endAfter) };
 }
+
+export { smallestEdit };
+export type { Splice };

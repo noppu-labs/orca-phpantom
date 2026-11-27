@@ -4,15 +4,15 @@ import { sameUri } from '../../src/utils/uri.ts';
 
 // Conversions between the Language Server Protocol and Monaco. Pure data in, pure data out, so Node can test them: the Monaco-aware code only wraps these.
 
-export interface LspPosition {
+interface LspPosition {
   line: number;
   character: number;
 }
-export interface LspRange {
+interface LspRange {
   start: LspPosition;
   end: LspPosition;
 }
-export interface MonacoRange {
+interface MonacoRange {
   startLineNumber: number;
   startColumn: number;
   endLineNumber: number;
@@ -20,25 +20,25 @@ export interface MonacoRange {
 }
 
 // LSP positions count from 0 and Monaco's from 1; both measure columns in UTF-16 code units.
-export const toLspPosition = (position: { lineNumber: number; column: number }): LspPosition => ({
+const toLspPosition = (position: { lineNumber: number; column: number }): LspPosition => ({
   line: position.lineNumber - 1,
   character: position.column - 1,
 });
 
-export const fromLspRange = (range: LspRange): MonacoRange => ({
+const fromLspRange = (range: LspRange): MonacoRange => ({
   startLineNumber: range.start.line + 1,
   startColumn: range.start.character + 1,
   endLineNumber: range.end.line + 1,
   endColumn: range.end.character + 1,
 });
 
-export const toLspRange = (range: MonacoRange): LspRange => ({
+const toLspRange = (range: MonacoRange): LspRange => ({
   start: { line: range.startLineNumber - 1, character: range.startColumn - 1 },
   end: { line: range.endLineNumber - 1, character: range.endColumn - 1 },
 });
 
 /** One of Monaco's content changes as an LSP incremental change; Monaco's ranges are against the text before it. */
-export const toLspContentChange = (change: {
+const toLspContentChange = (change: {
   range: MonacoRange;
   text: string;
 }): Extract<LspContentChange, { range: unknown }> => ({
@@ -47,7 +47,7 @@ export const toLspContentChange = (change: {
 });
 
 /** LSP severity (1 error ... 4 hint) as Monaco's MarkerSeverity (8, 4, 2, 1). */
-export function markerSeverity(severity: number | undefined): number {
+function markerSeverity(severity: number | undefined): number {
   switch (severity) {
     case 2: {
       return 4;
@@ -64,7 +64,7 @@ export function markerSeverity(severity: number | undefined): number {
   }
 }
 
-export interface LspDiagnostic {
+interface LspDiagnostic {
   range: LspRange;
   severity?: number;
   code?: string | number | { value: string | number };
@@ -74,7 +74,7 @@ export interface LspDiagnostic {
 }
 
 /** A diagnostic as a Monaco marker. Tags (unnecessary code, deprecated) use the same numbers in both. */
-export function toMarker(diagnostic: LspDiagnostic) {
+function toMarker(diagnostic: LspDiagnostic) {
   const code = typeof diagnostic.code === 'object' ? diagnostic.code.value : diagnostic.code;
   return {
     ...fromLspRange(diagnostic.range),
@@ -115,7 +115,7 @@ const COMPLETION_KIND_NAMES: Record<number, string> = {
 };
 
 /** The name of Monaco's CompletionItemKind member for an LSP kind. */
-export const completionKindName = (kind: number | undefined): string =>
+const completionKindName = (kind: number | undefined): string =>
   COMPLETION_KIND_NAMES[kind ?? 1] ?? 'Text';
 
 type MarkedString = string | { language: string; value: string };
@@ -125,9 +125,7 @@ interface Markup {
 }
 
 /** Hover and documentation text of any LSP shape as Markdown. */
-export function toMarkdown(
-  contents: MarkedString | MarkedString[] | Markup | undefined | null
-): string[] {
+function toMarkdown(contents: MarkedString | MarkedString[] | Markup | undefined | null): string[] {
   if (contents === undefined || contents === null) {
     return [];
   }
@@ -149,22 +147,22 @@ function escapeMarkdown(text: string): string {
   return text.replaceAll(/([\\`*_{}[\]()#+\-.!|>])/g, String.raw`\$1`);
 }
 
-export interface LspTextEdit {
+interface LspTextEdit {
   range: LspRange;
   newText: string;
 }
 
-export const toMonacoEdit = (edit: LspTextEdit) => ({
+const toMonacoEdit = (edit: LspTextEdit) => ({
   range: fromLspRange(edit.range),
   text: edit.newText,
 });
 
-export type LspLocation =
+type LspLocation =
   | { uri: string; range: LspRange }
   | { targetUri: string; targetSelectionRange: LspRange; targetRange: LspRange };
 
 /** Locations (or links) as plain {uri, range}, whichever shape the server used, or none. */
-export function normalizeLocations(result: unknown): { uri: string; range: MonacoRange }[] {
+function normalizeLocations(result: unknown): { uri: string; range: MonacoRange }[] {
   const list = Array.isArray(result) ? result : result ? [result] : [];
   return (list as LspLocation[]).map((item) =>
     'targetUri' in item
@@ -180,13 +178,13 @@ interface LspFileOperation {
   newUri?: string;
 }
 
-export interface LspWorkspaceEdit {
+interface LspWorkspaceEdit {
   changes?: Record<string, LspTextEdit[]>;
   documentChanges?: ({ textDocument: { uri: string }; edits: LspTextEdit[] } | LspFileOperation)[];
 }
 
 /** Splits a workspace edit into edits for the open document and the number of other files it touches. */
-export function splitWorkspaceEdit(edit: LspWorkspaceEdit | null | undefined, documentUri: string) {
+function splitWorkspaceEdit(edit: LspWorkspaceEdit | null | undefined, documentUri: string) {
   const byUri = new Map<string, LspTextEdit[]>();
   let fileOperations = 0;
   for (const [uri, edits] of Object.entries(edit?.changes ?? {})) {
@@ -210,7 +208,7 @@ export function splitWorkspaceEdit(edit: LspWorkspaceEdit | null | undefined, do
   return { own: own.map(toMonacoEdit), otherFiles };
 }
 
-export interface MonacoWorkspaceEdit {
+interface MonacoWorkspaceEdit {
   edits: {
     resource: string;
     textEdit: { range: MonacoRange; text: string };
@@ -219,7 +217,7 @@ export interface MonacoWorkspaceEdit {
 }
 
 // oxlint-disable-next-line typescript/consistent-type-definitions -- needs an implicit index signature
-export type LspCodeAction = {
+type LspCodeAction = {
   title: string;
   kind?: string;
   isPreferred?: boolean;
@@ -235,7 +233,7 @@ export type LspCodeAction = {
  * command (no edit, no data) is null: the server's commands mean nothing to Monaco. `versionId` is the
  * model version the action was computed against: Monaco refuses the edit once the model has moved.
  */
-export function toCodeAction(
+function toCodeAction(
   action: LspCodeAction,
   documentUri: string,
   modelUri: string,
@@ -263,7 +261,7 @@ const before = (a: LspPosition, b: LspPosition): boolean =>
   a.line < b.line || (a.line === b.line && a.character < b.character);
 
 /** The diagnostics that overlap or touch `range`, untouched: a code action request sends them back as sent. */
-export function diagnosticsTouching<T extends { range: LspRange }>(
+function diagnosticsTouching<T extends { range: LspRange }>(
   diagnostics: T[],
   range: LspRange
 ): T[] {
@@ -273,7 +271,7 @@ export function diagnosticsTouching<T extends { range: LspRange }>(
   );
 }
 
-export interface LspSymbol {
+interface LspSymbol {
   name: string;
   detail?: string;
   kind: number;
@@ -285,7 +283,7 @@ export interface LspSymbol {
 }
 
 /** Document symbols (tree or flat list) in Monaco's shape. LSP's symbol kinds are Monaco's plus one. */
-export function toDocumentSymbols(symbols: LspSymbol[] | null | undefined): unknown[] {
+function toDocumentSymbols(symbols: LspSymbol[] | null | undefined): unknown[] {
   return (symbols ?? []).map((symbol) => {
     const range = fromLspRange(
       symbol.range ??
@@ -307,14 +305,12 @@ export function toDocumentSymbols(symbols: LspSymbol[] | null | undefined): unkn
 }
 
 /** Hover or documentation text of any LSP shape as one Markdown value, or undefined when there is none. */
-export function markdownValue(
-  contents: Parameters<typeof toMarkdown>[0]
-): { value: string } | undefined {
+function markdownValue(contents: Parameters<typeof toMarkdown>[0]): { value: string } | undefined {
   const text = toMarkdown(contents).join('\n\n');
   return text ? { value: text } : undefined;
 }
 
-export interface LspCompletionDetails {
+interface LspCompletionDetails {
   detail?: string;
   documentation?: Parameters<typeof toMarkdown>[0];
   additionalTextEdits?: LspTextEdit[];
@@ -325,7 +321,7 @@ export interface LspCompletionDetails {
  * above all, the edits that go with picking it (the import that makes a symbol from another file usable).
  * Only what the server gave is returned, so nothing already known is overwritten with nothing.
  */
-export function completionDetails(resolved: LspCompletionDetails | null | undefined) {
+function completionDetails(resolved: LspCompletionDetails | null | undefined) {
   if (!resolved) {
     return {};
   }
@@ -340,7 +336,7 @@ export function completionDetails(resolved: LspCompletionDetails | null | undefi
 }
 
 /** A completion label, with PHPantom's signature (`detail`) and class (`description`) when it sent them. */
-export function toCompletionLabel(item: {
+function toCompletionLabel(item: {
   label: string;
   labelDetails?: { detail?: string; description?: string };
 }): string | { label: string; detail?: string; description?: string } {
@@ -355,7 +351,7 @@ export function toCompletionLabel(item: {
   };
 }
 
-export interface LspInlayHint {
+interface LspInlayHint {
   position: LspPosition;
   label: string | { value: string; tooltip?: string }[];
   kind?: 1 | 2;
@@ -365,7 +361,7 @@ export interface LspInlayHint {
 }
 
 /** An inlay hint in Monaco's shape. Both number their kinds the same way: 1 type, 2 parameter. */
-export function toInlayHint(hint: LspInlayHint): {
+function toInlayHint(hint: LspInlayHint): {
   label: string | { label: string; tooltip?: string }[];
   position: { lineNumber: number; column: number };
   kind?: 1 | 2;
@@ -401,7 +397,7 @@ const tooltipText = (tooltip: unknown): string =>
     : String((tooltip as { value?: unknown } | null)?.value ?? '');
 
 /** A full semantic tokens answer as Monaco takes it; null when there is none. */
-export function toSemanticTokens(
+function toSemanticTokens(
   result: { data: number[]; resultId?: string } | null
 ): { data: Uint32Array; resultId?: string } | null {
   if (!result || !Array.isArray(result.data)) {
@@ -417,7 +413,42 @@ export function toSemanticTokens(
  * Whether to ask for inlay hints: when the server offers them, and not in Blade, where PHPantom 1.1.0
  * hints its compiled view (`value:` after each `{{`, `args:` inside directives) rather than the code.
  */
-export const inlayHintsWanted = (
-  language: string,
-  capabilities: Record<string, unknown>
-): boolean => Boolean(capabilities.inlayHintProvider) && language !== 'blade';
+const inlayHintsWanted = (language: string, capabilities: Record<string, unknown>): boolean =>
+  Boolean(capabilities.inlayHintProvider) && language !== 'blade';
+
+export {
+  toLspPosition,
+  fromLspRange,
+  toLspRange,
+  toLspContentChange,
+  markerSeverity,
+  toMarker,
+  completionKindName,
+  toMarkdown,
+  toMonacoEdit,
+  normalizeLocations,
+  splitWorkspaceEdit,
+  toCodeAction,
+  diagnosticsTouching,
+  toDocumentSymbols,
+  markdownValue,
+  completionDetails,
+  toCompletionLabel,
+  toInlayHint,
+  toSemanticTokens,
+  inlayHintsWanted,
+};
+export type {
+  LspPosition,
+  LspRange,
+  MonacoRange,
+  LspDiagnostic,
+  LspTextEdit,
+  LspLocation,
+  LspWorkspaceEdit,
+  MonacoWorkspaceEdit,
+  LspCodeAction,
+  LspSymbol,
+  LspCompletionDetails,
+  LspInlayHint,
+};

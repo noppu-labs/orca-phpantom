@@ -2,7 +2,7 @@
 // A minimal JSON-RPC 2.0 connection over the framing every language server uses on stdio:
 // `Content-Length: n`, a blank line, then n bytes of JSON.
 
-export interface RpcHandlers {
+interface RpcHandlers {
   /** A request the server makes of us (configuration, registering capabilities ...); its result is the answer. */
   onRequest(method: string, params: unknown): Promise<unknown> | unknown;
   onNotification(method: string, params: unknown): void;
@@ -28,7 +28,7 @@ class RpcError extends Error {
   }
 }
 
-export class RpcConnection {
+class RpcConnection {
   private buffer: Buffer = Buffer.alloc(0);
   private nextId = 1;
   private readonly pending = new Map<number, Pending>();
@@ -168,3 +168,6 @@ export class RpcConnection {
     }
   }
 }
+
+export { RpcConnection };
+export type { RpcHandlers };

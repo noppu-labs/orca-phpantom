@@ -13,7 +13,7 @@ function container(): HTMLElement {
   return element;
 }
 
-export function showNote(kind: 'info' | 'warning', text: string, key: string): void {
+function showNote(kind: 'info' | 'warning', text: string, key: string): void {
   let note = notes.get(key);
   if (!note) {
     const element = document.createElement('div');
@@ -36,7 +36,9 @@ export function showNote(kind: 'info' | 'warning', text: string, key: string): v
   note.text.textContent = text;
 }
 
-export function clearNote(key: string): void {
+function clearNote(key: string): void {
   notes.get(key)?.element.remove();
   notes.delete(key);
 }
+
+export { showNote, clearNote };

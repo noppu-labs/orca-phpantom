@@ -1,7 +1,7 @@
 // What this client tells PHPantom it can do. Pull diagnostics are deliberately absent: with
 // `textDocument.diagnostic` missing the server pushes `textDocument/publishDiagnostics` instead.
 
-export const SEMANTIC_TOKEN_TYPES = [
+const SEMANTIC_TOKEN_TYPES = [
   'namespace',
   'class',
   'interface',
@@ -19,7 +19,7 @@ export const SEMANTIC_TOKEN_TYPES = [
   'comment',
 ];
 
-export const SEMANTIC_TOKEN_MODIFIERS = [
+const SEMANTIC_TOKEN_MODIFIERS = [
   'declaration',
   'static',
   'readonly',
@@ -29,7 +29,7 @@ export const SEMANTIC_TOKEN_MODIFIERS = [
   'defaultLibrary',
 ];
 
-export const CLIENT_CAPABILITIES = {
+const CLIENT_CAPABILITIES = {
   general: { positionEncodings: ['utf-16'] },
   window: { workDoneProgress: true },
   workspace: {
@@ -87,3 +87,5 @@ export const CLIENT_CAPABILITIES = {
     },
   },
 };
+
+export { SEMANTIC_TOKEN_TYPES, SEMANTIC_TOKEN_MODIFIERS, CLIENT_CAPABILITIES };

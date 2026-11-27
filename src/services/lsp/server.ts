@@ -6,9 +6,9 @@ import type { ServerState } from '../status.ts';
 import { CLIENT_CAPABILITIES } from './capabilities.ts';
 import { RpcConnection } from './jsonrpc.ts';
 
-export type RefreshKind = 'semanticTokens' | 'inlayHints' | 'codeLens' | 'diagnostics';
+type RefreshKind = 'semanticTokens' | 'inlayHints' | 'codeLens' | 'diagnostics';
 
-export interface ServerEvents {
+interface ServerEvents {
   diagnostics(uri: string, diagnostics: unknown[]): void;
   progress(state: ServerState): void;
   refresh(kind: RefreshKind): void;
@@ -16,7 +16,7 @@ export interface ServerEvents {
   exit(reason: string): void;
 }
 
-export interface PhpantomServerOptions {
+interface PhpantomServerOptions {
   executable: string;
   root: string;
   events: ServerEvents;
@@ -51,7 +51,7 @@ async function delay(ms: number): Promise<'timeout'> {
   );
 }
 
-export class PhpantomServer {
+class PhpantomServer {
   capabilities: Record<string, unknown> = {};
   private readonly options: PhpantomServerOptions;
   private readonly stderrTail: string[] = [];
@@ -282,3 +282,6 @@ export class PhpantomServer {
     }
   }
 }
+
+export { PhpantomServer };
+export type { RefreshKind, ServerEvents, PhpantomServerOptions };

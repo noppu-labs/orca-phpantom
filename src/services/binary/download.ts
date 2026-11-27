@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 
 /** Downloads `url` and returns the body only when its SHA-256 is `sha256`. */
-export async function downloadVerified(
+async function downloadVerified(
   url: string,
   sha256: string,
   fetchImpl: typeof fetch = fetch
@@ -21,3 +21,5 @@ export async function downloadVerified(
   }
   return Buffer.concat(chunks);
 }
+
+export { downloadVerified };

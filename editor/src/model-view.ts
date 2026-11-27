@@ -7,11 +7,11 @@
 import { smallestEdit, type Splice } from './edits.ts';
 import type { TextView } from './sync.ts';
 
-export type Eol = '\n' | '\r\n';
+type Eol = '\n' | '\r\n';
 const BOM = '﻿';
 
 /** The parts of a Monaco text model this needs; offsets never count the BOM. */
-export interface ModelPort {
+interface ModelPort {
   /** `model.getValue()`: the text without the BOM, in the model's line ending. */
   getText(): string;
   getEol(): Eol;
@@ -25,13 +25,13 @@ export interface ModelPort {
   onDidChangeContent(listener: () => void): { dispose(): void };
 }
 
-export type ModelView = TextView & {
+type ModelView = TextView & {
   /** Puts the first document in without sending it back and without an undo step to empty it. */
   load(initial: string): void;
 };
 
 /** The line ending Monaco picks for a whole text: CRLF when more than half the line breaks have a `\r`. */
-export function monacoEol(text: string, fallback: Eol): Eol {
+function monacoEol(text: string, fallback: Eol): Eol {
   let breaks = 0;
   let withCr = 0;
   for (let i = 0; i < text.length; i++) {
@@ -48,9 +48,9 @@ export function monacoEol(text: string, fallback: Eol): Eol {
   return withCr > breaks / 2 ? '\r\n' : '\n';
 }
 
-export const normalizeEol = (text: string, eol: Eol): string => text.replaceAll(/\r\n|\r|\n/g, eol);
+const normalizeEol = (text: string, eol: Eol): string => text.replaceAll(/\r\n|\r|\n/g, eol);
 
-export function modelView(port: ModelPort): ModelView {
+function modelView(port: ModelPort): ModelView {
   let bom = '';
   // True while text from Orca goes in, so it is not taken for typing and sent back.
   let applying = false;
@@ -109,3 +109,6 @@ export function modelView(port: ModelPort): ModelView {
   };
   return view;
 }
+
+export { monacoEol, normalizeEol, modelView };
+export type { Eol, ModelPort, ModelView };

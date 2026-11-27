@@ -4,7 +4,7 @@
 // Monarch quirks the rules below depend on: a rule only matches at the current position (no lookbehind past it), `@name` in a regex expands a grammar attribute so a literal `@` is written
 // `@@`, and the first matching rule of a state wins.
 
-export interface MonarchLanguage {
+interface MonarchLanguage {
   tokenizer: Record<string, unknown[]>;
 }
 type Rule = unknown;
@@ -111,7 +111,7 @@ function quotedValue(rule: Rule): '"' | "'" | null {
   return null;
 }
 
-export function bladeGrammar<C extends object, L extends MonarchLanguage>(html: {
+function bladeGrammar<C extends object, L extends MonarchLanguage>(html: {
   conf: C;
   language: L;
 }): { conf: C; language: L } {
@@ -184,3 +184,6 @@ export function bladeGrammar<C extends object, L extends MonarchLanguage>(html: 
     language,
   };
 }
+
+export { bladeGrammar };
+export type { MonarchLanguage };

@@ -14,14 +14,10 @@ interface Location {
   range: MonacoRange;
 }
 
-export const NAVIGATION_NOTE = 'phpantom-navigation';
+const NAVIGATION_NOTE = 'phpantom-navigation';
 
 /** Results in the open document point at the editor's model; the rest keep their `file:` URIs. */
-export function mapLocations(
-  locations: Location[],
-  documentUri: string,
-  modelUri: string
-): Location[] {
+function mapLocations(locations: Location[], documentUri: string, modelUri: string): Location[] {
   return locations.map((location) =>
     sameUri(location.uri, documentUri) ? { ...location, uri: modelUri } : location
   );
@@ -31,7 +27,7 @@ export function mapLocations(
  * After a peek: the locations to show, and how many were left out because their file was asked for and
  * not read. `keepUnread` keeps them all: a definition is gone to through the opener, which needs no preview.
  */
-export function afterPeek(
+function afterPeek(
   locations: Location[],
   asked: string[],
   read: string[],
@@ -48,22 +44,22 @@ export function afterPeek(
 const PEEK_MAX_FILES = 25;
 
 /** The files one peek asks for. Pass the whole list to `afterPeek`, so locations in the rest are left out with a note. */
-export const peekBatch = (wanted: string[]): string[] => wanted.slice(0, PEEK_MAX_FILES);
+const peekBatch = (wanted: string[]): string[] => wanted.slice(0, PEEK_MAX_FILES);
 
-export const moreResultsNote = (count: number): string =>
+const moreResultsNote = (count: number): string =>
   count === 1
     ? '1 more result is in a file not shown here.'
     : `${count} more results are in files not shown here.`;
 
-export const cutResultsNote = (shown: number, cut: number): string =>
+const cutResultsNote = (shown: number, cut: number): string =>
   `Showing the first ${shown} ${shown === 1 ? 'result' : 'results'}; ${cut} more ${cut === 1 ? 'was' : 'were'} cut.`;
 
 /** The note for a query whose list was cut: counts what is shown, and is null (clear the note) when nothing was cut. */
-export const cutNoteFor = (shown: number, cut: number): string | null =>
+const cutNoteFor = (shown: number, cut: number): string | null =>
   cut > 0 ? cutResultsNote(shown, cut) : null;
 
 /** The models made for previews, at most `limit` of them; the least recently used goes first. */
-export class PeekModels {
+class PeekModels {
   private readonly create: (uri: string, text: string) => Disposable;
   private readonly limit: number;
   /** In use order, oldest first. */
@@ -121,7 +117,7 @@ const NAVIGATE_NOTES = {
  * list) as an Orca tab instead; the tab gets its reveal when it attaches. The model's own URI is left
  * to Monaco, which moves the cursor in this editor.
  */
-export function installOpener(ctx: EditorContext, bridge: LspBridge): Disposable {
+function installOpener(ctx: EditorContext, bridge: LspBridge): Disposable {
   const { monaco, model } = ctx;
   return monaco.editor.registerEditorOpener({
     async openCodeEditor(_source, resource, selectionOrPosition) {
@@ -143,3 +139,15 @@ export function installOpener(ctx: EditorContext, bridge: LspBridge): Disposable
     },
   });
 }
+
+export {
+  NAVIGATION_NOTE,
+  mapLocations,
+  afterPeek,
+  peekBatch,
+  moreResultsNote,
+  cutResultsNote,
+  cutNoteFor,
+  PeekModels,
+  installOpener,
+};

@@ -54,7 +54,7 @@ const SERVER_NAME = 'PHPantom';
 const diagnosticsByModel = new WeakMap<Model, LspDiagnostic[]>();
 
 /** The diagnostics PHPantom last published for `model`, as it sent them; code actions send them back. */
-export function diagnosticsOf(model: Model): LspDiagnostic[] {
+function diagnosticsOf(model: Model): LspDiagnostic[] {
   return diagnosticsByModel.get(model) ?? [];
 }
 
@@ -62,7 +62,7 @@ export function diagnosticsOf(model: Model): LspDiagnostic[] {
  * Keeps PHPantom's diagnostics for this editor and shows them as markers. Call it before attaching:
  * PHPantom publishes while the open is still answering, before any provider is registered.
  */
-export function showDiagnostics(ctx: EditorContext, bridge: LspBridge): Disposable {
+function showDiagnostics(ctx: EditorContext, bridge: LspBridge): Disposable {
   const set = (diagnostics: LspDiagnostic[]): void => {
     diagnosticsByModel.set(ctx.model, diagnostics);
     ctx.monaco.editor.setModelMarkers(ctx.model, MARKER_OWNER, diagnostics.map(toMarker));
@@ -109,7 +109,7 @@ function disposeAll(list: Disposable[]): Disposable {
   };
 }
 
-export function registerReadingProviders(
+function registerReadingProviders(
   ctx: EditorContext,
   bridge: LspBridge,
   capabilities: Record<string, unknown>
@@ -356,13 +356,13 @@ const FORMAT_TIMEOUT_MS = 60_000;
 const EDIT_NOTE = 'phpantom-edit';
 const OTHER_FILES_FIX = "This fix also changes other files, which isn't supported yet.";
 const MOVED_FIX = 'The file changed after this fix was offered. Ask for it again.';
-export const renameReachesOtherFiles = (count: number): string =>
+const renameReachesOtherFiles = (count: number): string =>
   `Renaming here would also change ${count} other ${count === 1 ? 'file' : 'files'}. Cross-file rename isn't supported yet.`;
 
 /** Blade or PHP by the file name, as PHPantom tells them apart. */
 const languageOfUri = (uri: string): string => (/\.blade\.php$/i.test(uri) ? 'blade' : 'php');
 
-export function registerEditingProviders(
+function registerEditingProviders(
   ctx: EditorContext,
   bridge: LspBridge,
   capabilities: Record<string, unknown>
@@ -707,3 +707,11 @@ export function registerEditingProviders(
 
   return disposeAll(registered);
 }
+
+export {
+  diagnosticsOf,
+  showDiagnostics,
+  registerReadingProviders,
+  renameReachesOtherFiles,
+  registerEditingProviders,
+};

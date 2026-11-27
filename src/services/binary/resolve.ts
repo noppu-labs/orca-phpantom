@@ -7,11 +7,11 @@ import { extractSingleFile } from './extract.ts';
 import { atLeast, findExecutable, readVersion, wellKnownDirs } from './find.ts';
 import { assetFor, downloadUrl, PHPANTOM_VERSION, type ReleaseAsset } from './release.ts';
 
-export type Resolution =
+type Resolution =
   | { ok: true; path: string; version: string; source: 'setting' | 'path' | 'cache' | 'download' }
   | { ok: false; message: string };
 
-export function cacheDir(env: NodeJS.ProcessEnv, platform: string, home: string): string {
+function cacheDir(env: NodeJS.ProcessEnv, platform: string, home: string): string {
   if (platform === 'win32') {
     return win32.join(
       env.LOCALAPPDATA ?? win32.join(home, 'AppData', 'Local'),
@@ -25,7 +25,7 @@ export function cacheDir(env: NodeJS.ProcessEnv, platform: string, home: string)
   return posix.join(env.XDG_CACHE_HOME || posix.join(home, '.cache'), 'noppu-labs.phpantom');
 }
 
-export interface ResolveOptions {
+interface ResolveOptions {
   settingPath: string;
   allowDownload: boolean;
   env: NodeJS.ProcessEnv;
@@ -42,7 +42,7 @@ export interface ResolveOptions {
 
 const inFlight = new Map<string, Promise<Resolution>>();
 
-export async function resolveBinary(options: ResolveOptions): Promise<Resolution> {
+async function resolveBinary(options: ResolveOptions): Promise<Resolution> {
   const read = options.readVersionImpl ?? readVersion;
   const flavour = options.platform === 'win32' ? win32 : posix;
 
@@ -143,3 +143,6 @@ async function download(
     };
   }
 }
+
+export { cacheDir, resolveBinary };
+export type { Resolution, ResolveOptions };

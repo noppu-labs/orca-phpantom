@@ -5,7 +5,7 @@
 import { fitsIn, orcaSize, type Size } from '../utils/size.ts';
 
 // Orca drops a post over 256 KiB or 10,000 objects by its own measure; this leaves room for what it may miss.
-export interface OutboxOptions {
+interface OutboxOptions {
   windowMs?: number;
   maxPosts?: number;
   maxBytes?: number;
@@ -31,7 +31,7 @@ function severityOf(diagnostic: unknown): number {
   return typeof severity === 'number' ? severity : 1;
 }
 
-export class Outbox {
+class Outbox {
   private readonly post: PostFn;
   private readonly windowMs: number;
   private readonly maxPosts: number;
@@ -169,3 +169,6 @@ export class Outbox {
     };
   }
 }
+
+export { Outbox };
+export type { OutboxOptions };

@@ -1,7 +1,7 @@
 import { inflateRawSync, gunzipSync } from 'node:zlib';
 
 /** The one file `member` from a tar.gz or zip, using Node builtins only. */
-export function extractSingleFile(archive: Buffer, kind: 'tar.gz' | 'zip', member: string): Buffer {
+function extractSingleFile(archive: Buffer, kind: 'tar.gz' | 'zip', member: string): Buffer {
   const found = kind === 'tar.gz' ? fromTar(gunzipSync(archive), member) : fromZip(archive, member);
   if (!found) {
     throw new Error(`archive has no ${member}`);
@@ -77,3 +77,5 @@ function fromZip(zip: Buffer, member: string): Buffer | null {
   }
   return null;
 }
+
+export { extractSingleFile };

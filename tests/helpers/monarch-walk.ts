@@ -10,7 +10,7 @@ interface Grammar {
     defaultToken?: string;
   };
 }
-export interface Token {
+interface Token {
   type: string;
   text: string;
 }
@@ -64,12 +64,12 @@ function asRule(rule: unknown): { regex: RegExp; action: Action | Action[]; next
 }
 
 /** The first rule of `state`, compiled as Monarch compiles it. */
-export function firstRuleRegex(grammar: Grammar, state: string): RegExp {
+function firstRuleRegex(grammar: Grammar, state: string): RegExp {
   return compile(grammar, asRule(rulesOf(grammar, state)[0]).regex);
 }
 
 /** Tokenizes one line from `stack` (which it updates), returning Monaco's merged tokens. */
-export function tokenizeLine(grammar: Grammar, line: string, stack: string[] = ['root']): Token[] {
+function tokenizeLine(grammar: Grammar, line: string, stack: string[] = ['root']): Token[] {
   const tokens: Token[] = [];
   const emit = (type: string, text: string): void => {
     if (text === '') {
@@ -164,10 +164,13 @@ export function tokenizeLine(grammar: Grammar, line: string, stack: string[] = [
 }
 
 /** Token types of `lines` (tokenized in order), without plain text ('') and bare HTML punctuation ('delimiter'). */
-export function tokenTypes(grammar: Grammar, ...lines: string[]): string[] {
+function tokenTypes(grammar: Grammar, ...lines: string[]): string[] {
   const stack = ['root'];
   return lines
     .flatMap((line) => tokenizeLine(grammar, line, stack))
     .map((token) => token.type)
     .filter((type) => type !== '' && type !== 'delimiter');
 }
+
+export { firstRuleRegex, tokenizeLine, tokenTypes };
+export type { Token };

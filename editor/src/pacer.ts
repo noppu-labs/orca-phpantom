@@ -3,7 +3,7 @@
 // This keeps one editor's share of that budget and holds its calls back after a refusal.
 // No Monaco here.
 
-export interface PacerOptions {
+interface PacerOptions {
   windowMs?: number;
   /** Most passive calls (hover, completion, colouring...) this editor makes in a window. */
   passiveCap?: number;
@@ -15,12 +15,12 @@ export interface PacerOptions {
 
 const MIN_HOLD_MS = 250;
 
-export const isRateLimited = (error: unknown): boolean =>
+const isRateLimited = (error: unknown): boolean =>
   typeof error === 'object' &&
   error !== null &&
   (error as { code?: unknown }).code === 'rate_limited';
 
-export class Pacer {
+class Pacer {
   private readonly windowMs: number;
   private readonly passiveCap: number;
   private readonly firstBackoffMs: number;
@@ -80,3 +80,6 @@ export class Pacer {
     while (this.sent.length > 0 && this.sent[0] <= oldest) this.sent.shift();
   }
 }
+
+export { isRateLimited, Pacer };
+export type { PacerOptions };

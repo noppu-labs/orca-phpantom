@@ -7,7 +7,7 @@ import { showNote } from './notes.ts';
 import { bindDocument, flushWhenHidden } from './sync.ts';
 import { defineThemes, THEME_NAME, typographyOptions } from './theme.ts';
 
-export interface EditorContext {
+interface EditorContext {
   monaco: typeof monaco;
   editor: monaco.editor.IStandaloneCodeEditor;
   model: monaco.editor.ITextModel;
@@ -39,7 +39,7 @@ const NATIVE_OPTIONS = {
 const themeName = (): string =>
   document.documentElement.classList.contains('dark') ? THEME_NAME.dark : THEME_NAME.light;
 
-export async function startEditor(): Promise<EditorContext> {
+async function startEditor(): Promise<EditorContext> {
   const root = document.querySelector<HTMLElement>('#root');
   if (!root) {
     throw new Error('the page has no #root element');
@@ -114,3 +114,6 @@ export async function startEditor(): Promise<EditorContext> {
   editor.focus();
   return { monaco, editor, model, docId, language };
 }
+
+export { startEditor };
+export type { EditorContext };

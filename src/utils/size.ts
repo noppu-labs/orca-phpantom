@@ -7,16 +7,16 @@
 // A list of locations is mostly small objects and numbers, so it hits these limits long before its JSON would.
 // Depth is not tracked here:
 
-export interface Size {
+interface Size {
   bytes: number;
   objects: number;
 }
 
-export const ORCA_MAX_OBJECTS = 10_000;
+const ORCA_MAX_OBJECTS = 10_000;
 
 const encoder = new TextEncoder();
 
-export function orcaSize(value: unknown): Size {
+function orcaSize(value: unknown): Size {
   const size: Size = { bytes: 0, objects: 0 };
   const walk = (item: unknown): void => {
     if (item === null || item === undefined || typeof item === 'boolean') {
@@ -52,11 +52,11 @@ export function orcaSize(value: unknown): Size {
   return size;
 }
 
-export const fitsIn = (size: Size, limit: Size): boolean =>
+const fitsIn = (size: Size, limit: Size): boolean =>
   size.bytes <= limit.bytes && size.objects <= limit.objects;
 
 /** The leading `items` that fit in `limit` beside `envelope`, the answer measured with an empty list. */
-export function leadingThatFit<T>(items: T[], envelope: Size, limit: Size): T[] {
+function leadingThatFit<T>(items: T[], envelope: Size, limit: Size): T[] {
   let { bytes } = envelope;
   let { objects } = envelope;
   const kept: T[] = [];
@@ -71,3 +71,6 @@ export function leadingThatFit<T>(items: T[], envelope: Size, limit: Size): T[] 
   }
   return kept;
 }
+
+export { ORCA_MAX_OBJECTS, orcaSize, fitsIn, leadingThatFit };
+export type { Size };

@@ -10,13 +10,13 @@ interface Disposable {
 }
 type Ready = AttachStatus & { state: 'ready' };
 
-export interface WorkspaceContext {
+interface WorkspaceContext {
   workspaceId: string | null;
   branch: string;
   displayName: string;
 }
 
-export interface BridgeHost {
+interface BridgeHost {
   request<K extends keyof PluginRequests>(
     name: K,
     input: PluginRequestInput<K>,
@@ -39,13 +39,13 @@ export interface BridgeHost {
 }
 
 /** A content change with the length of the text it replaced, as Monaco reports it. */
-export interface SourceChange {
+interface SourceChange {
   range: LspRange;
   rangeLength: number;
   text: string;
 }
 
-export interface DocumentSource {
+interface DocumentSource {
   language: Language;
   getText(): string;
   getLength(): number;
@@ -62,16 +62,16 @@ export interface DocumentSource {
  * share. `background`: whole-document answers Monaco asks again after every change (colouring, inlay
  * hints, the outline, the lightbulb); as passive, and it first waits for a pause in typing.
  */
-export type RequestKind = 'user' | 'passive' | 'background';
+type RequestKind = 'user' | 'passive' | 'background';
 
 /** `silent`: a user request Monaco also makes on its own (resolving a focused item); it never shows the busy note. */
-export interface AskOptions {
+interface AskOptions {
   timeoutMs?: number;
   kind?: RequestKind;
   silent?: boolean;
 }
 
-export interface BridgeOptions {
+interface BridgeOptions {
   docId?: string;
   /** Most time a typed change waits before it is sent; changes typed meanwhile go with it in one request. */
   syncDelayMs?: number;
@@ -186,7 +186,7 @@ function groupsOf(event: QueuedEvent): { groups: Group[]; lengthBefore: number }
  * another workspace within `mountWindowMs` of mounting, and once if the context read after the first
  * input in this frame (and `settleMs` after the last switch) differs. Nothing else re-targets it.
  */
-export class LspBridge {
+class LspBridge {
   readonly docId: string;
   private readonly host: BridgeHost;
   private readonly source: DocumentSource;
@@ -1032,3 +1032,14 @@ export class LspBridge {
     }
   }
 }
+
+export { LspBridge };
+export type {
+  WorkspaceContext,
+  BridgeHost,
+  SourceChange,
+  DocumentSource,
+  RequestKind,
+  AskOptions,
+  BridgeOptions,
+};

@@ -9,7 +9,7 @@ import { join, sep } from 'node:path';
 
 import type { Language } from '../../protocol.ts';
 
-export type Located =
+type Located =
   | { status: 'found'; path: string; root: string; approximate?: true }
   | { status: 'none' }
   | { status: 'ambiguous' };
@@ -55,7 +55,7 @@ interface Options {
 }
 
 /** The extensions a php document can have: .php and the ones Drupal uses for PHP. */
-export const PHP_EXTENSIONS: readonly string[] = [
+const PHP_EXTENSIONS: readonly string[] = [
   '.php',
   '.module',
   '.install',
@@ -89,7 +89,7 @@ function meaningfulLines(text: string): string[] {
  * How much two texts share, by whole lines: 1 for the same lines, 0 for none in common. A line that
  * appears twice counts twice, so a file of repeated braces does not look like every other file.
  */
-export function sharedLines(a: string, b: string): number {
+function sharedLines(a: string, b: string): number {
   const linesA = meaningfulLines(a);
   const linesB = meaningfulLines(b);
   if (linesA.length < ALIKE_MIN_LINES || linesB.length < ALIKE_MIN_LINES) {
@@ -164,7 +164,7 @@ async function locateAlike(
   return { status: 'found', path: best.file.path, root: best.file.root, approximate: true };
 }
 
-export interface LocateInput {
+interface LocateInput {
   tiers: string[][];
   candidates: string[];
   /** Files located before (open now or not long ago), which the walk may not reach: Composer's vendor folder. */
@@ -215,7 +215,7 @@ async function locateCandidates(input: LocateInput, options: Options): Promise<L
   return locateAlike(others, input.content, size, options.alikeBudgetMs ?? ALIKE_BUDGET_MS);
 }
 
-export async function locateFile(input: LocateInput, options: Options = {}): Promise<Located> {
+async function locateFile(input: LocateInput, options: Options = {}): Promise<Located> {
   const fromCandidates = await locateCandidates(input, options);
   if (fromCandidates.status !== 'none') {
     return fromCandidates;
@@ -357,3 +357,6 @@ async function locateInRoots(
   }
   return locateAlike(others, content, size, options.alikeBudgetMs ?? ALIKE_BUDGET_MS);
 }
+
+export { PHP_EXTENSIONS, sharedLines, locateFile };
+export type { Located, LocateInput };

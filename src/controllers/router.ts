@@ -30,7 +30,7 @@ import {
 import { fitsIn, leadingThatFit, orcaSize } from '../utils/size.ts';
 import { sameUri, uriKey } from '../utils/uri.ts';
 
-export interface RouterHost {
+interface RouterHost {
   /** May answer from a short cache; `fresh` asks Orca again. */
   listWorkspaces(options?: { fresh?: boolean }): Promise<WorkspaceRow[]>;
   /** `path` is relative to the workspace, with forward slashes: `editor.open` refuses absolute paths. */
@@ -41,7 +41,7 @@ export interface RouterHost {
   settings(): Promise<{ phpantomPath: string; allowDownload: boolean }>;
 }
 
-export interface RouterOptions {
+interface RouterOptions {
   resolve?: typeof resolveBinary;
   createServer?: (executable: string, root: string, events: ServerEvents) => PhpantomServer;
   idleMs?: number;
@@ -148,7 +148,7 @@ function inside(root: string, path: string): boolean {
   return rel === '' || (!rel.startsWith('..') && !isAbsolute(rel));
 }
 
-export class Router {
+class Router {
   readonly session: string;
   private readonly host: RouterHost;
   private readonly resolve: typeof resolveBinary;
@@ -1075,3 +1075,6 @@ export class Router {
     }
   }
 }
+
+export { Router };
+export type { RouterHost, RouterOptions };

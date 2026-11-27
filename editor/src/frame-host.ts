@@ -15,7 +15,7 @@ function context(
     : null;
 }
 
-export function frameHost(): BridgeHost {
+function frameHost(): BridgeHost {
   return {
     request: async (name, input, options) =>
       // Why the cast: the declared overload takes its arguments as a tuple.
@@ -64,3 +64,5 @@ export function frameHost(): BridgeHost {
     },
   };
 }
+
+export { frameHost };

@@ -10,6 +10,14 @@ const WORKSPACE_LIST_TTL_MS = 10_000;
 
 let router: Router | null = null;
 
+async function deactivate(): Promise<void> {
+  const active = router;
+  router = null;
+  await active?.dispose();
+}
+
+export { deactivate };
+
 export default async function activate(orca: OrcaWorkerApi): Promise<void> {
   let workspaces: { rows: Promise<WorkspaceRow[]>; at: number } | null = null;
   const status = (update: StatusBarUpdate): void => {
@@ -81,10 +89,4 @@ export default async function activate(orca: OrcaWorkerApi): Promise<void> {
   await orca.host.call('statusBar.update', renderStatus(aggregate([]))).catch((error: unknown) => {
     orca.log(`status bar update failed: ${String(error)}`);
   });
-}
-
-export async function deactivate(): Promise<void> {
-  const active = router;
-  router = null;
-  await active?.dispose();
 }

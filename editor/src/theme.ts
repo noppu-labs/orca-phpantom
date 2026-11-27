@@ -3,10 +3,10 @@
 import type { HostResult } from 'orca/host';
 
 /** What `editor.readTypography` answers and `editor.typography.changed` carries. */
-export type EditorTypography = HostResult<'editor.readTypography'>;
+type EditorTypography = HostResult<'editor.readTypography'>;
 
 /** PHPantom's semantic token legend, in its order. */
-export const SEMANTIC_TYPES: readonly string[] = [
+const SEMANTIC_TYPES: readonly string[] = [
   'namespace',
   'class',
   'interface',
@@ -23,7 +23,7 @@ export const SEMANTIC_TYPES: readonly string[] = [
   'keyword',
   'comment',
 ];
-export const SEMANTIC_MODIFIERS: readonly string[] = [
+const SEMANTIC_MODIFIERS: readonly string[] = [
   'declaration',
   'static',
   'readonly',
@@ -33,7 +33,7 @@ export const SEMANTIC_MODIFIERS: readonly string[] = [
   'defaultLibrary',
 ];
 
-export const THEME_NAME = { dark: 'phpantom-dark', light: 'phpantom-light' } as const;
+const THEME_NAME = { dark: 'phpantom-dark', light: 'phpantom-light' } as const;
 
 type Base = 'variable' | 'type' | 'keyword' | 'comment' | 'annotation';
 
@@ -74,7 +74,7 @@ const NEAREST: Record<string, Base | null> = {
   comment: 'comment',
 };
 
-export interface ThemeRule {
+interface ThemeRule {
   token: string;
   foreground?: string;
   fontStyle?: string;
@@ -85,7 +85,7 @@ export interface ThemeRule {
  * or its longest dot-prefix, with no wildcards. So every type gets a rule for each non-empty subset of
  * the modifiers: static ones are italic and deprecated ones struck through, whatever else they carry.
  */
-export function themeRules(dark: boolean): ThemeRule[] {
+function themeRules(dark: boolean): ThemeRule[] {
   const colours = BASE_COLOURS[dark ? 'dark' : 'light'];
   const rules: ThemeRule[] = [];
   for (const type of SEMANTIC_TYPES) {
@@ -129,7 +129,7 @@ const FRAME_COLOURS: [string, string[]][] = [
 ];
 
 /** Editor chrome from Orca's frame variables (already `#rrggbb`); a missing one keeps the base colour. */
-export function themeColors(vars: Record<string, string>): Record<string, string> {
+function themeColors(vars: Record<string, string>): Record<string, string> {
   const colors: Record<string, string> = {};
   for (const [variable, keys] of FRAME_COLOURS) {
     const value = vars[variable];
@@ -141,7 +141,7 @@ export function themeColors(vars: Record<string, string>): Record<string, string
 }
 
 /** Orca's file editor typography as Monaco options. */
-export function typographyOptions(t: EditorTypography) {
+function typographyOptions(t: EditorTypography) {
   return {
     fontFamily: t.cssFontFamily,
     fontSize: t.fontSize,
@@ -157,7 +157,7 @@ export function typographyOptions(t: EditorTypography) {
  * Reads Orca's frame variables as `#rrggbb`, whatever CSS colour syntax they use, by painting each on
  * a 1×1 canvas. A translucent colour is painted over the background first, as the page shows it.
  */
-export function readOrcaVars(): Record<string, string> {
+function readOrcaVars(): Record<string, string> {
   const style = getComputedStyle(document.documentElement);
   const canvas = document.createElement('canvas');
   canvas.width = 1;
@@ -204,7 +204,7 @@ interface ThemeHost {
 }
 
 /** Defines both themes from Orca's current variables; run again on each `theme` event. */
-export function defineThemes(monaco: ThemeHost): void {
+function defineThemes(monaco: ThemeHost): void {
   const colors = themeColors(readOrcaVars());
   monaco.editor.defineTheme(THEME_NAME.dark, {
     base: 'vs-dark',
@@ -219,3 +219,15 @@ export function defineThemes(monaco: ThemeHost): void {
     colors,
   });
 }
+
+export {
+  SEMANTIC_TYPES,
+  SEMANTIC_MODIFIERS,
+  THEME_NAME,
+  themeRules,
+  themeColors,
+  typographyOptions,
+  readOrcaVars,
+  defineThemes,
+};
+export type { EditorTypography, ThemeRule };

@@ -4,7 +4,7 @@ import type { LspRange } from '../protocol.ts';
 
 const MAX_ENTRIES = 5;
 
-export class PendingReveals {
+class PendingReveals {
   private readonly entries = new Map<string, { range: LspRange; at: number }>();
   private readonly ttlMs: number;
   private readonly now: () => number;
@@ -51,3 +51,5 @@ export class PendingReveals {
     }
   }
 }
+
+export { PendingReveals };

@@ -1,10 +1,10 @@
-export interface ServerState {
+interface ServerState {
   phase: 'downloading' | 'starting' | 'indexing' | 'ready' | 'error';
   percent?: number;
   message?: string;
 }
 
-export interface StatusState {
+interface StatusState {
   phase: 'idle' | ServerState['phase'];
   percent?: number;
   message?: string;
@@ -13,7 +13,7 @@ export interface StatusState {
 }
 
 // A literal union rather than `string`, so the update can go straight to `statusBar.update`.
-export interface StatusBarUpdate {
+interface StatusBarUpdate {
   id: 'phpantom';
   text: string;
   icon: 'code' | 'check' | 'error' | 'download' | 'refresh';
@@ -31,7 +31,7 @@ const SOURCE_WORDS: Record<NonNullable<StatusState['source']>, string> = {
 };
 
 /** Folds every running server into one state: the most urgent phase wins. */
-export function aggregate(states: ServerState[]): StatusState {
+function aggregate(states: ServerState[]): StatusState {
   for (const phase of URGENCY) {
     const matching = states.filter((s) => s.phase === phase);
     if (matching.length === 0) {
@@ -55,7 +55,7 @@ export function aggregate(states: ServerState[]): StatusState {
   return { phase: 'idle' };
 }
 
-export function renderStatus(state: StatusState): StatusBarUpdate {
+function renderStatus(state: StatusState): StatusBarUpdate {
   switch (state.phase) {
     case 'idle': {
       return {
@@ -116,3 +116,6 @@ export function renderStatus(state: StatusState): StatusBarUpdate {
     }
   }
 }
+
+export { aggregate, renderStatus };
+export type { ServerState, StatusState, StatusBarUpdate };

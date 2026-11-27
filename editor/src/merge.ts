@@ -67,7 +67,7 @@ function anchors(mine: string[], base: string[], outside: string[]): [number, nu
  * Three-way line merge. Changes that do not overlap are both kept; an overlap is written out with
  * both sides between conflict markers so nothing is dropped.
  */
-export function mergeText(
+function mergeText(
   base: string,
   outside: string,
   mine: string
@@ -129,3 +129,5 @@ export function mergeText(
   );
   return { text, conflicts };
 }
+
+export { mergeText };

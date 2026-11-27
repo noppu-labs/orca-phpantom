@@ -3,7 +3,7 @@ import { crc32, deflateRawSync, gzipSync } from 'node:zlib';
 // Builds the tar.gz and zip archives the binary tests read, in memory, so no archive is committed.
 // Orca's plugin indexer refuses any archive in a tagged commit.
 
-export type ArchiveFiles = Record<string, string | Buffer>;
+type ArchiveFiles = Record<string, string | Buffer>;
 
 const MTIME = 1_700_000_000;
 
@@ -11,7 +11,7 @@ const bytes = (data: string | Buffer): Buffer =>
   typeof data === 'string' ? Buffer.from(data) : data;
 
 /** The ustar header checksum: the sum of all 512 bytes with the checksum field read as spaces. */
-export function tarChecksum(header: Buffer): number {
+function tarChecksum(header: Buffer): number {
   let sum = 0;
   for (let i = 0; i < 512; i++) {
     sum += i >= 148 && i < 156 ? 0x20 : header[i];
@@ -19,7 +19,7 @@ export function tarChecksum(header: Buffer): number {
   return sum;
 }
 
-export interface TarEntry {
+interface TarEntry {
   name: string;
   data: string | Buffer;
   /** The ustar typeflag: '0' for a regular file (the default), 'x' for a pax extended header. */
@@ -45,7 +45,7 @@ function tarHeader(name: string, size: number, type: string): Buffer {
 }
 
 /** An uncompressed ustar archive: one entry each, regular files unless an entry sets a typeflag, then two zero blocks. */
-export function tar(files: ArchiveFiles | TarEntry[]): Buffer {
+function tar(files: ArchiveFiles | TarEntry[]): Buffer {
   const entries: TarEntry[] = Array.isArray(files)
     ? files
     : Object.entries(files).map(([name, data]) => ({ name, data }));
@@ -63,17 +63,17 @@ export function tar(files: ArchiveFiles | TarEntry[]): Buffer {
 }
 
 /** A gzip-compressed ustar archive. */
-export function tarGz(files: ArchiveFiles | TarEntry[]): Buffer {
+function tarGz(files: ArchiveFiles | TarEntry[]): Buffer {
   return gzipSync(tar(files));
 }
 
-export interface ZipOptions {
+interface ZipOptions {
   /** Store entries uncompressed (method 0) or deflate them (method 8). Defaults to stored. */
   method?: 'stored' | 'deflate';
 }
 
 /** A zip with a local header and a central-directory record per file, then the end record. */
-export function zip(files: ArchiveFiles, options: ZipOptions = {}): Buffer {
+function zip(files: ArchiveFiles, options: ZipOptions = {}): Buffer {
   const method = options.method === 'deflate' ? 8 : 0;
   const local: Buffer[] = [];
   const central: Buffer[] = [];
@@ -121,7 +121,7 @@ export function zip(files: ArchiveFiles, options: ZipOptions = {}): Buffer {
 }
 
 /** A pax extended-header entry: one `<length> key=value\n` record, the length counting itself. */
-export function paxEntry(name: string, key: string, value: string): TarEntry {
+function paxEntry(name: string, key: string, value: string): TarEntry {
   const record = ` ${key}=${value}\n`;
   let length = record.length + 1;
   if (String(length).length + record.length !== length) length += 1;
@@ -129,11 +129,14 @@ export function paxEntry(name: string, key: string, value: string): TarEntry {
 }
 
 /** What the old committed one.tar.gz held: a pax header entry, then the `phpantom_lsp` file. */
-export const oneTarGz = (): Buffer =>
+const oneTarGz = (): Buffer =>
   tarGz([
     paxEntry('PaxHeader/phpantom_lsp', 'path', 'phpantom_lsp'),
     { name: 'phpantom_lsp', data: 'fake-binary' },
   ]);
 
 /** What the old committed one.zip held: a single stored `phpantom_lsp.exe`. */
-export const oneZip = (): Buffer => zip({ 'phpantom_lsp.exe': 'fake-exe' });
+const oneZip = (): Buffer => zip({ 'phpantom_lsp.exe': 'fake-exe' });
+
+export { tarChecksum, tar, tarGz, zip, paxEntry, oneTarGz, oneZip };
+export type { ArchiveFiles, TarEntry, ZipOptions };
