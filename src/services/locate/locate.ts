@@ -1,7 +1,9 @@
 // Adapted from actus7/orca-autocomplete src/lsp/locate.ts @ da5a680 (MIT). See THIRD_PARTY_NOTICES.md.
-// A custom editor never learns its file's path, but a language server needs one. The open document equals the file on disk, so find it: look through the workspaces for a file of the right type
+// A custom editor never learns its file's path, but a language server needs one.
+// The open document equals the file on disk, so find it: look through the workspaces for a file of the right type
 //
-// A document with unsaved edits equals no file. Then the file it was opened from is the one that still shares most of its lines, as long as one file is clearly ahead of the rest.
+// A document with unsaved edits equals no file.
+// Then the file it was opened from is the one that still shares most of its lines, as long as one file is clearly ahead of the rest.
 import { readFile, readdir, stat } from 'node:fs/promises';
 import { join, sep } from 'node:path';
 

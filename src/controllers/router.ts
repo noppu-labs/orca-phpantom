@@ -265,7 +265,8 @@ export class Router {
       // Its copy failed the length check: an answer now would be about text the editor does not have.
       return { error: 'the document is being sent again' };
     }
-    // Why: several documents can hold one file, and PHPantom holds whichever sent last. Positions in the question, and edits in the answer, are this document's.
+    // Why: several documents can hold one file, and PHPantom holds whichever sent last.
+    // Positions in the question, and edits in the answer, are this document's.
     this.sendFull(doc.server, doc.file, doc.mirror.text);
     const params = input.method.startsWith('textDocument/')
       ? { ...input.params, textDocument: { uri: doc.uri } }
@@ -608,7 +609,8 @@ export class Router {
     const gap = now - this.lastSweepAt;
     this.lastSweepAt = now;
     if (gap > 2 * this.sweepMs) {
-      // The computer slept or the worker was held up: editors could not ping meanwhile either, so silence says nothing yet. The next tick, on time, judges after they have had the chance.
+      // The computer slept or the worker was held up: editors could not ping meanwhile either, so silence says nothing yet.
+      // The next tick, on time, judges after they have had the chance.
       this.host.log(
         `Lease check ran ${Math.round((gap - this.sweepMs) / 1000)} s late; releasing nothing this time`
       );
@@ -649,7 +651,9 @@ export class Router {
       .map((docId) => this.docs.get(docId))
       .filter((other) => other !== undefined);
     if (remaining.length > 0) {
-      // Why resend: PHPantom holds whatever the leaving document sent last. The one heard from most recently is the tab on screen; the others are frames Orca replaced that hold on until their lease ends. One waiting
+      // Why resend: PHPantom holds whatever the leaving document sent last.
+      // The one heard from most recently is the tab on screen; the others are frames Orca replaced that hold on until their lease ends.
+      // One waiting
       const current = remaining
         .filter((other) => !other.needsResync)
         .sort((a, b) => b.lastSeen - a.lastSeen)[0];

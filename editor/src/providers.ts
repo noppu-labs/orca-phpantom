@@ -1,5 +1,6 @@
 // Adapted from actus7/orca-autocomplete editor/src/lsp.ts @ da5a680 (MIT). See THIRD_PARTY_NOTICES.md.
-// Monaco's language features answered by PHPantom through the bridge: diagnostics, completion, hover, signature help, semantic colouring, inlay hints and the outline; then going to definitions and references, formatting, rename and code actions. Only what the server says it supports is registered,
+// Monaco's language features answered by PHPantom through the bridge: diagnostics, completion, hover, signature help, semantic colouring, inlay hints and the outline; then going to definitions and references, formatting, rename and code actions.
+// Only what the server says it supports is registered,
 import type { AskOptions, LspBridge, RequestKind } from './bridge.ts';
 import type { EditorContext } from './editor.ts';
 import {
@@ -204,7 +205,8 @@ export function registerReadingProviders(
           ? async (suggestion, token) => {
               const raw = serverItems.get(suggestion);
               if (!raw) return suggestion;
-              // Why user, not passive: Monaco also resolves here when the item is accepted, and a dropped answer would lose the import. Silent: it resolves every item that gets focus, too.
+              // Why user, not passive: Monaco also resolves here when the item is accepted, and a dropped answer would lose the import.
+              // Silent: it resolves every item that gets focus, too.
               const resolved = await ask('completionItem/resolve', raw, token, 'user', true);
               // Monaco resolves an item once; one with no answer must say so to be resolved again later.
               if (resolved === null) throw canceled();
@@ -294,7 +296,8 @@ export function registerReadingProviders(
           const tokens = toSemanticTokens(
             await ask('textDocument/semanticTokens/full', {}, token, 'background')
           );
-          // Why throw: Monaco wipes the colouring on an empty answer but keeps it on an error, and a message with "busy" in it is not reported. No answer means not now, not "no tokens".
+          // Why throw: Monaco wipes the colouring on an empty answer but keeps it on an error, and a message with "busy" in it is not reported.
+          // No answer means not now, not "no tokens".
           if (!tokens) throw new Error('PHPantom is busy');
           return tokens;
         },

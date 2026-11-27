@@ -1,7 +1,9 @@
 // The TextView that `bindDocument` drives, over a Monaco text model. No Monaco import, so Node can test it against a stand-in that follows Monaco's rules.
 //
-// Monaco keeps one line ending per model and rewrites any inserted text whose line endings are of another kind (pieceTreeTextBuffer.js), and it keeps a UTF-8 BOM out of `getValue()`. A raw splice of
-// Orca's text can therefore cut a `\r\n` pair and leave an extra line. So an outside write is applied as Orca's whole new text: switch the model to the line ending Monaco would pick for it, then apply
+// Monaco keeps one line ending per model and rewrites any inserted text whose line endings are of another kind (pieceTreeTextBuffer.js), and it keeps a UTF-8 BOM out of `getValue()`.
+// A raw splice of
+// Orca's text can therefore cut a `\r\n` pair and leave an extra line.
+// So an outside write is applied as Orca's whole new text: switch the model to the line ending Monaco would pick for it, then apply
 import { smallestEdit, type Splice } from './edits.ts';
 import type { TextView } from './sync.ts';
 
@@ -81,7 +83,8 @@ export function modelView(port: ModelPort): ModelView {
         try {
           if (eol !== port.getEol()) {
             port.setEol(eol);
-            // Why: a step of its own. Monaco records the edit's offsets against the new line endings but redoes a step's edits before its line-ending change, so sharing one corrupts redo.
+            // Why: a step of its own.
+            // Monaco records the edit's offsets against the new line endings but redoes a step's edits before its line-ending change, so sharing one corrupts redo.
             port.pushStackElement();
           }
           const edit = smallestEdit(port.getText(), target);
