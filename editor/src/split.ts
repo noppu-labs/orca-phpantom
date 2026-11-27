@@ -1,11 +1,41 @@
+import {
+  CARRIAGE_RETURN,
+  HIGH_SURROGATE_MAX,
+  HIGH_SURROGATE_MIN,
+  LINE_FEED,
+  LOW_SURROGATE_MAX,
+  LOW_SURROGATE_MIN,
+} from '../../src/constants/characters.ts';
+import { ORCA_ARRAY_BYTES, ORCA_SLOT_BYTES } from '../../src/constants/orca-measure.ts';
+import { BYTES_PER_KIB } from '../../src/constants/units.ts';
 import type { LspContentChange, LspPosition } from '../../src/protocol.ts';
 import { orcaSize } from '../../src/utils/size.ts';
 
 // Orca refuses a panel request ("panel message exceeds the size limit") whose whole message is over 64 KiB or
 // 10,000 arrays and objects by its own measure (see src/utils/size.ts), not by its JSON.
 // A group of changes is held to both budgets below, in JSON bytes and in Orca's measure, which leaves room for the message around it: the session token (up to 128 bytes), the action and request names, and the document id, session and length.
-const REQUEST_BUDGET_BYTES = 56 * 1024;
+const REQUEST_BUDGET_KIB = 56;
+const REQUEST_BUDGET_BYTES = REQUEST_BUDGET_KIB * BYTES_PER_KIB;
 const REQUEST_BUDGET_OBJECTS = 9000;
+
+// What JSON escapes: a quotation mark, a backslash and the control characters below a space.
+const QUOTATION_MARK = 0x22;
+const REVERSE_SOLIDUS = 0x5c;
+const FIRST_UNESCAPED = 0x20;
+// The control characters with a two-character escape (\b, \t, \n, \f, \r); the rest take six (\u0000).
+const BACKSPACE = 0x08;
+const TAB = 0x09;
+const FORM_FEED = 0x0c;
+const UNICODE_ESCAPE_BYTES = 6;
+// UTF-8: one byte below 0x80, two below 0x800, three for the rest of a unit, four for a surrogate pair.
+const ONE_BYTE_BELOW = 0x80;
+const TWO_BYTES_BELOW = 0x8_00;
+const THREE_BYTES = 3;
+const PAIR_BYTES = 4;
+// The bits that mark a unit as a high surrogate, which then equal HIGH_SURROGATE_MIN.
+const HIGH_SURROGATE_MASK = 0xfc_00;
+// The smallest text budget a piece gets, however large the change around it.
+const MIN_TEXT_BUDGET = 16;
 
 const encoder = new TextEncoder();
 
@@ -15,14 +45,22 @@ function encodedSize(value: unknown): number {
 
 /** UTF-8 bytes one UTF-16 unit (or a surrogate pair, when `next` completes it) adds to a JSON string. */
 function jsonCost(unit: number, pairedWith: number | null): number {
-  if (unit === 0x22 || unit === 0x5c) return 2;
-  if (unit < 0x20) {
-    return unit === 8 || unit === 9 || unit === 10 || unit === 12 || unit === 13 ? 2 : 6;
+  if (unit === QUOTATION_MARK || unit === REVERSE_SOLIDUS) return 2;
+  if (unit < FIRST_UNESCAPED) {
+    return unit === BACKSPACE ||
+      unit === TAB ||
+      unit === LINE_FEED ||
+      unit === FORM_FEED ||
+      unit === CARRIAGE_RETURN
+      ? 2
+      : UNICODE_ESCAPE_BYTES;
   }
-  if (unit < 0x80) return 1;
-  if (unit < 0x8_00) return 2;
-  if (unit >= 0xd8_00 && unit <= 0xdf_ff) return pairedWith === null ? 6 : 4;
-  return 3;
+  if (unit < ONE_BYTE_BELOW) return 1;
+  if (unit < TWO_BYTES_BELOW) return 2;
+  if (unit >= HIGH_SURROGATE_MIN && unit <= LOW_SURROGATE_MAX) {
+    return pairedWith === null ? UNICODE_ESCAPE_BYTES : PAIR_BYTES;
+  }
+  return THREE_BYTES;
 }
 
 function chunkText(text: string, budget: number = REQUEST_BUDGET_BYTES): string[] {
@@ -34,7 +72,11 @@ function chunkText(text: string, budget: number = REQUEST_BUDGET_BYTES): string[
   while (i < text.length) {
     const unit = text.charCodeAt(i);
     const next = i + 1 < text.length ? text.charCodeAt(i + 1) : 0;
-    const paired = unit >= 0xd8_00 && unit <= 0xdb_ff && next >= 0xdc_00 && next <= 0xdf_ff;
+    const paired =
+      unit >= HIGH_SURROGATE_MIN &&
+      unit <= HIGH_SURROGATE_MAX &&
+      next >= LOW_SURROGATE_MIN &&
+      next <= LOW_SURROGATE_MAX;
     const width = paired ? 2 : 1;
     const cost = jsonCost(unit, paired ? next : null);
     if (size + cost > budget && i > start) {
@@ -43,8 +85,10 @@ function chunkText(text: string, budget: number = REQUEST_BUDGET_BYTES): string[
       const unsafe = (c: number): boolean => {
         const u = text.charCodeAt(c);
         const midPair =
-          u >= 0xdc_00 && u <= 0xdf_ff && (text.charCodeAt(c - 1) & 0xfc_00) === 0xd8_00;
-        return u === 0x0a || midPair;
+          u >= LOW_SURROGATE_MIN &&
+          u <= LOW_SURROGATE_MAX &&
+          (text.charCodeAt(c - 1) & HIGH_SURROGATE_MASK) === HIGH_SURROGATE_MIN;
+        return u === LINE_FEED || midPair;
       };
       while (cut > start + 1 && unsafe(cut)) cut -= 1;
       if (unsafe(cut)) cut = i;
@@ -78,7 +122,7 @@ const ORCA_ENVELOPE = orcaSize([EMPTY_CHANGE]).bytes;
 function splitOne(change: LspContentChange, budget: number): LspContentChange[] {
   // Why the smaller: a piece's raw UTF-8 bytes never exceed its JSON size, so JSON-bounding it bounds Orca's measure of the text too; this adds what Orca counts around it.
   const textBudget = Math.min(budget - 2 - ENVELOPE + 2, budget - ORCA_ENVELOPE + 2);
-  const pieces = chunkText(change.text, Math.max(textBudget, 16));
+  const pieces = chunkText(change.text, Math.max(textBudget, MIN_TEXT_BUDGET));
   // There is always a last piece: chunkText gives at least one.
   const [last] = pieces.slice(-1);
   const at = 'range' in change ? change.range.start : { character: 0, line: 0 };
@@ -100,19 +144,23 @@ function splitChanges(
   let current: LspContentChange[] = [];
   // A group is an array: 2 JSON bytes of brackets, 8 Orca bytes and one object.
   let size = 2;
-  let orcaBytes = 8;
+  let orcaBytes = ORCA_ARRAY_BYTES;
   let objects = 1;
   const flush = (): void => {
     if (current.length > 0) groups.push(current);
     current = [];
     size = 2;
-    orcaBytes = 8;
+    orcaBytes = ORCA_ARRAY_BYTES;
     objects = 1;
   };
   for (const change of changes) {
     const own = encodedSize(change);
     const ownOrca = orcaSize(change);
-    if (own + 2 > budget || ownOrca.bytes + 12 > budget || ownOrca.objects + 1 > maxObjects) {
+    if (
+      own + 2 > budget ||
+      ownOrca.bytes + ORCA_ARRAY_BYTES + ORCA_SLOT_BYTES > budget ||
+      ownOrca.objects + 1 > maxObjects
+    ) {
       flush();
       for (const piece of splitOne(change, budget)) groups.push([piece]);
       continue;
@@ -120,13 +168,13 @@ function splitChanges(
     const added = own + (current.length > 0 ? 1 : 0);
     if (
       size + added > budget ||
-      orcaBytes + 4 + ownOrca.bytes > budget ||
+      orcaBytes + ORCA_SLOT_BYTES + ownOrca.bytes > budget ||
       objects + ownOrca.objects > maxObjects
     ) {
       flush();
     }
     size += own + (current.length > 0 ? 1 : 0);
-    orcaBytes += 4 + ownOrca.bytes;
+    orcaBytes += ORCA_SLOT_BYTES + ownOrca.bytes;
     objects += ownOrca.objects;
     current.push(change);
   }

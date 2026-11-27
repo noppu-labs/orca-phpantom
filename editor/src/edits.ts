@@ -1,5 +1,6 @@
 // Adapted from actus7/orca-autocomplete editor/src/edits.ts @ da5a680 (MIT). See THIRD_PARTY_NOTICES.md.
 // Pure text helpers for the editor; no Monaco here so Node can test them.
+import { HIGH_SURROGATE_MAX, HIGH_SURROGATE_MIN } from '../../src/constants/characters.ts';
 
 interface Splice {
   start: number;
@@ -7,7 +8,8 @@ interface Splice {
   text: string;
 }
 
-const isHighSurrogate = (code: number): boolean => code >= 0xd8_00 && code <= 0xdb_ff;
+const isHighSurrogate = (code: number): boolean =>
+  code >= HIGH_SURROGATE_MIN && code <= HIGH_SURROGATE_MAX;
 
 /**
  * The smallest single edit that turns `before` into `after`, or null when they are the same.

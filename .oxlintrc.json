@@ -168,7 +168,6 @@
         "eslint/no-duplicate-imports": "off",
         "eslint/no-empty-function": "off",
         "eslint/no-inline-comments": "off",
-        "eslint/no-magic-numbers": "off",
         "eslint/no-nested-ternary": "off",
         "eslint/no-param-reassign": "off",
         "eslint/no-promise-executor-return": "off",

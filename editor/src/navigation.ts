@@ -43,6 +43,8 @@ function afterPeek(
 
 // The worker reads at most this many files per peek (PEEK_MAX_FILES in src/controllers/router.ts); asking for more only makes the request bigger, and a long list of URIs could pass Orca's 64 KiB request limit.
 const PEEK_MAX_FILES = 25;
+// Preview models kept at once; each holds a whole file.
+const PEEK_MODEL_LIMIT = 30;
 
 /** The files one peek asks for. Pass the whole list to `afterPeek`, so locations in the rest are left out with a note. */
 const peekBatch = (wanted: string[]): string[] => wanted.slice(0, PEEK_MAX_FILES);
@@ -66,7 +68,7 @@ class PeekModels {
   /** In use order, oldest first. */
   private readonly models = new Map<string, Disposable>();
 
-  public constructor(create: (uri: string, text: string) => Disposable, limit = 30) {
+  public constructor(create: (uri: string, text: string) => Disposable, limit = PEEK_MODEL_LIMIT) {
     this.create = create;
     this.limit = limit;
   }

@@ -121,6 +121,21 @@ const VERSION_GUARDED = new Set([
 ]);
 // The last chunk waits for PHPantom to start, which can mean a cold index or a download.
 const LAST_CHUNK_TIMEOUT_MS = 120_000;
+// The timings an editor uses unless told otherwise (tests shorten them); BridgeOptions says what each is.
+const DEFAULT_SYNC_DELAY_MS = 400;
+const DEFAULT_RETRY_GAP_MS = 8000;
+const DEFAULT_MAX_RETRIES = 20;
+const DEFAULT_QUIET_MS = 2000;
+const DEFAULT_SAVE_DELAY_MS = 1000;
+const DEFAULT_REATTACH_GAP_MS = 5000;
+const DEFAULT_MOUNT_WINDOW_MS = 1500;
+const DEFAULT_SETTLE_MS = 1500;
+const DEFAULT_PING_MS = 20_000;
+const DEFAULT_BACKGROUND_QUIET_MS = 500;
+const DEFAULT_BACKGROUND_MIN_WAIT_MS = 250;
+const DEFAULT_USER_MAX_WAIT_MS = 3000;
+// The soonest a refresh is asked for after a background request was dropped.
+const REFRESH_MIN_DELAY_MS = 1000;
 
 interface Events {
   ready: Ready;
@@ -278,18 +293,18 @@ class LspBridge {
     this.host = host;
     this.source = source;
     this.docId = options.docId ?? crypto.randomUUID();
-    this.syncDelayMs = options.syncDelayMs ?? 400;
-    this.retryGapMs = options.retryGapMs ?? 8000;
-    this.maxRetries = options.maxRetries ?? 20;
-    this.quietMs = options.quietMs ?? 2000;
-    this.saveDelayMs = options.saveDelayMs ?? 1000;
-    this.reattachGapMs = options.reattachGapMs ?? 5000;
-    this.mountWindowMs = options.mountWindowMs ?? 1500;
-    this.settleMs = options.settleMs ?? 1500;
-    this.pingMs = options.pingMs ?? 20_000;
-    this.backgroundQuietMs = options.backgroundQuietMs ?? 500;
-    this.backgroundMinWaitMs = options.backgroundMinWaitMs ?? 250;
-    this.userMaxWaitMs = options.userMaxWaitMs ?? 3000;
+    this.syncDelayMs = options.syncDelayMs ?? DEFAULT_SYNC_DELAY_MS;
+    this.retryGapMs = options.retryGapMs ?? DEFAULT_RETRY_GAP_MS;
+    this.maxRetries = options.maxRetries ?? DEFAULT_MAX_RETRIES;
+    this.quietMs = options.quietMs ?? DEFAULT_QUIET_MS;
+    this.saveDelayMs = options.saveDelayMs ?? DEFAULT_SAVE_DELAY_MS;
+    this.reattachGapMs = options.reattachGapMs ?? DEFAULT_REATTACH_GAP_MS;
+    this.mountWindowMs = options.mountWindowMs ?? DEFAULT_MOUNT_WINDOW_MS;
+    this.settleMs = options.settleMs ?? DEFAULT_SETTLE_MS;
+    this.pingMs = options.pingMs ?? DEFAULT_PING_MS;
+    this.backgroundQuietMs = options.backgroundQuietMs ?? DEFAULT_BACKGROUND_QUIET_MS;
+    this.backgroundMinWaitMs = options.backgroundMinWaitMs ?? DEFAULT_BACKGROUND_MIN_WAIT_MS;
+    this.userMaxWaitMs = options.userMaxWaitMs ?? DEFAULT_USER_MAX_WAIT_MS;
     this.pacer = new Pacer({
       firstBackoffMs: options.firstBackoffMs,
       maxBackoffMs: options.maxBackoffMs,
@@ -971,7 +986,7 @@ class LspBridge {
           this.emit('refresh', ['semanticTokens', 'inlayHints']);
         }
       },
-      Math.max(this.pacer.wait(), 1000)
+      Math.max(this.pacer.wait(), REFRESH_MIN_DELAY_MS)
     );
   }
 

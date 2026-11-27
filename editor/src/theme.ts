@@ -33,6 +33,7 @@ const SEMANTIC_MODIFIERS: readonly string[] = [
 ];
 
 const THEME_NAME = { dark: 'phpantom-dark', light: 'phpantom-light' } as const;
+const HEX = 16;
 
 type Base = 'variable' | 'type' | 'keyword' | 'comment' | 'annotation';
 
@@ -180,7 +181,7 @@ function readOrcaVars(): Record<string, string> {
       context.fillRect(0, 0, 1, 1);
     }
     const [r, g, b] = context.getImageData(0, 0, 1, 1).data;
-    return `#${[r, g, b].map((n) => n.toString(16).padStart(2, '0')).join('')}`;
+    return `#${[r, g, b].map((n) => n.toString(HEX).padStart(2, '0')).join('')}`;
   };
   const valid = (value: string): boolean => value !== '' && CSS.supports('color', value);
   const background = style.getPropertyValue('--orca-background').trim();

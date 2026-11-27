@@ -3,13 +3,15 @@
 import type { LspRange } from '../protocol.ts';
 
 const MAX_ENTRIES = 5;
+// How long a range waits for the open that takes it.
+const TTL_MS = 30_000;
 
 class PendingReveals {
   private readonly entries = new Map<string, { range: LspRange; at: number }>();
   private readonly ttlMs: number;
   private readonly now: () => number;
 
-  public constructor(ttlMs = 30_000, now: () => number = Date.now) {
+  public constructor(ttlMs = TTL_MS, now: () => number = Date.now) {
     this.ttlMs = ttlMs;
     this.now = now;
   }

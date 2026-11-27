@@ -7,6 +7,8 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import type { PluginRequests } from 'orca';
 
+import { ORCA_NUMBER_BYTES, ORCA_SLOT_BYTES } from '../constants/orca-measure.ts';
+import { BYTES_PER_KIB } from '../constants/units.ts';
 import type { AttachStatus } from '../protocol.ts';
 import { resolveBinary, type Resolution } from '../services/binary/resolve.ts';
 import { locateFile } from '../services/locate/locate.ts';
@@ -104,8 +106,12 @@ interface Doc {
   lastSeen: number;
 }
 
+const MS_PER_SECOND = 1000;
+const MS_PER_MINUTE = 60_000;
+
 // Orca takes an answer of at most 1 MiB and 10,000 objects by its own measure (see size.ts); this leaves room for what the measure may miss.
-const ANSWER_LIMIT = { bytes: 900 * 1024, objects: 9000 };
+const ANSWER_LIMIT_KIB = 900;
+const ANSWER_LIMIT = { bytes: ANSWER_LIMIT_KIB * BYTES_PER_KIB, objects: 9000 };
 // Lists whose leading items are still a useful answer. Never edits: half a formatting is a broken file.
 const CUTTABLE_LISTS = new Set([
   'textDocument/references',
@@ -121,16 +127,22 @@ const CUTTABLE_LISTS = new Set([
 const PEEK_MAX_FILES = 25;
 // Files attached before, tried again when a tab of theirs is shown: a new frame must locate its file anew, and the walk never reaches Composer's vendor folder, where go to definition often leads.
 const REMEMBERED_FILES = 50;
-const PEEK_MAX_BYTES = 600 * 1024;
-const IDLE_MS = 10 * 60_000;
+const PEEK_MAX_KIB = 600;
+const PEEK_MAX_BYTES = PEEK_MAX_KIB * BYTES_PER_KIB;
+const IDLE_MINUTES = 10;
+const IDLE_MS = IDLE_MINUTES * MS_PER_MINUTE;
 // Why a lease: an editor frame that remounts (Orca does on every tab show) or dies never sends its close.
 // The editor pings every 20 s; three minutes is nine missed pings, room for a busy or throttled frame.
-const LEASE_MS = 3 * 60_000;
+const LEASE_MINUTES = 3;
+const LEASE_MS = LEASE_MINUTES * MS_PER_MINUTE;
 const SWEEP_MS = 15_000;
 // A failed lookup or download is kept this long, so tabs retrying (on show, after typing) do not download in a loop.
-const FAILED_BINARY_MS = 2 * 60_000;
+const FAILED_BINARY_MS = 2 * MS_PER_MINUTE;
 const STATUS_INTERVAL_MS = 1000;
-const RESTART_WINDOW_MS = 5 * 60_000;
+const RESTART_WINDOW_MINUTES = 5;
+const RESTART_WINDOW_MS = RESTART_WINDOW_MINUTES * MS_PER_MINUTE;
+// A full semantic tokens answer gives five numbers per token.
+const NUMBERS_PER_TOKEN = 5;
 const MAX_RESTARTS = 3;
 
 const SOURCE_WORDS: Record<string, string> = {
@@ -616,7 +628,7 @@ class Router {
       // The computer slept or the worker was held up: editors could not ping meanwhile either, so silence says nothing yet.
       // The next tick, on time, judges after they have had the chance.
       this.host.log(
-        `Lease check ran ${Math.round((gap - this.sweepMs) / 1000)} s late; releasing nothing this time`
+        `Lease check ran ${Math.round((gap - this.sweepMs) / MS_PER_SECOND)} s late; releasing nothing this time`
       );
       return;
     }
@@ -636,7 +648,7 @@ class Router {
             return;
           }
           this.host.log(
-            `Released ${current.path}: its editor was not heard from for ${Math.round(this.leaseMs / 1000)} s (${this.docs.size - 1} document(s) still open)`
+            `Released ${current.path}: its editor was not heard from for ${Math.round(this.leaseMs / MS_PER_SECOND)} s (${this.docs.size - 1} document(s) still open)`
           );
           this.chunks.delete(docId);
           this.detach(current);
@@ -1026,10 +1038,12 @@ class Router {
     if (isRecord(result) && Array.isArray(tokens)) {
       // Why whole tokens: `data` is five numbers per token, each relative to the one before, so a leading run of whole tokens is still correct colouring; a number is 8 bytes plus 4 for its slot in the array.
       const shell = orcaSize({ result: { ...result, data: [] } });
-      const room = Math.floor((ANSWER_LIMIT.bytes - shell.bytes) / 12);
+      const room = Math.floor(
+        (ANSWER_LIMIT.bytes - shell.bytes) / (ORCA_NUMBER_BYTES + ORCA_SLOT_BYTES)
+      );
       const count = Math.max(
         0,
-        Math.min(tokens.length, room) - (Math.min(tokens.length, room) % 5)
+        Math.min(tokens.length, room) - (Math.min(tokens.length, room) % NUMBERS_PER_TOKEN)
       );
       return { result: { ...result, data: tokens.slice(0, count) } };
     }

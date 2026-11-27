@@ -7,7 +7,11 @@ import { fileURLToPath } from 'node:url';
 // Run `npm run build` after changing editor/src and commit the result; CI rebuilds and fails when editor/dist differs.
 import { build, type BuildOptions } from 'esbuild';
 
-const MAX_FILE_BYTES = 10 * 1024 * 1024;
+import { BYTES_PER_KIB } from '../src/constants/units.ts';
+
+const BYTES_PER_MIB = BYTES_PER_KIB * BYTES_PER_KIB;
+const MAX_FILE_MIB = 10;
+const MAX_FILE_BYTES = MAX_FILE_MIB * BYTES_PER_MIB;
 const MAX_FILES = 200;
 
 // Why a fixed working directory and relative paths: the output must not depend on where it is run from.
@@ -45,7 +49,7 @@ function files(dir: string): { bytes: number; path: string }[] {
 
 const built = files(dist);
 const total = built.reduce((sum, file) => sum + file.bytes, 0);
-console.log(`editor/dist: ${(total / 1024 / 1024).toFixed(2)} MiB in ${built.length} files`);
+console.log(`editor/dist: ${(total / BYTES_PER_MIB).toFixed(2)} MiB in ${built.length} files`);
 const problems = [
   ...built
     .filter((file) => file.bytes > MAX_FILE_BYTES)

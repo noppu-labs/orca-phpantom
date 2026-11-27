@@ -55,10 +55,14 @@ function parseVersion(output: string): string | null {
   return /^phpantom_lsp (?<version>\d+\.\d+\.\d+)\b/mu.exec(output.trim())?.groups?.version ?? null;
 }
 
+// Major, minor and patch.
+const VERSION_PARTS = 3;
+const VERSION_TIMEOUT_MS = 5000;
+
 function atLeast(version: string, minimum: string): boolean {
   const a = version.split('.').map(Number);
   const b = minimum.split('.').map(Number);
-  for (let i = 0; i < 3; i++) {
+  for (let i = 0; i < VERSION_PARTS; i++) {
     const x = a[i] ?? 0;
     const y = b[i] ?? 0;
     if (x !== y) {
@@ -69,7 +73,7 @@ function atLeast(version: string, minimum: string): boolean {
 }
 
 /** Runs `<path> --version`; null when it fails, times out or prints something else. */
-async function readVersion(path: string, timeoutMs = 5000): Promise<string | null> {
+async function readVersion(path: string, timeoutMs = VERSION_TIMEOUT_MS): Promise<string | null> {
   return new Promise((resolve) => {
     execFile(path, ['--version'], { timeout: timeoutMs, windowsHide: true }, (error, stdout) => {
       resolve(error ? null : parseVersion(String(stdout)));

@@ -1,3 +1,4 @@
+import { CARRIAGE_RETURN, LINE_FEED } from '../../constants/characters.ts';
 import type { LspContentChange, LspPosition } from '../../protocol.ts';
 
 /**
@@ -51,7 +52,7 @@ class DocumentMirror {
     let lineEnd = i;
     while (lineEnd < text.length) {
       const c = text.charCodeAt(lineEnd);
-      if (c === 0x0a || c === 0x0d) break;
+      if (c === LINE_FEED || c === CARRIAGE_RETURN) break;
       lineEnd++;
     }
     return Math.min(i + Math.max(pos.character, 0), lineEnd);
@@ -62,7 +63,7 @@ class DocumentMirror {
     let i = offset;
     while (i > 0) {
       const c = text.charCodeAt(i - 1);
-      if (c === 0x0a || c === 0x0d) break;
+      if (c === LINE_FEED || c === CARRIAGE_RETURN) break;
       i--;
     }
     return i;
@@ -72,8 +73,8 @@ class DocumentMirror {
     const text = this.content;
     for (let i = from; i < text.length; i++) {
       const c = text.charCodeAt(i);
-      if (c === 0x0a) return i + 1;
-      if (c === 0x0d) return text.charCodeAt(i + 1) === 0x0a ? i + 2 : i + 1;
+      if (c === LINE_FEED) return i + 1;
+      if (c === CARRIAGE_RETURN) return text.charCodeAt(i + 1) === LINE_FEED ? i + 2 : i + 1;
     }
     return -1;
   }

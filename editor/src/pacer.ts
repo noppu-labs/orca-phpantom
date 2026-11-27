@@ -14,6 +14,11 @@ interface PacerOptions {
 }
 
 const MIN_HOLD_MS = 250;
+// Orca's window, and this editor's share of it and its backoff, unless told otherwise.
+const DEFAULT_WINDOW_MS = 10_000;
+const DEFAULT_PASSIVE_CAP = 50;
+const DEFAULT_FIRST_BACKOFF_MS = 1000;
+const DEFAULT_MAX_BACKOFF_MS = 10_000;
 
 const isRateLimited = (error: unknown): boolean =>
   typeof error === 'object' &&
@@ -32,10 +37,10 @@ class Pacer {
   private backoff = 0;
 
   public constructor(options: PacerOptions = {}) {
-    this.windowMs = options.windowMs ?? 10_000;
-    this.passiveCap = options.passiveCap ?? 50;
-    this.firstBackoffMs = options.firstBackoffMs ?? 1000;
-    this.maxBackoffMs = options.maxBackoffMs ?? 10_000;
+    this.windowMs = options.windowMs ?? DEFAULT_WINDOW_MS;
+    this.passiveCap = options.passiveCap ?? DEFAULT_PASSIVE_CAP;
+    this.firstBackoffMs = options.firstBackoffMs ?? DEFAULT_FIRST_BACKOFF_MS;
+    this.maxBackoffMs = options.maxBackoffMs ?? DEFAULT_MAX_BACKOFF_MS;
     this.now = options.now ?? Date.now;
   }
 

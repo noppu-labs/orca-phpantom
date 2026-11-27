@@ -1,5 +1,7 @@
 // Reading JSON nobody typed: a language server's answers, Orca's payloads, errors thrown by others.
 
+const BIGINT_ZERO = 0n;
+
 /** A JSON object: not null and not an array, so its fields can be read by name. */
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -15,7 +17,7 @@ function isTruthy(value: unknown): boolean {
     value !== null &&
     value !== false &&
     value !== 0 &&
-    value !== 0n &&
+    value !== BIGINT_ZERO &&
     value !== '' &&
     !Number.isNaN(value)
   );

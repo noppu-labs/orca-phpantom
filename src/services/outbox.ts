@@ -2,10 +2,21 @@
 // 10 s, 256 KiB each, measured by Orca's own function: see size.ts) even when PHPantom publishes diagnostics for hundreds of files at once.
 // Posts are keyed: a newer payload for a key replaces the queued one, so the latest state always arrives and stale ones are never sent.
 
+import { ORCA_SLOT_BYTES } from '../constants/orca-measure.ts';
+import { BYTES_PER_KIB } from '../constants/units.ts';
 import { isRecord } from '../utils/json.ts';
 import { fitsIn, orcaSize, type Size } from '../utils/size.ts';
 
 // Orca drops a post over 256 KiB or 10,000 objects by its own measure; this leaves room for what it may miss.
+const DEFAULT_MAX_KIB = 250;
+const DEFAULT_MAX_OBJECTS = 9000;
+// Orca's 200 posts per 10 s, with room to spare, and how long a send waits before the queue goes out, so sends close together go out together.
+const DEFAULT_WINDOW_MS = 10_000;
+const DEFAULT_MAX_POSTS = 180;
+const DEFAULT_DELAY_MS = 150;
+// The most UTF-8 bytes one UTF-16 unit of a message can take.
+const MAX_BYTES_PER_UNIT = 4;
+
 interface OutboxOptions {
   windowMs?: number;
   maxPosts?: number;
@@ -49,10 +60,13 @@ class Outbox {
 
   public constructor(post: PostFn, options: OutboxOptions = {}) {
     this.post = post;
-    this.windowMs = options.windowMs ?? 10_000;
-    this.maxPosts = options.maxPosts ?? 180;
-    this.limit = { bytes: options.maxBytes ?? 250 * 1024, objects: options.maxObjects ?? 9000 };
-    this.delayMs = options.delayMs ?? 150;
+    this.windowMs = options.windowMs ?? DEFAULT_WINDOW_MS;
+    this.maxPosts = options.maxPosts ?? DEFAULT_MAX_POSTS;
+    this.limit = {
+      bytes: options.maxBytes ?? DEFAULT_MAX_KIB * BYTES_PER_KIB,
+      objects: options.maxObjects ?? DEFAULT_MAX_OBJECTS,
+    };
+    this.delayMs = options.delayMs ?? DEFAULT_DELAY_MS;
     this.now = options.now ?? Date.now;
   }
 
@@ -135,7 +149,7 @@ class Outbox {
       const room = this.limit.bytes - shell.bytes;
       if (room > 0 && shell.objects <= this.limit.objects) {
         // Why chars before bytes: a character is at most 4 bytes, so this many always fit.
-        return { ...payload, message: message.slice(0, Math.floor(room / 4)) };
+        return { ...payload, message: message.slice(0, Math.floor(room / MAX_BYTES_PER_UNIT)) };
       }
     }
     return payload;
@@ -158,12 +172,12 @@ class Outbox {
     for (const entry of ranked) {
       const size = orcaSize(entry.diagnostic);
       if (
-        bytes + 4 + size.bytes > this.limit.bytes ||
+        bytes + ORCA_SLOT_BYTES + size.bytes > this.limit.bytes ||
         objects + size.objects > this.limit.objects
       ) {
         break;
       }
-      bytes += 4 + size.bytes;
+      bytes += ORCA_SLOT_BYTES + size.bytes;
       objects += size.objects;
       kept.push(entry);
     }

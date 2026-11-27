@@ -45,6 +45,8 @@ interface ResolveOptions {
 }
 
 const inFlight = new Map<string, Promise<Resolution>>();
+// Read and run for everyone, write for the owner.
+const EXECUTABLE_MODE = 0o755;
 
 async function resolveBinary(options: ResolveOptions): Promise<Resolution> {
   const read = options.readVersionImpl ?? readVersion;
@@ -130,7 +132,7 @@ async function download(
     mkdirSync(directory, { recursive: true });
     const temporary = `${target}.tmp`;
     writeFileSync(temporary, binary);
-    chmodSync(temporary, 0o755);
+    chmodSync(temporary, EXECUTABLE_MODE);
     renameSync(temporary, target);
     writeFileSync(marker, PHPANTOM_VERSION);
     const version = await read(target);

@@ -48,21 +48,30 @@ const toLspContentChange = (change: {
   text: change.text,
 });
 
+// LSP's DiagnosticSeverity (1 is error) and Monaco's MarkerSeverity.
+const LSP_WARNING = 2;
+const LSP_INFORMATION = 3;
+const LSP_HINT = 4;
+const MARKER_ERROR = 8;
+const MARKER_WARNING = 4;
+const MARKER_INFO = 2;
+const MARKER_HINT = 1;
+
 /** LSP severity (1 error ... 4 hint) as Monaco's MarkerSeverity (8, 4, 2, 1). */
 function markerSeverity(severity: number | undefined): number {
-  if (severity === undefined) return 8;
+  if (severity === undefined) return MARKER_ERROR;
   switch (severity) {
-    case 2: {
-      return 4;
+    case LSP_WARNING: {
+      return MARKER_WARNING;
     }
-    case 3: {
-      return 2;
+    case LSP_INFORMATION: {
+      return MARKER_INFO;
     }
-    case 4: {
-      return 1;
+    case LSP_HINT: {
+      return MARKER_HINT;
     }
     default: {
-      return 8;
+      return MARKER_ERROR;
     }
   }
 }

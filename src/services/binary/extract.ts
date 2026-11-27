@@ -1,5 +1,35 @@
 import { inflateRawSync, gunzipSync } from 'node:zlib';
 
+// A tar is 512-byte blocks; a header block holds the name, the size in octal and the type ('0', or NUL, for a file).
+const TAR_BLOCK = 512;
+const TAR_NAME_END = 100;
+const TAR_SIZE_START = 124;
+const TAR_SIZE_END = 136;
+const TAR_TYPE_AT = 156;
+const TAR_FILE_TYPE = 0x30;
+
+// A zip ends with its end-of-central-directory record, which a comment of up to 64 KiB may follow.
+const ZIP_END_SIGNATURE = 0x06_05_4b_50;
+const ZIP_END_SIZE = 22;
+const ZIP_MAX_COMMENT = 0xff_ff;
+const ZIP_END_ENTRIES_AT = 10;
+const ZIP_END_DIRECTORY_AT = 16;
+// The central directory has one header per entry.
+const ZIP_ENTRY_SIGNATURE = 0x02_01_4b_50;
+const ZIP_ENTRY_METHOD_AT = 10;
+const ZIP_ENTRY_COMPRESSED_SIZE_AT = 20;
+const ZIP_ENTRY_NAME_LENGTH_AT = 28;
+const ZIP_ENTRY_EXTRA_LENGTH_AT = 30;
+const ZIP_ENTRY_COMMENT_LENGTH_AT = 32;
+const ZIP_ENTRY_LOCAL_AT = 42;
+const ZIP_ENTRY_NAME_AT = 46;
+// Each entry's data follows its local header, whose name and extra field may differ from the directory's.
+const ZIP_LOCAL_SIGNATURE = 0x04_03_4b_50;
+const ZIP_LOCAL_NAME_LENGTH_AT = 26;
+const ZIP_LOCAL_EXTRA_LENGTH_AT = 28;
+const ZIP_LOCAL_NAME_AT = 30;
+const ZIP_DEFLATE = 8;
+
 /** The one file `member` from a tar.gz or zip, using Node builtins only. */
 function extractSingleFile(archive: Buffer, kind: 'tar.gz' | 'zip', member: string): Buffer {
   const found = kind === 'tar.gz' ? fromTar(gunzipSync(archive), member) : fromZip(archive, member);
@@ -11,20 +41,23 @@ function extractSingleFile(archive: Buffer, kind: 'tar.gz' | 'zip', member: stri
 
 function fromTar(tar: Buffer, member: string): Buffer | null {
   let offset = 0;
-  while (offset + 512 <= tar.length) {
-    const header = tar.subarray(offset, offset + 512);
+  while (offset + TAR_BLOCK <= tar.length) {
+    const header = tar.subarray(offset, offset + TAR_BLOCK);
     if (header.every((byte) => byte === 0)) {
       return null;
     }
-    const name = cString(header.subarray(0, 100));
-    const size = Number.parseInt(cString(header.subarray(124, 136)).trim() || '0', 8);
-    const type = String.fromCharCode(header[156] || 48);
-    const start = offset + 512;
+    const name = cString(header.subarray(0, TAR_NAME_END));
+    const size = Number.parseInt(
+      cString(header.subarray(TAR_SIZE_START, TAR_SIZE_END)).trim() || '0',
+      8
+    );
+    const type = String.fromCharCode(header[TAR_TYPE_AT] || TAR_FILE_TYPE);
+    const start = offset + TAR_BLOCK;
     const base = name.replace(/^\.\//u, '');
     if (type === '0' && base === member) {
       return Buffer.from(tar.subarray(start, start + size));
     }
-    offset = start + Math.ceil(size / 512) * 512;
+    offset = start + Math.ceil(size / TAR_BLOCK) * TAR_BLOCK;
   }
   return null;
 }
@@ -36,8 +69,12 @@ function cString(bytes: Buffer): string {
 
 function fromZip(zip: Buffer, member: string): Buffer | null {
   let eocd = -1;
-  for (let i = zip.length - 22; i >= Math.max(0, zip.length - 22 - 0xff_ff); i--) {
-    if (zip.readUInt32LE(i) === 0x06_05_4b_50) {
+  for (
+    let i = zip.length - ZIP_END_SIZE;
+    i >= Math.max(0, zip.length - ZIP_END_SIZE - ZIP_MAX_COMMENT);
+    i--
+  ) {
+    if (zip.readUInt32LE(i) === ZIP_END_SIGNATURE) {
       eocd = i;
       break;
     }
@@ -45,35 +82,40 @@ function fromZip(zip: Buffer, member: string): Buffer | null {
   if (eocd === -1) {
     throw new Error('not a zip archive');
   }
-  const entries = zip.readUInt16LE(eocd + 10);
-  let at = zip.readUInt32LE(eocd + 16);
+  const entries = zip.readUInt16LE(eocd + ZIP_END_ENTRIES_AT);
+  let at = zip.readUInt32LE(eocd + ZIP_END_DIRECTORY_AT);
   for (let n = 0; n < entries; n++) {
-    if (zip.readUInt32LE(at) !== 0x02_01_4b_50) {
+    if (zip.readUInt32LE(at) !== ZIP_ENTRY_SIGNATURE) {
       throw new Error('corrupt zip directory');
     }
-    const method = zip.readUInt16LE(at + 10);
-    const compressedSize = zip.readUInt32LE(at + 20);
-    const nameLength = zip.readUInt16LE(at + 28);
-    const extraLength = zip.readUInt16LE(at + 30);
-    const commentLength = zip.readUInt16LE(at + 32);
-    const localOffset = zip.readUInt32LE(at + 42);
-    const name = zip.subarray(at + 46, at + 46 + nameLength).toString('utf8');
+    const method = zip.readUInt16LE(at + ZIP_ENTRY_METHOD_AT);
+    const compressedSize = zip.readUInt32LE(at + ZIP_ENTRY_COMPRESSED_SIZE_AT);
+    const nameLength = zip.readUInt16LE(at + ZIP_ENTRY_NAME_LENGTH_AT);
+    const extraLength = zip.readUInt16LE(at + ZIP_ENTRY_EXTRA_LENGTH_AT);
+    const commentLength = zip.readUInt16LE(at + ZIP_ENTRY_COMMENT_LENGTH_AT);
+    const localOffset = zip.readUInt32LE(at + ZIP_ENTRY_LOCAL_AT);
+    const name = zip
+      .subarray(at + ZIP_ENTRY_NAME_AT, at + ZIP_ENTRY_NAME_AT + nameLength)
+      .toString('utf8');
     if (name === member) {
-      if (zip.readUInt32LE(localOffset) !== 0x04_03_4b_50) {
+      if (zip.readUInt32LE(localOffset) !== ZIP_LOCAL_SIGNATURE) {
         throw new Error('corrupt zip entry');
       }
       const dataStart =
-        localOffset + 30 + zip.readUInt16LE(localOffset + 26) + zip.readUInt16LE(localOffset + 28);
+        localOffset +
+        ZIP_LOCAL_NAME_AT +
+        zip.readUInt16LE(localOffset + ZIP_LOCAL_NAME_LENGTH_AT) +
+        zip.readUInt16LE(localOffset + ZIP_LOCAL_EXTRA_LENGTH_AT);
       const data = zip.subarray(dataStart, dataStart + compressedSize);
       if (method === 0) {
         return Buffer.from(data);
       }
-      if (method === 8) {
+      if (method === ZIP_DEFLATE) {
         return inflateRawSync(data);
       }
       throw new Error(`unsupported zip method ${method}`);
     }
-    at += 46 + nameLength + extraLength + commentLength;
+    at += ZIP_ENTRY_NAME_AT + nameLength + extraLength + commentLength;
   }
   return null;
 }

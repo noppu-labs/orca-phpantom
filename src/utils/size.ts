@@ -3,6 +3,7 @@
 // It refuses a value with more than 10,000 arrays and objects, or nested deeper than 100, whatever its size (`structuredCloneMessageBytes` in plugin-panel-message-budget.js, and `MW` in the main bundle, which measures `plugin.request` answers (1 MiB), worker posts (256 KiB, payload only) and panel requests (64 KiB, the whole `{ sessionToken, action, params }` message)).
 // A list of locations is mostly small objects and numbers, so it hits these limits long before its JSON would.
 // Depth is not tracked here: nothing the plugin sends nests anywhere near 100.
+import { ORCA_ARRAY_BYTES, ORCA_NUMBER_BYTES, ORCA_SLOT_BYTES } from '../constants/orca-measure.ts';
 
 interface Size {
   bytes: number;
@@ -21,7 +22,7 @@ function orcaSize(value: unknown): Size {
       return;
     }
     if (typeof item === 'number') {
-      size.bytes += 8;
+      size.bytes += ORCA_NUMBER_BYTES;
       return;
     }
     if (typeof item === 'string') {
@@ -32,16 +33,16 @@ function orcaSize(value: unknown): Size {
       return;
     }
     size.objects += 1;
-    size.bytes += Array.isArray(item) ? 8 : 0;
+    size.bytes += Array.isArray(item) ? ORCA_ARRAY_BYTES : 0;
     if (Array.isArray(item)) {
       for (const element of item) {
-        size.bytes += 4;
+        size.bytes += ORCA_SLOT_BYTES;
         walk(element);
       }
       return;
     }
     for (const [key, entry] of Object.entries(item)) {
-      size.bytes += 4 + encoder.encode(key).byteLength;
+      size.bytes += ORCA_SLOT_BYTES + encoder.encode(key).byteLength;
       walk(entry);
     }
   };
@@ -59,10 +60,13 @@ function leadingThatFit<T>(items: T[], envelope: Size, limit: Size): T[] {
   const kept: T[] = [];
   for (const item of items) {
     const size = orcaSize(item);
-    if (bytes + 4 + size.bytes > limit.bytes || objects + size.objects > limit.objects) {
+    if (
+      bytes + ORCA_SLOT_BYTES + size.bytes > limit.bytes ||
+      objects + size.objects > limit.objects
+    ) {
       break;
     }
-    bytes += 4 + size.bytes;
+    bytes += ORCA_SLOT_BYTES + size.bytes;
     objects += size.objects;
     kept.push(item);
   }
