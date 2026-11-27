@@ -53,6 +53,8 @@ function fromTar(tar: Buffer, member: string): Buffer | null {
     );
     const type = String.fromCodePoint(header[TAR_TYPE_AT] || TAR_FILE_TYPE);
     const start = offset + TAR_BLOCK;
+    // Why: a negative or unreadable size would stop the walk from advancing, and a size past the end reads a short file.
+    if (!(size >= 0) || start + size > tar.length) throw new Error('corrupt tar header');
     const base = name.replace(/^\.\//u, '');
     if (type === '0' && base === member) {
       return Buffer.from(tar.subarray(start, start + size));
