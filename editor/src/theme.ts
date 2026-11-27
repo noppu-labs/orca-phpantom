@@ -1,5 +1,4 @@
-// The editor's two themes: Monaco's stock dark and light token colours, a rule for every semantic token
-// PHPantom sends, and editor chrome in Orca's colours. Monaco comes in as a parameter, so Node can test it.
+// The editor's two themes: Monaco's stock dark and light token colours, a rule for every semantic token PHPantom sends, and editor chrome in Orca's colours. Monaco comes in as a parameter, so Node can test it.
 import type { HostResult } from 'orca/host';
 
 /** What `editor.readTypography` answers and `editor.typography.changed` carries. */

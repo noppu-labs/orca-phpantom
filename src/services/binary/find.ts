@@ -18,8 +18,7 @@ function findExecutable(
 ): string | null {
   const flavour = platform === 'win32' ? win32 : posix;
   const directories = (env.PATH ?? env.Path ?? '').split(flavour.delimiter).filter(Boolean);
-  // Why not the bare name on Windows: npm leaves a Unix script with no extension beside the .cmd, and
-  // Windows cannot run it. Only the PATHEXT forms (.exe, .cmd ...) are runnable there.
+  // Why not the bare name on Windows: npm leaves a Unix script with no extension beside the .cmd, and Windows cannot run it. Only the PATHEXT forms (.exe, .cmd ...) are runnable there.
   const extensions =
     platform === 'win32'
       ? (env.PATHEXT ?? '.COM;.EXE;.BAT;.CMD')

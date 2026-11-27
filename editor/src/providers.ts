@@ -1,7 +1,6 @@
 // Adapted from actus7/orca-autocomplete editor/src/lsp.ts @ da5a680 (MIT). See THIRD_PARTY_NOTICES.md.
 // Monaco's language features answered by PHPantom through the bridge: diagnostics, completion, hover, signature help, semantic colouring, inlay hints and the outline; then going to definitions and references, formatting, rename and code actions.
-// Only what the server says it supports is registered,
-// For the model's own language, and only this editor's model is answered.
+// Only what the server says it supports is registered, for the model's own language, and only this editor's model is answered.
 import type { AskOptions, LspBridge, RequestKind } from './bridge.ts';
 import type { EditorContext } from './editor.ts';
 import {
@@ -609,8 +608,7 @@ function registerEditingProviders(
               }
               // The server either leaves the range to the client ...
               if (result.defaultBehavior) return null;
-              // ... or sends a range, alone or with a placeholder. Why not show the placeholder: for a class
-              // PHPantom 1.1.0 sends the fully qualified name while the range and the new name are the short one.
+              // ... or sends a range, alone or with a placeholder. Why not show the placeholder: for a class PHPantom 1.1.0 sends the fully qualified name while the range and the new name are the short one.
               const range = fromLspRange(result.range ?? result);
               return { range, text: m.getValueInRange(range) };
             }

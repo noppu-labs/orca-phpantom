@@ -1,5 +1,4 @@
-// Keeps one editor's document attached to PHPantom through the worker: opens it in chunks, streams incremental changes, forwards LSP requests, and opens it again when the worker or its server restarts
-// Or the frame turns out to belong to another workspace.
+// Keeps one editor's document attached to PHPantom through the worker: opens it in chunks, streams incremental changes, forwards LSP requests, and opens it again when the worker or its server restarts or the frame turns out to belong to another workspace.
 // No Monaco here, so Node can test it with fakes.
 import type { PluginRequestInput, PluginRequestOutput, PluginRequests } from 'orca';
 
