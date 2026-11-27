@@ -1,6 +1,6 @@
 # Security assessment
 
-This page lists what could go wrong in orca-phpantom, how likely and costly each problem is, and what the code does about it. It was last reviewed for version 0.2.1. A change to the binary lookup, extraction, the `phpantom.*` requests, file location or the release pipeline should update it. [ARCHITECTURE.md](ARCHITECTURE.md) describes the actors and interfaces named here.
+This page lists what could go wrong in orca-phpantom, how likely and costly each problem is, and what the code does about it. It was last reviewed for version 0.3.0. A change to the binary lookup, extraction, the `phpantom.*` requests, file location or the release pipeline should update it. [ARCHITECTURE.md](ARCHITECTURE.md) describes the actors and interfaces named here.
 
 To report a vulnerability, see [SECURITY.md](../SECURITY.md).
 
