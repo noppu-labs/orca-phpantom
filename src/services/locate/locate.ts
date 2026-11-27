@@ -199,7 +199,8 @@ async function locateCandidates(input: LocateInput, options: Options): Promise<L
     if (info?.isFile() !== true) {
       continue;
     }
-    const text = (await readFile(path, 'utf8').catch(() => null))?.replace(/^﻿/u, '');
+    const raw = await readFile(path, 'utf8').catch(() => null);
+    const text = raw?.replace(/^﻿/u, '');
     if (text === input.content) {
       matches.push(path);
     } else {
@@ -274,7 +275,8 @@ async function locateKnown(
       if (info?.isFile() !== true || (info.size !== size && info.size !== size + BOM_BYTES)) {
         continue;
       }
-      const text = (await readFile(path, 'utf8').catch(() => null))?.replace(/^\uFEFF/u, '');
+      const raw = await readFile(path, 'utf8').catch(() => null);
+      const text = raw?.replace(/^\uFEFF/u, '');
       if (text === content) {
         matches.push({ path, root });
       }
@@ -308,7 +310,8 @@ async function sortFile(
   }
   let same = false;
   if (info.size === size || info.size === size + BOM_BYTES) {
-    const text = (await readFile(path, 'utf8').catch(() => null))?.replace(/^﻿/u, '');
+    const raw = await readFile(path, 'utf8').catch(() => null);
+    const text = raw?.replace(/^﻿/u, '');
     same = text === content;
   }
   if (same) {

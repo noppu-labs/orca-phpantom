@@ -151,7 +151,7 @@ function tokenizeLine(grammar: Grammar, line: string, stack: string[] = ['root']
       if (match.slice(1).join('') !== match[0]) {
         throw new Error(`groups must cover the whole match: /${rule.regex.source}/`);
       }
-      rule.action.forEach((action, index) => apply(action, match[index + 1] ?? ''));
+      for (const [index, action] of rule.action.entries()) apply(action, match[index + 1] ?? '');
     } else {
       apply(rule.action, match[0]);
     }

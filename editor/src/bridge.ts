@@ -383,7 +383,8 @@ class LspBridge {
     signal?: AbortSignal,
     options: AskOptions = {}
   ): Promise<unknown | null> {
-    return (await this.askDetailed(method, params, signal, options))?.result ?? null;
+    const answer = await this.askDetailed(method, params, signal, options);
+    return answer?.result ?? null;
   }
 
   /** As `ask`, with how many items the worker cut from a list too large for Orca to carry. */

@@ -15,7 +15,9 @@ function fakeMonacoModel() {
   let eol: Eol = '\n';
   const listeners = new Set<() => void>();
   const calls: string[] = [];
-  const changed = (): void => listeners.forEach((l) => l());
+  const changed = (): void => {
+    for (const listener of listeners) listener();
+  };
   const kind = (s: string): 'none' | Eol | 'invalid' => {
     const lf = /(?<!\r)\n/u.test(s);
     const crlf = s.includes('\r\n');

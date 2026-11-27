@@ -177,8 +177,6 @@
         "typescript/no-unnecessary-type-conversion": "off",
         "typescript/no-unsafe-enum-comparison": "off",
         "typescript/prefer-for-of": "off",
-        "unicorn/no-array-for-each": "off",
-        "unicorn/no-await-expression-member": "off",
         "unicorn/no-immediate-mutation": "off",
         "unicorn/no-new-array": "off",
         "unicorn/no-useless-collection-argument": "off",

@@ -40,9 +40,9 @@ function longestIncreasing(values: number[]): number[] {
 
 function occurrences(items: string[]): Map<string, number> {
   const seen = new Map<string, number>();
-  items.forEach((item, at) => {
+  for (const [at, item] of items.entries()) {
     seen.set(item, seen.has(item) ? -1 : at);
-  });
+  }
   return seen;
 }
 
@@ -55,7 +55,7 @@ function anchors(mine: string[], base: string[], outside: string[]): [number, nu
   const inMine = occurrences(mine);
   const inOutside = occurrences(outside);
   const found: [number, number, number][] = [];
-  occurrences(base).forEach((at, line) => {
+  for (const [line, at] of occurrences(base)) {
     const mineAt = inMine.get(line);
     const outsideAt = inOutside.get(line);
     if (
@@ -67,7 +67,7 @@ function anchors(mine: string[], base: string[], outside: string[]): [number, nu
     ) {
       found.push([mineAt, at, outsideAt]);
     }
-  });
+  }
   found.sort((left, right) => left[1] - right[1]);
   const byMine = longestIncreasing(found.map((entry) => entry[0])).map(
     (position) => found[position]
