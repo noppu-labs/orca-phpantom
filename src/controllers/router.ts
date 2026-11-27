@@ -161,6 +161,21 @@ function inside(root: string, path: string): boolean {
   return rel === '' || (!rel.startsWith('..') && !isAbsolute(rel));
 }
 
+/** The branch and name an editor sent, which find its workspace when the id is not in the list; both or nothing. */
+function focusContext(
+  input: Input<'phpantom.open'>
+): { branch: string; displayName: string } | undefined {
+  return input.branch !== null && input.displayName !== null
+    ? { branch: input.branch, displayName: input.displayName }
+    : undefined;
+}
+
+/** The focused workspace first, then every other local one; an empty tier is left out. */
+function searchTiers(rows: WorkspaceRow[], focused: WorkspaceRow | null): string[][] {
+  const others = rows.filter((row) => row !== focused && isLocal(row)).map((row) => row.path);
+  return [focused ? [focused.path] : [], others].filter((tier) => tier.length > 0);
+}
+
 class Router {
   public readonly session: string;
   private readonly host: RouterHost;
@@ -501,16 +516,12 @@ class Router {
       // Why ask again: a worktree made in the last few seconds is missing from the cached list, and without its row the file would attach to a sibling's copy (or a remote one to a local look-alike).
       rows = await this.host.listWorkspaces({ fresh: true });
     }
-    const context =
-      input.branch !== null && input.displayName !== null
-        ? { branch: input.branch, displayName: input.displayName }
-        : undefined;
+    const context = focusContext(input);
     const focused = resolveFocused(rows, input.workspaceId, context);
     if (focused && !isLocal(focused)) {
       return { host: focused.hostId ?? 'unknown', state: 'remote' };
     }
-    const others = rows.filter((row) => row !== focused && isLocal(row)).map((row) => row.path);
-    const tiers = [focused ? [focused.path] : [], others].filter((tier) => tier.length > 0);
+    const tiers = searchTiers(rows, focused);
     const remembered = new Set([
       ...this.remembered,
       ...[...this.docs.values()].map((doc) => doc.path),
@@ -544,18 +555,7 @@ class Router {
     }
     const { entry, server } = started;
     const uri = pathToFileURL(path).href;
-    const key = uriKey(uri);
-    let file = entry.files.get(key);
-    if (file) {
-      // Another document already holds this file: PHPantom gets this one's text, not a second didOpen.
-      this.sendFull(server, file, text);
-    } else {
-      file = { diagnostics: null, holders: new Set(), text, uri, version: 1 };
-      entry.files.set(key, file);
-      server.notify('textDocument/didOpen', {
-        textDocument: { languageId: input.language, text, uri, version: 1 },
-      });
-    }
+    const file = this.holdFile(entry, server, uri, text, input.language);
     file.holders.add(input.docId);
     this.docs.set(input.docId, {
       diagnostics: file.diagnostics?.length ?? 0,
@@ -591,6 +591,29 @@ class Router {
       ...(located.approximate ? { approximate: true as const } : {}),
       ...(reveal ? { reveal } : {}),
     };
+  }
+
+  /** The pool's copy of a file, opened in PHPantom unless another document holds it already. */
+  private holdFile(
+    entry: Entry,
+    server: PhpantomServer,
+    uri: string,
+    text: string,
+    language: Input<'phpantom.open'>['language']
+  ): SharedFile {
+    const key = uriKey(uri);
+    let file = entry.files.get(key);
+    if (file) {
+      // Another document already holds this file: PHPantom gets this one's text, not a second didOpen.
+      this.sendFull(server, file, text);
+    } else {
+      file = { diagnostics: null, holders: new Set(), text, uri, version: 1 };
+      entry.files.set(key, file);
+      server.notify('textDocument/didOpen', {
+        textDocument: { languageId: language, text, uri, version: 1 },
+      });
+    }
+    return file;
   }
 
   private remember(path: string): void {

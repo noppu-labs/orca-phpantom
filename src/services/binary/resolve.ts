@@ -48,13 +48,18 @@ const inFlight = new Map<string, Promise<Resolution>>();
 // Read and run for everyone, write for the owner.
 const EXECUTABLE_MODE = 0o755;
 
+/** A binary that ran and printed a version; null means it did not run, and an empty version is no version. */
+function reportsVersion(version: string | null): version is string {
+  return version !== null && version !== '';
+}
+
 async function resolveBinary(options: ResolveOptions): Promise<Resolution> {
   const read = options.readVersionImpl ?? readVersion;
   const flavour = options.platform === 'win32' ? win32 : posix;
 
   if (options.settingPath) {
     const version = existsSync(options.settingPath) ? await read(options.settingPath) : null;
-    return version !== null && version !== ''
+    return reportsVersion(version)
       ? { ok: true, path: options.settingPath, source: 'setting', version }
       : {
           message: `phpantomPath is set to ${options.settingPath}, which is not a working phpantom_lsp.`,
@@ -77,7 +82,7 @@ async function resolveBinary(options: ResolveOptions): Promise<Resolution> {
       continue;
     }
     const version = await read(candidate);
-    if (version !== null && version !== '' && atLeast(version, PHPANTOM_VERSION)) {
+    if (reportsVersion(version) && atLeast(version, PHPANTOM_VERSION)) {
       return { ok: true, path: candidate, source: 'path', version };
     }
   }
@@ -95,7 +100,7 @@ async function resolveBinary(options: ResolveOptions): Promise<Resolution> {
   const marker = flavour.join(directory, 'verified');
   if (existsSync(target) && existsSync(marker)) {
     const version = await read(target);
-    if (version !== null && version !== '') {
+    if (reportsVersion(version)) {
       return { ok: true, path: target, source: 'cache', version };
     }
   }

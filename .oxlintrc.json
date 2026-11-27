@@ -158,10 +158,8 @@
     {
       "files": ["**/*"],
       "rules": {
-        "eslint/complexity": "off",
         "eslint/default-case": "off",
         "eslint/max-classes-per-file": "off",
-        "eslint/max-depth": "off",
         "eslint/no-bitwise": "off",
         "eslint/no-console": "off",
         "eslint/no-duplicate-imports": "off",

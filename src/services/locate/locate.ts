@@ -284,6 +284,43 @@ async function locateKnown(
   return matches;
 }
 
+/** Whether the walk goes into a folder: never a hidden or skipped one, nor vendor or storage beside composer.json. */
+function walksInto(name: string, hasComposer: boolean): boolean {
+  return (
+    !SKIPPED_DIRECTORIES.has(name) &&
+    !name.startsWith('.') &&
+    !(hasComposer && COMPOSER_SIBLING_SKIPPED.has(name))
+  );
+}
+
+/** Puts a file whose name matches with the exact matches or with the likeness candidates; a file it cannot stat goes nowhere. */
+async function sortFile(
+  path: string,
+  root: string,
+  content: string,
+  size: number,
+  matches: { path: string; root: string }[],
+  others: Candidate[]
+): Promise<void> {
+  // Why stat first: reading every file of a large repository would take far too long.
+  const info = await stat(path).catch(() => null);
+  if (!info) {
+    return;
+  }
+  let same = false;
+  if (info.size === size || info.size === size + BOM_BYTES) {
+    const text = (await readFile(path, 'utf8').catch(() => null))?.replace(/^﻿/u, '');
+    same = text === content;
+  }
+  if (same) {
+    if (!matches.some((match) => match.path === path)) {
+      matches.push({ path, root });
+    }
+  } else {
+    others.push({ path, root, size: info.size });
+  }
+}
+
 async function locateInRoots(
   roots: readonly string[],
   language: Language,
@@ -321,32 +358,12 @@ async function locateInRoots(
       }
       const path = join(directory, entry.name);
       if (entry.isDirectory()) {
-        if (
-          !SKIPPED_DIRECTORIES.has(entry.name) &&
-          !entry.name.startsWith('.') &&
-          !(hasComposer && COMPOSER_SIBLING_SKIPPED.has(entry.name))
-        ) {
+        if (walksInto(entry.name, hasComposer)) {
           queue.push({ directory: path, root });
         }
       } else if (entry.isFile() && nameMatches(entry.name, language)) {
         visited += 1;
-        // Why stat first: reading every file of a large repository would take far too long.
-        const info = await stat(path).catch(() => null);
-        if (!info) {
-          continue;
-        }
-        let same = false;
-        if (info.size === size || info.size === size + BOM_BYTES) {
-          const text = (await readFile(path, 'utf8').catch(() => null))?.replace(/^﻿/u, '');
-          same = text === content;
-        }
-        if (same) {
-          if (!matches.some((match) => match.path === path)) {
-            matches.push({ path, root });
-          }
-        } else {
-          others.push({ path, root, size: info.size });
-        }
+        await sortFile(path, root, content, size, matches, others);
       }
     }
   }

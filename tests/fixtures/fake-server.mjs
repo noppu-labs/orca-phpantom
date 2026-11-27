@@ -48,131 +48,196 @@ function publish() {
   }
 }
 
+const handlers = new Map([
+  [
+    'initialize',
+    ({ id, params }) => {
+      initializeParams = params;
+      send({
+        jsonrpc: '2.0',
+        id,
+        result: {
+          capabilities:
+            process.env.FAKE_CAPABILITIES !== undefined && process.env.FAKE_CAPABILITIES !== ''
+              ? JSON.parse(process.env.FAKE_CAPABILITIES)
+              : {
+                  textDocumentSync: 2,
+                  hoverProvider: true,
+                  definitionProvider: true,
+                  semanticTokensProvider: {
+                    legend: { tokenTypes: ['parameter'], tokenModifiers: [] },
+                    full: true,
+                  },
+                },
+        },
+      });
+    },
+  ],
+  [
+    'initialized',
+    () => {
+      send({
+        jsonrpc: '2.0',
+        id: 9001,
+        method: 'window/workDoneProgress/create',
+        params: { token: 'index' },
+      });
+      send({
+        jsonrpc: '2.0',
+        method: '$/progress',
+        params: { token: 'index', value: { kind: 'begin', title: 'Indexing', percentage: 0 } },
+      });
+      send({
+        jsonrpc: '2.0',
+        method: '$/progress',
+        params: { token: 'index', value: { kind: 'report', percentage: 50 } },
+      });
+      send({
+        jsonrpc: '2.0',
+        method: '$/progress',
+        params: { token: 'index', value: { kind: 'end' } },
+      });
+      send({ jsonrpc: '2.0', id: 9002, method: 'workspace/inlayHint/refresh', params: null });
+      if (process.env.FAKE_NULL_PARAMS !== undefined && process.env.FAKE_NULL_PARAMS !== '') {
+        for (const method of [
+          'textDocument/publishDiagnostics',
+          '$/progress',
+          'window/logMessage',
+        ]) {
+          send({ jsonrpc: '2.0', method, params: null });
+        }
+      }
+      const items = Number(process.env.FAKE_CONFIG_ITEMS ?? 0);
+      if (items > 0) {
+        send({
+          jsonrpc: '2.0',
+          id: 9003,
+          method: 'workspace/configuration',
+          params: { items: Array.from({ length: items }, () => ({ section: 'x' })) },
+        });
+      }
+    },
+  ],
+  [
+    'textDocument/didOpen',
+    ({ params }) => {
+      ({ uri, text } = params.textDocument);
+      publish();
+    },
+  ],
+  [
+    'textDocument/didChange',
+    ({ params }) => {
+      for (const change of params.contentChanges) {
+        text =
+          change.range !== undefined && change.range !== null
+            ? text.slice(0, offsetAt(change.range.start)) +
+              change.text +
+              text.slice(offsetAt(change.range.end))
+            : change.text;
+      }
+      publish();
+    },
+  ],
+  [
+    'textDocument/hover',
+    ({ id }) => {
+      send({
+        jsonrpc: '2.0',
+        id,
+        result: { contents: { kind: 'markdown', value: `len=${text.length}` } },
+      });
+    },
+  ],
+  [
+    'fake/text',
+    ({ id }) => {
+      send({ jsonrpc: '2.0', id, result: text });
+    },
+  ],
+  [
+    'fake/initialize',
+    ({ id }) => {
+      send({ jsonrpc: '2.0', id, result: initializeParams });
+    },
+  ],
+  [
+    'textDocument/completion',
+    ({ id }) => {
+      const items = Array.from({ length: 5000 }, (_, i) => ({
+        label: `item${i}`,
+        detail: 'x'.repeat(400),
+      }));
+      send({ jsonrpc: '2.0', id, result: { isIncomplete: false, items } });
+    },
+  ],
+  [
+    'textDocument/references',
+    ({ id }) => {
+      const range = { start: { line: 1, character: 2 }, end: { line: 1, character: 9 } };
+      send({
+        jsonrpc: '2.0',
+        id,
+        result: Array.from({ length: 6000 }, (_, i) => ({ uri: `file:///w/F${i}.php`, range })),
+      });
+    },
+  ],
+  [
+    'textDocument/formatting',
+    ({ id }) => {
+      send({
+        jsonrpc: '2.0',
+        id,
+        result: [
+          {
+            range: { start: { line: 0, character: 0 }, end: { line: 1, character: 0 } },
+            newText: 'x'.repeat(1200 * 1024),
+          },
+        ],
+      });
+    },
+  ],
+  [
+    'textDocument/semanticTokens/full',
+    ({ id }) => {
+      send({
+        jsonrpc: '2.0',
+        id,
+        result: { resultId: 'r1', data: Array.from({ length: 200_000 }, (_, i) => i % 5) },
+      });
+    },
+  ],
+  [
+    'shutdown',
+    ({ id }) => {
+      send({ jsonrpc: '2.0', id, result: null });
+    },
+  ],
+  [
+    'exit',
+    () => {
+      process.exit(0);
+    },
+  ],
+]);
+
 function handle(message) {
-  const { id, method, params } = message;
+  const { id, method } = message;
   if (mode === 'silent' || (mode === 'stubborn' && (method === 'shutdown' || method === 'exit'))) {
     return;
   }
-  if (method === 'initialize') {
-    initializeParams = params;
-    send({
-      jsonrpc: '2.0',
-      id,
-      result: {
-        capabilities:
-          process.env.FAKE_CAPABILITIES !== undefined && process.env.FAKE_CAPABILITIES !== ''
-            ? JSON.parse(process.env.FAKE_CAPABILITIES)
-            : {
-                textDocumentSync: 2,
-                hoverProvider: true,
-                definitionProvider: true,
-                semanticTokensProvider: {
-                  legend: { tokenTypes: ['parameter'], tokenModifiers: [] },
-                  full: true,
-                },
-              },
-      },
-    });
-  } else if (method === 'initialized') {
-    send({
-      jsonrpc: '2.0',
-      id: 9001,
-      method: 'window/workDoneProgress/create',
-      params: { token: 'index' },
-    });
-    send({
-      jsonrpc: '2.0',
-      method: '$/progress',
-      params: { token: 'index', value: { kind: 'begin', title: 'Indexing', percentage: 0 } },
-    });
-    send({
-      jsonrpc: '2.0',
-      method: '$/progress',
-      params: { token: 'index', value: { kind: 'report', percentage: 50 } },
-    });
-    send({
-      jsonrpc: '2.0',
-      method: '$/progress',
-      params: { token: 'index', value: { kind: 'end' } },
-    });
-    send({ jsonrpc: '2.0', id: 9002, method: 'workspace/inlayHint/refresh', params: null });
-    if (process.env.FAKE_NULL_PARAMS !== undefined && process.env.FAKE_NULL_PARAMS !== '') {
-      for (const method of ['textDocument/publishDiagnostics', '$/progress', 'window/logMessage']) {
-        send({ jsonrpc: '2.0', method, params: null });
-      }
-    }
-    const items = Number(process.env.FAKE_CONFIG_ITEMS ?? 0);
-    if (items > 0) {
-      send({
-        jsonrpc: '2.0',
-        id: 9003,
-        method: 'workspace/configuration',
-        params: { items: Array.from({ length: items }, () => ({ section: 'x' })) },
-      });
-    }
-  } else if (id === 9003) {
+  // The configuration answer has id 9003 and no method; only initialize and initialized are looked at before it.
+  if (id === 9003 && method !== 'initialize' && method !== 'initialized') {
     send({
       jsonrpc: '2.0',
       method: 'window/logMessage',
       params: { type: 2, message: `config=${JSON.stringify(message.result)}` },
     });
-  } else if (method === 'textDocument/didOpen') {
-    ({ uri, text } = params.textDocument);
-    publish();
-  } else if (method === 'textDocument/didChange') {
-    for (const change of params.contentChanges) {
-      text =
-        change.range !== undefined && change.range !== null
-          ? text.slice(0, offsetAt(change.range.start)) +
-            change.text +
-            text.slice(offsetAt(change.range.end))
-          : change.text;
-    }
-    publish();
-  } else if (method === 'textDocument/hover') {
-    send({
-      jsonrpc: '2.0',
-      id,
-      result: { contents: { kind: 'markdown', value: `len=${text.length}` } },
-    });
-  } else if (method === 'fake/text') {
-    send({ jsonrpc: '2.0', id, result: text });
-  } else if (method === 'fake/initialize') {
-    send({ jsonrpc: '2.0', id, result: initializeParams });
-  } else if (method === 'textDocument/completion') {
-    const items = Array.from({ length: 5000 }, (_, i) => ({
-      label: `item${i}`,
-      detail: 'x'.repeat(400),
-    }));
-    send({ jsonrpc: '2.0', id, result: { isIncomplete: false, items } });
-  } else if (method === 'textDocument/references') {
-    const range = { start: { line: 1, character: 2 }, end: { line: 1, character: 9 } };
-    send({
-      jsonrpc: '2.0',
-      id,
-      result: Array.from({ length: 6000 }, (_, i) => ({ uri: `file:///w/F${i}.php`, range })),
-    });
-  } else if (method === 'textDocument/formatting') {
-    send({
-      jsonrpc: '2.0',
-      id,
-      result: [
-        {
-          range: { start: { line: 0, character: 0 }, end: { line: 1, character: 0 } },
-          newText: 'x'.repeat(1200 * 1024),
-        },
-      ],
-    });
-  } else if (method === 'textDocument/semanticTokens/full') {
-    send({
-      jsonrpc: '2.0',
-      id,
-      result: { resultId: 'r1', data: Array.from({ length: 200_000 }, (_, i) => i % 5) },
-    });
-  } else if (method === 'shutdown') {
-    send({ jsonrpc: '2.0', id, result: null });
-  } else if (method === 'exit') {
-    process.exit(0);
+    return;
+  }
+  const handler = handlers.get(method);
+  if (handler) {
+    handler(message);
   } else if (id !== undefined && method !== undefined) {
     send({ jsonrpc: '2.0', id, result: null });
   }

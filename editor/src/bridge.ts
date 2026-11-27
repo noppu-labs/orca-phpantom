@@ -387,6 +387,7 @@ class LspBridge {
   }
 
   /** As `ask`, with how many items the worker cut from a list too large for Orca to carry. */
+  // oxlint-disable-next-line eslint/complexity -- one retry loop whose blocks return early or use more than two of the bridge's fields, so none moves out without redesigning the bridge
   public async askDetailed(
     method: string,
     params: object,
@@ -576,6 +577,7 @@ class LspBridge {
     return status ?? this.current ?? { message: 'PHPantom: the editor closed', state: 'error' };
   }
 
+  // oxlint-disable-next-line eslint/complexity -- the chunk loop returns null from open() itself and the ready branch sets six fields, so no block moves out without redesigning the bridge
   private async open(generation: number, resync: boolean): Promise<AttachStatus | null> {
     if (generation !== this.generation || this.disposed) return null;
     const { context } = this;
@@ -616,10 +618,12 @@ class LspBridge {
             break;
           } catch (error) {
             // Orca refused the chunk before the worker saw it: the same chunk goes again after the hold.
+            // oxlint-disable-next-line eslint/max-depth -- the chunk retry sits in try, for, for and catch, and its return null leaves open() itself, so it stays inline
             if (!isRateLimited(error) || generation !== this.generation || this.disposed) {
               throw error;
             }
             await sleep(Math.max(this.pacer.wait(), 1));
+            // oxlint-disable-next-line eslint/max-depth -- the chunk retry sits in try, for, for and catch, and its return null leaves open() itself, so it stays inline
             if (generation !== this.generation || this.disposed) return null;
           }
         }
@@ -923,18 +927,7 @@ class LspBridge {
             version: this.version + 1,
           });
         } catch (error) {
-          if (generation !== this.generation) return;
-          // Refused before the worker saw it, so it did not land: send the same groups after the hold.
-          if (isRateLimited(error)) {
-            this.holdBack(groups.slice(index));
-            return;
-          }
-          if (codeOf(error) === 'unavailable') {
-            this.lost();
-            return;
-          }
-          // Whether it landed is unknown, so send the whole text.
-          this.resyncNext();
+          if (this.changeFailed(error, generation, groups, index) === 'stop') return;
           break;
         }
         if (generation !== this.generation || this.attachedTo === null) return;
@@ -951,6 +944,28 @@ class LspBridge {
       }
       if (!drain && !held && !this.needsResync) return;
     }
+  }
+
+  /** After a change that threw: `stop` ends the sync, `resync` leaves the groups to send the whole text. */
+  private changeFailed(
+    error: unknown,
+    generation: number,
+    groups: Group[],
+    index: number
+  ): 'resync' | 'stop' {
+    if (generation !== this.generation) return 'stop';
+    // Refused before the worker saw it, so it did not land: send the same groups after the hold.
+    if (isRateLimited(error)) {
+      this.holdBack(groups.slice(index));
+      return 'stop';
+    }
+    if (codeOf(error) === 'unavailable') {
+      this.lost();
+      return 'stop';
+    }
+    // Whether it landed is unknown, so send the whole text.
+    this.resyncNext();
+    return 'resync';
   }
 
   private holdBack(groups: Group[]): void {
