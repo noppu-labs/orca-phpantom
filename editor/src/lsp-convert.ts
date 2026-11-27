@@ -499,6 +499,13 @@ interface LspInlayHint {
 
 const isInlayHintList = (value: unknown): value is LspInlayHint[] => Array.isArray(value);
 
+// Why: a label part's tooltip may be MarkupContent on the wire even where the type says string.
+const tooltipText = (tooltip: unknown): string => {
+  if (typeof tooltip === 'string') return tooltip;
+  // oxlint-disable-next-line typescript/no-base-to-string -- a MarkupContent value is a string; anything else a server sends is shown as String() shows it
+  return String(isRecord(tooltip) ? (tooltip.value ?? '') : '');
+};
+
 /** An inlay hint in Monaco's shape. Both number their kinds the same way: 1 type, 2 parameter. */
 function toInlayHint(hint: LspInlayHint): {
   label: string | { label: string; tooltip?: string }[];
@@ -528,10 +535,6 @@ function toInlayHint(hint: LspInlayHint): {
     ...(isTruthy(hint.paddingRight) ? { paddingRight: true } : {}),
   };
 }
-
-// Why: a label part's tooltip may be MarkupContent on the wire even where the type says string.
-const tooltipText = (tooltip: unknown): string =>
-  typeof tooltip === 'string' ? tooltip : String(isRecord(tooltip) ? (tooltip.value ?? '') : '');
 
 interface LspSemanticTokens {
   data: number[];

@@ -116,6 +116,11 @@ function renderStatus(state: StatusState): StatusBarUpdate {
         tooltip: `PHPantom${version}${source}, ready`,
       };
     }
+    default: {
+      // Unreachable: aggregate() only gives these phases, and TypeScript checks every one has its case.
+      const unhandled: never = state.phase;
+      throw new TypeError(`no status for the phase ${String(unhandled)}`);
+    }
   }
 }
 

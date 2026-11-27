@@ -349,7 +349,9 @@ function registerEditingProviders(
               },
               token,
               // The lightbulb asks on every cursor move; only an invoked one (1) is someone asking. Silent: hovering a diagnostic asks as invoked too.
-              context.trigger === 1 ? { kind: 'user', silent: true } : { kind: 'background' }
+              context.trigger === monaco.languages.CodeActionTriggerType.Invoke
+                ? { kind: 'user', silent: true }
+                : { kind: 'background' }
             );
             const actions: monaco.languages.CodeAction[] = [];
             if (model.getVersionId() !== versionId) return { actions, dispose: noop };

@@ -1,3 +1,5 @@
+import { inspect } from 'node:util';
+
 import { assert, test } from 'orca/testing';
 
 import { isRecord, isTruthy } from '../../../src/utils/json.ts';
@@ -9,7 +11,7 @@ test('isTruthy reads a value as an if does', () => {
   }
   for (const value of [true, 1, -1, 1n, 'x', ' ', '0', 'false', {}, [], Number.POSITIVE_INFINITY]) {
     assert.equal(Boolean(value), true);
-    assert.equal(isTruthy(value), true, String(value));
+    assert.equal(isTruthy(value), true, inspect(value));
   }
 });
 

@@ -382,7 +382,7 @@ class LspBridge {
     params: object,
     signal?: AbortSignal,
     options: AskOptions = {}
-  ): Promise<unknown | null> {
+  ): Promise<unknown> {
     const answer = await this.askDetailed(method, params, signal, options);
     return answer?.result ?? null;
   }

@@ -43,7 +43,7 @@ function rulesOf(grammar: Grammar, state: string, seen: string[] = []): unknown[
   for (const rule of tokenizer[name]) {
     if (rule !== null && typeof rule === 'object' && !Array.isArray(rule) && 'include' in rule) {
       rules.push(
-        ...rulesOf(grammar, String((rule as { include: string }).include).replace(/^@/u, ''), [
+        ...rulesOf(grammar, (rule as { include: string }).include.replace(/^@/u, ''), [
           ...seen,
           name,
         ])

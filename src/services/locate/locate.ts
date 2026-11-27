@@ -339,12 +339,12 @@ async function locateInRoots(
 
   // Why breadth-first: the file being edited is nearly always close to the workspace root, so a huge tree (a home folder used as a workspace) must not use up the time before the shallow files are seen.
   const queue = roots.map((root) => ({ directory: root, root }));
-  for (let next = 0; next < queue.length; next += 1) {
+  // Directories pushed while the loop runs are visited too: an array iterator reads the length at each step.
+  for (const { root, directory } of queue) {
     // Why here: a deadline or cap checked only inside the entry loop would still read every queued directory.
     if (Date.now() > deadline || visited >= (options.maxFiles ?? MAX_FILES_VISITED)) {
       break;
     }
-    const { root, directory } = queue[next];
     let entries;
     try {
       entries = await readdir(directory, { withFileTypes: true });

@@ -76,7 +76,7 @@ function atLeast(version: string, minimum: string): boolean {
 async function readVersion(path: string, timeoutMs = VERSION_TIMEOUT_MS): Promise<string | null> {
   return new Promise((resolve) => {
     execFile(path, ['--version'], { timeout: timeoutMs, windowsHide: true }, (error, stdout) => {
-      resolve(error ? null : parseVersion(String(stdout)));
+      resolve(error ? null : parseVersion(stdout));
     });
   });
 }

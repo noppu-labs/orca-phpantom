@@ -4,8 +4,8 @@
 import { isRecord } from '../../utils/json.ts';
 
 interface RpcHandlers {
-  /** A request the server makes of us (configuration, registering capabilities ...); its result is the answer. */
-  onRequest: (method: string, params: unknown) => Promise<unknown> | unknown;
+  /** A request the server makes of us (configuration, registering capabilities ...); its result, or what its promise settles to, is the answer. */
+  onRequest: (method: string, params: unknown) => unknown;
   onNotification: (method: string, params: unknown) => void;
   /** A handler threw on a message; the connection carries on with the next one. */
   onError?: (message: string) => void;

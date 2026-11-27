@@ -158,7 +158,6 @@
     {
       "files": ["**/*"],
       "rules": {
-        "eslint/default-case": "off",
         "eslint/max-classes-per-file": "off",
         "eslint/no-duplicate-imports": "off",
         "eslint/no-inline-comments": "off",
@@ -169,12 +168,6 @@
         "eslint/no-use-before-define": "off",
         "eslint/no-useless-return": "off",
         "import/unambiguous": "off",
-        "typescript/consistent-return": "off",
-        "typescript/no-base-to-string": "off",
-        "typescript/no-redundant-type-constituents": "off",
-        "typescript/no-unnecessary-type-conversion": "off",
-        "typescript/no-unsafe-enum-comparison": "off",
-        "typescript/prefer-for-of": "off",
         "unicorn/no-immediate-mutation": "off",
         "unicorn/no-new-array": "off",
         "unicorn/no-useless-collection-argument": "off"

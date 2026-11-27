@@ -18,6 +18,7 @@ function fakeContext() {
       CompletionItemKind: new Proxy({}, { get: (_target, key) => String(key) }),
       CompletionItemInsertTextRule: { InsertAsSnippet: 4 },
       CompletionItemTag: { Deprecated: 1 },
+      CodeActionTriggerType: { Invoke: 1, Auto: 2 },
     },
     {
       get(target, key) {

@@ -38,7 +38,8 @@ interface Call {
   options?: { timeoutMs?: number; signal?: AbortSignal };
 }
 type OpenHandler = (input: any, host: FakeHost) => AttachStatus | Promise<AttachStatus>;
-type Answer = unknown | Promise<unknown>;
+// An answer, or a promise of one.
+type Answer = unknown;
 
 /** Pending until the last chunk, then ready under the host's current session. */
 function readyOn(_when: 'last'): OpenHandler {
