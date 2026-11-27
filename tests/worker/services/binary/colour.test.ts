@@ -81,16 +81,16 @@ test('finds the global config where PHPantom looks for it', () => {
     '/h/.config/phpantom_lsp/.phpantom.toml'
   );
   assert.equal(
-    globalConfigPath({ APPDATA: 'C:\\A' }, 'win32', 'C:\\u'),
-    'C:\\A\\phpantom_lsp\\.phpantom.toml'
+    globalConfigPath({ APPDATA: String.raw`C:\A` }, 'win32', String.raw`C:\u`),
+    String.raw`C:\A\phpantom_lsp\.phpantom.toml`
   );
   assert.equal(
-    globalConfigPath({ APPDATA: '' }, 'win32', 'C:\\u'),
-    'C:\\u\\AppData\\Roaming\\phpantom_lsp\\.phpantom.toml'
+    globalConfigPath({ APPDATA: '' }, 'win32', String.raw`C:\u`),
+    String.raw`C:\u\AppData\Roaming\phpantom_lsp\.phpantom.toml`
   );
   assert.equal(
-    globalConfigPath({ XDG_CONFIG_HOME: 'C:\\x' }, 'win32', 'C:\\u'),
-    'C:\\u\\AppData\\Roaming\\phpantom_lsp\\.phpantom.toml'
+    globalConfigPath({ XDG_CONFIG_HOME: String.raw`C:\x` }, 'win32', String.raw`C:\u`),
+    String.raw`C:\u\AppData\Roaming\phpantom_lsp\.phpantom.toml`
   );
 });
 

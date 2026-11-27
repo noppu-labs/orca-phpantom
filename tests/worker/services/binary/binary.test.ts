@@ -143,23 +143,30 @@ test('finds executables and well-known folders', () => {
     '/b/x'
   );
   assert.equal(
-    findExecutable('x', { PATH: 'C:\\a', PATHEXT: '.EXE' }, 'win32', (p) => p === 'C:\\a\\x.exe'),
-    'C:\\a\\x.exe'
+    findExecutable(
+      'x',
+      { PATH: String.raw`C:\a`, PATHEXT: '.EXE' },
+      'win32',
+      (p) => p === String.raw`C:\a\x.exe`
+    ),
+    String.raw`C:\a\x.exe`
   );
   assert.deepEqual(wellKnownDirs({ HOME: '/h' }, 'darwin'), [
     '/opt/homebrew/bin',
     '/usr/local/bin',
     '/h/.cargo/bin',
   ]);
-  assert.deepEqual(wellKnownDirs({ USERPROFILE: 'C:\\u' }, 'win32'), ['C:\\u\\.cargo\\bin']);
+  assert.deepEqual(wellKnownDirs({ USERPROFILE: String.raw`C:\u` }, 'win32'), [
+    String.raw`C:\u\.cargo\bin`,
+  ]);
 });
 test('places the cache per platform', () => {
   assert.equal(cacheDir({}, 'darwin', '/h'), '/h/Library/Caches/noppu-labs.phpantom');
   assert.equal(cacheDir({}, 'linux', '/h'), '/h/.cache/noppu-labs.phpantom');
   assert.equal(cacheDir({ XDG_CACHE_HOME: '/x' }, 'linux', '/h'), '/x/noppu-labs.phpantom');
   assert.equal(
-    cacheDir({ LOCALAPPDATA: 'C:\\L' }, 'win32', 'C:\\u'),
-    'C:\\L\\noppu-labs.phpantom\\cache'
+    cacheDir({ LOCALAPPDATA: String.raw`C:\L` }, 'win32', String.raw`C:\u`),
+    String.raw`C:\L\noppu-labs.phpantom\cache`
   );
 });
 test('readVersion runs the binary and returns null for a missing one', async () => {

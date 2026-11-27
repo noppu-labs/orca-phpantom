@@ -17,5 +17,5 @@ test('different files, and Unix paths that differ only in case, stay different',
 
 test('uriKey tolerates a malformed escape and a Windows separator', () => {
   assert.equal(uriKey('file:///home/me/%E0%A4%A'), '/home/me/%E0%A4%A');
-  assert.equal(uriKey('file:///C:\\a\\b'), '/c:/a/b');
+  assert.equal(uriKey(String.raw`file:///C:\a\b`), '/c:/a/b');
 });

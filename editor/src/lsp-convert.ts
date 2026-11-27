@@ -138,7 +138,7 @@ export function toMarkdown(
 }
 
 function escapeMarkdown(text: string): string {
-  return text.replace(/([\\`*_{}[\]()#+\-.!|>])/g, '\\$1');
+  return text.replace(/([\\`*_{}[\]()#+\-.!|>])/g, String.raw`\$1`);
 }
 
 export type LspTextEdit = { range: LspRange; newText: string };

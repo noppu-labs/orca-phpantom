@@ -53,13 +53,19 @@ test('remote and WSL workspaces are not local', () => {
       id: '2',
       name: 'x',
       branch: null,
-      path: '\\\\wsl.localhost\\Ubuntu\\app',
+      path: String.raw`\\wsl.localhost\Ubuntu\app`,
       hostId: 'local',
     }),
     false
   );
   assert.equal(
-    isLocal({ id: '4', name: 'x', branch: null, path: '\\\\WSL$\\Ubuntu\\app', hostId: null }),
+    isLocal({
+      id: '4',
+      name: 'x',
+      branch: null,
+      path: String.raw`\\WSL$\Ubuntu\app`,
+      hostId: null,
+    }),
     false
   );
   assert.equal(

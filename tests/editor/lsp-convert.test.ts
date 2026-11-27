@@ -74,7 +74,7 @@ test('toMarkdown accepts every hover shape', () => {
   assert.deepEqual(toMarkdown({ kind: 'markdown', value: '**x**' }), ['**x**']);
   assert.deepEqual(toMarkdown({ language: 'ts', value: 'let a' }), ['```ts\nlet a\n```']);
   assert.deepEqual(toMarkdown(['a', { language: 'rs', value: 'fn' }, '']), ['a', '```rs\nfn\n```']);
-  assert.deepEqual(toMarkdown({ kind: 'plaintext', value: 'a_b *c*' }), ['a\\_b \\*c\\*']);
+  assert.deepEqual(toMarkdown({ kind: 'plaintext', value: 'a_b *c*' }), [String.raw`a\_b \*c\*`]);
   assert.deepEqual(toMarkdown(null), []);
 });
 

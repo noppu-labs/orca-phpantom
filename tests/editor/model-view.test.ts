@@ -106,7 +106,7 @@ test('a line-ending switch is an undo step of its own, before the text edit', ()
   const { fake } = outsideWrite('a\nb\nc', 'a\r\nb\r\nX');
   assert.deepEqual(fake.calls.slice(fake.calls.indexOf('setText') + 1), [
     'stack',
-    'setEol:"\\r\\n"',
+    String.raw`setEol:"\r\n"`,
     'stack',
     'replace',
     'stack',
