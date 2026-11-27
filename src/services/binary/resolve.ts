@@ -109,9 +109,9 @@ async function resolveBinary(options: ResolveOptions): Promise<Resolution> {
   }
   let pending = inFlight.get(target);
   if (pending === undefined) {
-    pending = download(options, asset, directory, target, marker, read).finally(() =>
-      inFlight.delete(target)
-    );
+    pending = download(options, asset, directory, target, marker, read).finally(() => {
+      inFlight.delete(target);
+    });
     inFlight.set(target, pending);
   }
   return pending;

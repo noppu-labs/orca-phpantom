@@ -34,7 +34,11 @@ function source(initial: string, language: Language = 'php'): FakeSource {
     getVersion: () => version,
     onChanges(listener) {
       listeners.add(listener);
-      return { dispose: () => void listeners.delete(listener) };
+      return {
+        dispose: () => {
+          listeners.delete(listener);
+        },
+      };
     },
     edit(start, end, insert) {
       const range = { start: positionAt(value, start), end: positionAt(value, end) };

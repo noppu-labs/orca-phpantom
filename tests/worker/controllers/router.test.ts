@@ -78,11 +78,18 @@ async function setup(
   const logs: string[] = [];
   const host: RouterHost = {
     listWorkspaces: async (listOptions) => (options.list ? options.list(dir, listOptions) : rows),
-    openEditor: async (workspaceId, path) => void opened.push({ workspaceId, path }),
-    post: (event, payload, postOptions) =>
-      void posts.push({ event, payload, panel: postOptions.panel }),
-    status: (update) => void statuses.push(update),
-    log: (message) => void logs.push(message),
+    openEditor: async (workspaceId, path) => {
+      opened.push({ workspaceId, path });
+    },
+    post: (event, payload, postOptions) => {
+      posts.push({ event, payload, panel: postOptions.panel });
+    },
+    status: (update) => {
+      statuses.push(update);
+    },
+    log: (message) => {
+      logs.push(message);
+    },
     settings: async () => ({ phpantomPath: '', allowDownload: false }),
   };
   const started: Started[] = [];

@@ -38,7 +38,9 @@ function longestIncreasing(values: number[]): number[] {
 
 function occurrences(items: string[]): Map<string, number> {
   const seen = new Map<string, number>();
-  items.forEach((item, at) => seen.set(item, seen.has(item) ? -1 : at));
+  items.forEach((item, at) => {
+    seen.set(item, seen.has(item) ? -1 : at);
+  });
   return seen;
 }
 

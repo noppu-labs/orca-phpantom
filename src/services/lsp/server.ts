@@ -58,11 +58,11 @@ function requireParams(method: string, params: unknown): void {
 }
 
 async function delay(ms: number): Promise<'timeout'> {
-  return new Promise((resolve) =>
+  return new Promise((resolve) => {
     setTimeout(() => {
       resolve('timeout');
-    }, ms).unref()
-  );
+    }, ms).unref();
+  });
 }
 
 class PhpantomServer {
@@ -111,15 +111,20 @@ class PhpantomServer {
       child.kill();
       throw new Error('could not open the language server pipes');
     }
-    const rpc = new RpcConnection((frame) => void stdin.write(frame), {
-      onError: (message) => {
-        events.log(`PHPantom sent something unexpected: ${message}`);
+    const rpc = new RpcConnection(
+      (frame) => {
+        stdin.write(frame);
       },
-      onNotification: (method, params) => {
-        this.onNotification(method, params);
-      },
-      onRequest: (method, params) => this.onRequest(method, params),
-    });
+      {
+        onError: (message) => {
+          events.log(`PHPantom sent something unexpected: ${message}`);
+        },
+        onNotification: (method, params) => {
+          this.onNotification(method, params);
+        },
+        onRequest: (method, params) => this.onRequest(method, params),
+      }
+    );
     this.rpc = rpc;
     stdout.on('data', (chunk: Buffer) => {
       rpc.feed(chunk);

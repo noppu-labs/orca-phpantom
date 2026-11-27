@@ -16,7 +16,9 @@ function connect() {
   const notifications: { method: string; params: unknown }[] = [];
   const connection = new RpcConnection((out) => sent.push(out), {
     onRequest: (method) => (method === 'workspace/configuration' ? [null] : undefined),
-    onNotification: (method, params) => void notifications.push({ method, params }),
+    onNotification: (method, params) => {
+      notifications.push({ method, params });
+    },
   });
   return { connection, sent, notifications };
 }
@@ -153,7 +155,9 @@ test('a notification handler that throws is reported, and the next message in th
       if (params === null) throw new TypeError(`cannot read ${method}`);
       seen.push(method);
     },
-    onError: (message) => void errors.push(message),
+    onError: (message) => {
+      errors.push(message);
+    },
   });
   const chunk = Buffer.concat([
     frame({ jsonrpc: '2.0', method: 'bad', params: null }),

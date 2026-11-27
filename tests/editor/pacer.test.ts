@@ -13,7 +13,12 @@ function hostError(code: string, message: string, retryAfterMs?: number): Error 
 
 function clock(start = 1_000_000) {
   let now = start;
-  return { now: () => now, advance: (ms: number) => void (now += ms) };
+  return {
+    now: () => now,
+    advance: (ms: number) => {
+      now += ms;
+    },
+  };
 }
 
 test('isRateLimited recognises only a rate_limited refusal', () => {

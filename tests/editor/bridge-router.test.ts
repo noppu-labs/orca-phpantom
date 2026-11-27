@@ -140,7 +140,11 @@ function harness(options: { leaseMs?: number; sweepMs?: number } = {}) {
         const set = listeners.get(event) ?? new Set();
         listeners.set(event, set);
         set.add(handler);
-        return { dispose: () => void set.delete(handler) };
+        return {
+          dispose: () => {
+            set.delete(handler);
+          },
+        };
       },
       readContext: async () => ({ workspaceId: 'ws-a', branch: 'main', displayName: 'a' }),
       onWorkspaceChanged: () => none,
@@ -149,7 +153,12 @@ function harness(options: { leaseMs?: number; sweepMs?: number } = {}) {
       onSaved: () => none,
       onSettingsChanged: () => none,
     };
-    return { host, die: () => void (dead = true) };
+    return {
+      host,
+      die: () => {
+        dead = true;
+      },
+    };
   };
 
   return {

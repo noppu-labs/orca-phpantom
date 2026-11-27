@@ -25,11 +25,21 @@ interface Recorded {
 function fakeServer(env: Record<string, string> = {}) {
   const events: Recorded = { diagnostics: [], progress: [], refresh: [], logs: [], exits: [] };
   const hooks: ServerEvents = {
-    diagnostics: (uri, diagnostics) => void events.diagnostics.push({ uri, diagnostics }),
-    progress: (state) => void events.progress.push(state),
-    refresh: (kind) => void events.refresh.push(kind),
-    log: (message) => void events.logs.push(message),
-    exit: (reason) => void events.exits.push(reason),
+    diagnostics: (uri, diagnostics) => {
+      events.diagnostics.push({ uri, diagnostics });
+    },
+    progress: (state) => {
+      events.progress.push(state);
+    },
+    refresh: (kind) => {
+      events.refresh.push(kind);
+    },
+    log: (message) => {
+      events.logs.push(message);
+    },
+    exit: (reason) => {
+      events.exits.push(reason);
+    },
   };
   const children: ChildProcess[] = [];
   const spawnImpl = ((_executable: string, _args: string[], options: object) => {

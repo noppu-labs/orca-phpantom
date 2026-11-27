@@ -52,7 +52,11 @@ function recorder(limit?: number) {
   const disposed: string[] = [];
   const peek = new PeekModels((uri) => {
     made.push(uri);
-    return { dispose: () => void disposed.push(uri) };
+    return {
+      dispose: () => {
+        disposed.push(uri);
+      },
+    };
   }, limit);
   return { made, disposed, peek };
 }

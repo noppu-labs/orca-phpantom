@@ -13,7 +13,11 @@ function view(): TextView & { type: (text: string) => void } {
     },
     onUserChange(listener) {
       listeners.add(listener);
-      return { dispose: () => void listeners.delete(listener) };
+      return {
+        dispose: () => {
+          listeners.delete(listener);
+        },
+      };
     },
     type(text) {
       value = text;

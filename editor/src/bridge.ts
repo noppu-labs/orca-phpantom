@@ -748,7 +748,9 @@ class LspBridge {
   // Why: Orca remounts an editor frame (with a new docId) each time its tab shows, and the old frame's pagehide close may never reach the worker, so the worker releases what it stops hearing from.
   private startPinging(): void {
     if (this.pingTimer !== undefined || this.disposed) return;
-    const timer = setInterval(() => void this.ping(), this.pingMs);
+    const timer = setInterval(() => {
+      void this.ping();
+    }, this.pingMs);
     // Why: under Node (the tests) a bridge never disposed must not keep the process alive; a browser timer is a number.
     if (typeof timer === 'object') timer.unref?.();
     this.pingTimer = timer;
@@ -818,7 +820,9 @@ class LspBridge {
     for (;;) {
       const due = Math.max(this.mountedAt, this.lastSwitchAt) + this.settleMs - Date.now();
       if (due <= 0) break;
-      await new Promise((resolve) => setTimeout(resolve, due));
+      await new Promise((resolve) => {
+        setTimeout(resolve, due);
+      });
       if (this.disposed) return;
     }
     const context = await this.host.readContext().catch(() => null);
@@ -1063,7 +1067,11 @@ class LspBridge {
   ): Disposable {
     const set = this.listeners[kind];
     set.add(listener);
-    return { dispose: () => void set.delete(listener) };
+    return {
+      dispose: () => {
+        set.delete(listener);
+      },
+    };
   }
 
   private emit<Kind extends keyof Events>(kind: Kind, value: Events[Kind]): void {

@@ -84,7 +84,11 @@ function fakeHost(
     const set = listeners.get(event) ?? new Set();
     listeners.set(event, set);
     set.add(listener);
-    return { dispose: () => void set.delete(listener) };
+    return {
+      dispose: () => {
+        set.delete(listener);
+      },
+    };
   };
   const emit = (event: string, payload?: unknown) => {
     for (const listener of [...(listeners.get(event) ?? [])]) listener(payload);

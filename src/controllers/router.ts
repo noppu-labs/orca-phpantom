@@ -210,7 +210,9 @@ class Router {
     });
     this.sweepMs = options.sweepMs ?? SWEEP_MS;
     this.lastSweepAt = this.now();
-    this.sweepTimer = setInterval(() => void this.sweep(), this.sweepMs);
+    this.sweepTimer = setInterval(() => {
+      void this.sweep();
+    }, this.sweepMs);
     this.sweepTimer.unref?.();
   }
 
@@ -240,6 +242,7 @@ class Router {
     return this.inLane(input.docId, async () => this.attach(input, text, caller.panel));
   }
 
+  // oxlint-disable-next-line typescript/require-await -- a phpantom.* handler like the rest: async keeps its answer a promise and a throw from the mirror a rejection, which main.ts and the tests await
   public async change(input: Input<'phpantom.change'>): Promise<Output<'phpantom.change'>> {
     const doc = this.attached(input.docId, input.session);
     if (!doc) {
@@ -299,6 +302,7 @@ class Router {
 
   public async close(input: Input<'phpantom.close'>): Promise<Output<'phpantom.close'>> {
     this.chunks.delete(input.docId);
+    // oxlint-disable-next-line typescript/require-await -- inLane chains the task with then(); a promise-returning task keeps the lane settling as late as it does now
     return this.inLane(input.docId, async () => {
       const doc = this.docs.get(input.docId);
       if (doc) {
@@ -357,6 +361,7 @@ class Router {
     return { opened: true };
   }
 
+  // oxlint-disable-next-line typescript/require-await -- a phpantom.* handler like the rest: async keeps its answer a promise, which main.ts and the tests await
   public async ping(input: Input<'phpantom.ping'>): Promise<Output<'phpantom.ping'>> {
     return this.attached(input.docId, input.session) ? { ok: true } : { detached: true };
   }
@@ -642,6 +647,7 @@ class Router {
       const { docId } = doc;
       // Why in its lane and checked again there: an open in flight for this docId finishes first, and a document it attached anew has just been seen.
       releases.push(
+        // oxlint-disable-next-line typescript/require-await -- inLane chains the task with then(); a promise-returning task keeps the lane settling as late as it does now
         this.inLane(docId, async () => {
           const current = this.docs.get(docId);
           if (this.disposed || current !== doc || !expired(current)) {
