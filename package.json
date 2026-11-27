@@ -20,5 +20,8 @@
     "oxlint": "^1.95.0",
     "oxlint-tsgolint": "^7.0.2009",
     "typescript": "^7.0.2"
+  },
+  "engines": {
+    "node": ">=22.18"
   }
 }

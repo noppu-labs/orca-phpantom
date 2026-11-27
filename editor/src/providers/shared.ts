@@ -44,11 +44,12 @@ function capability(capabilities: Record<string, unknown>, ...path: string[]): u
   return value;
 }
 
-const isStringList = (value: unknown): value is string[] => Array.isArray(value);
+// Checks only that `value` is a list: its entries are taken as strings, as the server sends them.
+const isList = (value: unknown): value is string[] => Array.isArray(value);
 
-/** `value` when it is a list (trigger characters, code action kinds), its entries taken as strings; else undefined. */
-const stringList = (value: unknown): string[] | undefined =>
-  isStringList(value) ? value : undefined;
+/** `value` when it is a list (trigger characters, code action kinds), else undefined. */
+const listOrUndefined = (value: unknown): string[] | undefined =>
+  isList(value) ? value : undefined;
 
 function disposeAll(list: Disposable[]): Disposable {
   return {
@@ -58,5 +59,5 @@ function disposeAll(list: Disposable[]): Disposable {
   };
 }
 
-export { SERVER_NAME, canceled, capability, disposeAll, isRecord, stringList, withSignal };
+export { SERVER_NAME, canceled, capability, disposeAll, isRecord, listOrUndefined, withSignal };
 export type { Disposable, Model };

@@ -34,7 +34,7 @@ import {
   capability,
   disposeAll,
   isRecord,
-  stringList,
+  listOrUndefined,
   withSignal,
   type Disposable,
   type Model,
@@ -142,7 +142,7 @@ function registerReadingProviders(
               return { ...suggestion, ...completionDetails(resolved) };
             }
           : undefined,
-        triggerCharacters: stringList(
+        triggerCharacters: listOrUndefined(
           capability(capabilities, 'completionProvider', 'triggerCharacters')
         ),
       })
@@ -207,10 +207,10 @@ function registerReadingProviders(
             },
           };
         },
-        signatureHelpRetriggerCharacters: stringList(
+        signatureHelpRetriggerCharacters: listOrUndefined(
           capability(capabilities, 'signatureHelpProvider', 'retriggerCharacters')
         ),
-        signatureHelpTriggerCharacters: stringList(
+        signatureHelpTriggerCharacters: listOrUndefined(
           capability(capabilities, 'signatureHelpProvider', 'triggerCharacters')
         ),
       })

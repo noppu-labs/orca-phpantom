@@ -40,7 +40,7 @@ import {
   capability,
   disposeAll,
   isRecord,
-  stringList,
+  listOrUndefined,
   withSignal,
   type Disposable,
   type Model,
@@ -311,7 +311,9 @@ function registerEditingProviders(
   if (capabilities.codeActionProvider) {
     // The server's own action for each one shown, and the model version it was computed against: resolving needs exactly what the server sent, and an edit applies only to that version's text.
     const serverActions = new WeakMap<object, { raw: LspCodeAction; versionId: number }>();
-    const kinds = stringList(capability(capabilities, 'codeActionProvider', 'codeActionKinds'));
+    const kinds = listOrUndefined(
+      capability(capabilities, 'codeActionProvider', 'codeActionKinds')
+    );
     const resolves = Boolean(capability(capabilities, 'codeActionProvider', 'resolveProvider'));
     const toMonacoWorkspaceEdit = (edit: MonacoWorkspaceEdit): monaco.languages.WorkspaceEdit => ({
       edits: edit.edits.map((item) => ({

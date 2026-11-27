@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { capability, isRecord, stringList } from '../../../editor/src/providers/shared.ts';
+import { capability, isRecord, listOrUndefined } from '../../../editor/src/providers/shared.ts';
 
 test('capability walks nested keys and returns undefined off the path', () => {
   assert.equal(capability({ a: { b: true } }, 'a', 'b'), true);
@@ -29,11 +29,11 @@ test('isRecord accepts an Error, as reading its code did', () => {
   assert.equal(isRecord(undefined), false);
 });
 
-test('stringList keeps a list, empty or not, and drops anything else', () => {
+test('listOrUndefined keeps a list, empty or not, and drops anything else', () => {
   const list = ['.', '->'];
-  assert.equal(stringList(list), list);
-  assert.deepEqual(stringList([]), []);
+  assert.equal(listOrUndefined(list), list);
+  assert.deepEqual(listOrUndefined([]), []);
   for (const odd of [undefined, null, true, '.', {}]) {
-    assert.equal(stringList(odd), undefined);
+    assert.equal(listOrUndefined(odd), undefined);
   }
 });
