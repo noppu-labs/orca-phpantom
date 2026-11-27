@@ -24,14 +24,14 @@ function connect() {
 
 const notification = fc.record({
   jsonrpc: fc.constant('2.0'),
-  method: fc.string(),
-  params: fc.jsonValue(),
+  method: fc.string({ unit: 'binary' }),
+  params: fc.jsonValue({ stringUnit: 'binary' }),
 });
 
 // Raw bytes alone almost never hold a header, so frames with arbitrary bodies are mixed in.
 const chunk = fc.oneof(
   fc.uint8Array(),
-  fc.jsonValue().map((value) => framed(JSON.stringify(value))),
+  fc.jsonValue({ stringUnit: 'binary' }).map((value) => framed(JSON.stringify(value))),
   notification.map((message) => framed(JSON.stringify(message))),
   anyText().map((text) => framed(text))
 );
@@ -46,7 +46,7 @@ test('feed never throws on arbitrary bytes', () => {
 });
 
 test('messages arrive the same however the stream is chunked', () => {
-  const message = fc.oneof(notification, fc.jsonValue());
+  const message = fc.oneof(notification, fc.jsonValue({ stringUnit: 'binary' }));
   fc.assert(
     fc.property(fc.array(message), fc.array(fc.nat()), (messages, offsets) => {
       const stream = Buffer.concat(messages.map((sent) => framed(JSON.stringify(sent))));

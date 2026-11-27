@@ -6,7 +6,7 @@ import { fc } from './setup.ts';
 
 test('orcaSize is finite and non-negative for JSON values', () => {
   fc.assert(
-    fc.property(fc.jsonValue(), (value) => {
+    fc.property(fc.jsonValue({ stringUnit: 'binary' }), (value) => {
       const { bytes, objects } = orcaSize(value);
       assert.ok(Number.isSafeInteger(bytes) && bytes >= 0, `bytes ${bytes}`);
       assert.ok(Number.isSafeInteger(objects) && objects >= 0, `objects ${objects}`);
@@ -17,7 +17,7 @@ test('orcaSize is finite and non-negative for JSON values', () => {
 test('leadingThatFit returns a prefix that fits', () => {
   fc.assert(
     fc.property(
-      fc.array(fc.jsonValue()),
+      fc.array(fc.jsonValue({ stringUnit: 'binary' })),
       fc.nat({ max: 4096 }),
       fc.nat({ max: 64 }),
       (items, spareBytes, spareObjects) => {

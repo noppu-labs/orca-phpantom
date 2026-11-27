@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { gzipSync } from 'node:zlib';
+import { gunzipSync, gzipSync } from 'node:zlib';
 
 import { extractSingleFile } from '../../src/services/binary/extract.ts';
 import { oneTarGz, oneZip, tar, tarGz, zip } from '../helpers/archives.ts';
@@ -91,19 +91,30 @@ test('extractSingleFile throws an Error or returns a Buffer for arbitrary bytes'
   );
 });
 
+type Cut = 'prefix' | 'inside' | 'in-member-data';
+
 interface ValidArchive {
   archive: Buffer;
   kind: Kind;
   member: string;
   content: Buffer;
+  /** A copy cut short inside the archive, past the gzip framing a plain prefix dies at; `inData` cuts within the member's bytes. */
+  cutInside?: (at: number, inData: boolean) => Buffer;
 }
 
-const tarHolding = (content: Buffer, archive = tarGz({ phpantom_lsp: content })): ValidArchive => ({
-  archive,
-  kind: 'tar.gz',
-  member: 'phpantom_lsp',
-  content,
-});
+const tarHolding = (content: Buffer, archive = tarGz({ phpantom_lsp: content })): ValidArchive => {
+  const inner = gunzipSync(archive);
+  // The member is the last entry: its data, padded to whole 512-byte blocks, then two zero blocks.
+  const dataAt = inner.length - 1024 - Math.ceil(content.length / 512) * 512;
+  return {
+    archive,
+    kind: 'tar.gz',
+    member: 'phpantom_lsp',
+    content,
+    cutInside: (at, inData) =>
+      gzipSync(inner.subarray(0, inData ? dataAt + (at % content.length) : at % inner.length)),
+  };
+};
 
 const zipHolding = (content: Buffer, archive: Buffer): ValidArchive => ({
   archive,
@@ -123,11 +134,15 @@ const archive = fc.oneof(
 );
 
 test('a truncated copy of a valid archive never returns different bytes', () => {
+  const cut = fc.constantFrom<Cut>('prefix', 'inside', 'in-member-data');
   fc.assert(
-    fc.property(archive, fc.nat(), (valid, at) => {
+    fc.property(archive, fc.nat(), cut, (valid, at, where) => {
       assert.deepEqual(extractSingleFile(valid.archive, valid.kind, valid.member), valid.content);
-      const prefix = valid.archive.subarray(0, at % valid.archive.length);
-      const result = attempt(prefix, valid.kind, valid.member);
+      const truncated =
+        where !== 'prefix' && valid.cutInside !== undefined
+          ? valid.cutInside(at, where === 'in-member-data')
+          : valid.archive.subarray(0, at % valid.archive.length);
+      const result = attempt(truncated, valid.kind, valid.member);
       if (!(result instanceof Error)) assert.deepEqual(result, valid.content);
     })
   );
