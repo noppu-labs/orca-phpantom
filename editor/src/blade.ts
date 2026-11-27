@@ -54,8 +54,7 @@ function bladeRules(text: string): Rule[] {
     [/@@@@\w*/u, text],
     [/@@verbatim\b/u, 'keyword.blade', '@bladeVerbatim'],
     [
-      // oxlint-disable-next-line eslint/prefer-named-capture-group -- Monarch maps each group to the action at its position
-      /(@@[a-zA-Z_]\w*)(\s*)(\()/u,
+      /(?<directive>@@[a-zA-Z_]\w*)(?<space>\s*)(?<open>\()/u,
       ['keyword.blade', '', { next: '@bladeArguments', token: 'delimiter.parenthesis' }],
     ],
     [/@@php\b/u, 'keyword.blade', '@bladePhp'],
@@ -137,8 +136,10 @@ function bladeGrammar<C extends object, L extends MonarchLanguage>(html: {
   }
   tokenizer.root = [
     ...bladeRules(''),
-    // oxlint-disable-next-line eslint/prefer-named-capture-group -- Monarch maps each group to the action at its position
-    [/(<\/?)(x-[\w\-.:]+)/u, ['delimiter', { next: '@bladeComponent', token: 'tag.blade' }]],
+    [
+      /(?<open><\/?)(?<tag>x-[\w\-.:]+)/u,
+      ['delimiter', { next: '@bladeComponent', token: 'tag.blade' }],
+    ],
     ...textRules('', '<'),
     ...tokenizer.root,
   ];

@@ -10,7 +10,8 @@ interface WorkspaceRow {
   hostId: string | null;
 }
 
-const WSL_PATH = /^(?:\\\\|\/\/)wsl(?:\.localhost|\$)[\\/]/iu;
+// Why the cases are spelled out: with `i`, unicode mode would also fold U+017F (ſ) to `s`.
+const WSL_PATH = /^(?:\\\\|\/\/)[Ww][Ss][Ll](?:\.[Ll][Oo][Cc][Aa][Ll][Hh][Oo][Ss][Tt]|\$)[\\/]/u;
 
 /** A workspace on this machine: host `local` or none recorded, and not a WSL share. */
 function isLocal(row: WorkspaceRow): boolean {

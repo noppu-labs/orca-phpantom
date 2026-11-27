@@ -14,10 +14,11 @@ function fakeHtml() {
       ignoreCase: true,
       tokenizer: {
         root: [
-          // oxlint-disable-next-line eslint/prefer-named-capture-group -- Monarch maps each group to the action at its position, as in Monaco's HTML grammar
-          [/(<)((?:[\w-]+:)?[\w-]+)/u, ['delimiter', { token: 'tag', next: '@tag' }]],
-          // oxlint-disable-next-line eslint/prefer-named-capture-group -- Monarch maps each group to the action at its position, as in Monaco's HTML grammar
-          [/(<\/)((?:[\w-]+:)?[\w-]+)/u, ['delimiter', { token: 'tag', next: '@tag' }]],
+          [/(?<open><)(?<tag>(?:[\w-]+:)?[\w-]+)/u, ['delimiter', { token: 'tag', next: '@tag' }]],
+          [
+            /(?<open><\/)(?<tag>(?:[\w-]+:)?[\w-]+)/u,
+            ['delimiter', { token: 'tag', next: '@tag' }],
+          ],
           [/</u, 'delimiter'],
           [/[^<]+/u],
         ],
