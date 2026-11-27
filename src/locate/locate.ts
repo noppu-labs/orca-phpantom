@@ -38,10 +38,16 @@ const ALIKE_SIZE_RATIO = 3
 
 type Options = { maxFiles?: number; budgetMs?: number; alikeBudgetMs?: number }
 
-/** A blade document matches only names ending .blade.php; a php document only the other .php names. */
+/** The extensions a php document can have: .php and the ones Drupal uses for PHP. */
+export const PHP_EXTENSIONS: readonly string[] = ['.php', '.module', '.install', '.theme', '.profile', '.inc', '.engine']
+
+/** A blade document matches only names ending .blade.php; a php document a longer name ending in a PHP extension, other than .blade.php. */
 function nameMatches(name: string, language: Language): boolean {
   const lower = name.toLowerCase()
-  return language === 'blade' ? lower.endsWith('.blade.php') : lower.endsWith('.php') && !lower.endsWith('.blade.php')
+  if (language === 'blade') {
+    return lower.endsWith('.blade.php')
+  }
+  return !lower.endsWith('.blade.php') && PHP_EXTENSIONS.some((extension) => lower.endsWith(extension) && lower.length > extension.length)
 }
 
 /** The lines that say something: trimmed, without the empty ones. */

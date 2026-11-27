@@ -3,9 +3,9 @@
   "manifestVersion": 2,
   "execution": "trusted-worker",
   "id": "phpantom",
-  "name": "PHP & Laravel (PHPantom)",
-  "version": "0.1.0",
-  "description": "PHP and Blade editing powered by PHPantom: errors, completion, hover, go to definition and Laravel awareness.",
+  "name": "PHP, Laravel, Symfony, WP",
+  "version": "0.2.0",
+  "description": "Errors as you type, completion, go to definition and quick fixes for PHP. Understands Laravel, Symfony, WordPress, Drupal, Yii 3, Tempest, PHPUnit and Pest with nothing to switch on. Powered by PHPantom.",
   "license": "MIT",
   "repository": "https://github.com/noppu-labs/orca-phpantom",
   "engines": { "orca": ">=1.4.259" },
@@ -15,7 +15,7 @@
   "contributes": {
     "customEditors": [
       { "id": "blade", "title": "PHPantom", "extensions": [".blade.php"], "entry": "editor/pages/blade.html", "priority": "default", "frame": "isolated" },
-      { "id": "php", "title": "PHPantom", "extensions": [".php"], "entry": "editor/pages/php.html", "priority": "default", "frame": "isolated" }
+      { "id": "php", "title": "PHPantom", "extensions": [".php", ".module", ".install", ".theme", ".profile", ".inc", ".engine"], "entry": "editor/pages/php.html", "priority": "default", "frame": "isolated" }
     ],
     "settings": [
       { "key": "phpantomPath", "title": "PHPantom binary", "description": "Full path to phpantom_lsp. Leave empty to find it on PATH or download it.", "type": "string", "default": "", "placeholder": "/opt/homebrew/bin/phpantom_lsp" },
