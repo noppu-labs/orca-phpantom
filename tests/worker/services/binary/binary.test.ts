@@ -112,7 +112,7 @@ test('generated tar has valid ustar headers and an end marker', () => {
   for (const offset of [0, 1024]) {
     const header = archive.subarray(offset, offset + 512);
     assert.equal(header.subarray(257, 262).toString(), 'ustar');
-    assert.equal(parseInt(header.subarray(148, 154).toString(), 8), tarChecksum(header));
+    assert.equal(Number.parseInt(header.subarray(148, 154).toString(), 8), tarChecksum(header));
   }
   assert.equal(archive.length, 512 + 512 + 512 + 1024 + 1024);
   assert.ok(archive.subarray(-1024).every((byte) => byte === 0));
