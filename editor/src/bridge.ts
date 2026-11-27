@@ -288,15 +288,23 @@ export class LspBridge {
           this.lost();
         }
       }),
-      host.onWorkspaceChanged((context) => this.workspaceChanged(context)),
+      host.onWorkspaceChanged((context) => {
+        this.workspaceChanged(context);
+      }),
       host.onVisible(() => {
         this.lastSwitchAt = Date.now();
         this.retrySoon(this.quietMs, false);
       }),
       // A save is what makes a new file findable; a settings change can fix a missing binary.
-      host.onSaved(() => this.retrySoon(this.saveDelayMs, true)),
-      host.onSettingsChanged(() => this.retrySoon(this.saveDelayMs, true)),
-      source.onChanges((changes, isFlush) => this.changed(changes, isFlush))
+      host.onSaved(() => {
+        this.retrySoon(this.saveDelayMs, true);
+      }),
+      host.onSettingsChanged(() => {
+        this.retrySoon(this.saveDelayMs, true);
+      }),
+      source.onChanges((changes, isFlush) => {
+        this.changed(changes, isFlush);
+      })
     );
     const firstInput = host.onFirstInput(() => {
       firstInput.dispose();
@@ -643,8 +651,12 @@ export class LspBridge {
       this.reattachTimer = setTimeout(() => {
         this.lastReattachAt = Date.now();
         this.settled(this.start(false)).then(
-          (status) => resolve(status.state === 'ready'),
-          () => resolve(false)
+          (status) => {
+            resolve(status.state === 'ready');
+          },
+          () => {
+            resolve(false);
+          }
         );
       }, delay);
     }).finally(() => {

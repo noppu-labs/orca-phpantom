@@ -28,7 +28,7 @@ function modelSource(ctx: EditorContext): DocumentSource {
     getLength: () => model.getValueLength(),
     getVersion: () => model.getVersionId(),
     onChanges: (listener) =>
-      model.onDidChangeContent((event) =>
+      model.onDidChangeContent((event) => {
         listener(
           event.changes.map((change) => ({
             ...toLspContentChange(change),
@@ -36,8 +36,8 @@ function modelSource(ctx: EditorContext): DocumentSource {
           })),
           // A line-ending switch rewrites every line: send it whole, as setValue.
           event.isFlush || event.isEolChange
-        )
-      ),
+        );
+      }),
   };
 }
 
@@ -98,7 +98,9 @@ export function attachLanguageServer(ctx: EditorContext): LspBridge {
   bridge.onBusy(() => {
     showNote('info', BUSY_TEXT, BUSY_NOTE);
     clearTimeout(busyTimer);
-    busyTimer = setTimeout(() => clearNote(BUSY_NOTE), BUSY_NOTE_MS);
+    busyTimer = setTimeout(() => {
+      clearNote(BUSY_NOTE);
+    }, BUSY_NOTE_MS);
   });
   bridge.onReveal((range) => {
     const target = fromLspRange(range);
@@ -110,7 +112,15 @@ export function attachLanguageServer(ctx: EditorContext): LspBridge {
     if (status.state !== 'ready') unregister();
     showStatus(status);
   });
-  window.addEventListener('pagehide', () => bridge.dispose(), { once: true });
-  bridge.attach().catch((error: unknown) => console.error('PHPantom attach failed', error));
+  window.addEventListener(
+    'pagehide',
+    () => {
+      bridge.dispose();
+    },
+    { once: true }
+  );
+  bridge.attach().catch((error: unknown) => {
+    console.error('PHPantom attach failed', error);
+  });
   return bridge;
 }

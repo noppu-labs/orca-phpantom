@@ -23,7 +23,9 @@ export function showNote(kind: 'info' | 'warning', text: string, key: string): v
     close.className = 'phpantom-note-close';
     close.setAttribute('aria-label', 'Dismiss');
     close.textContent = '×';
-    close.addEventListener('click', () => clearNote(key));
+    close.addEventListener('click', () => {
+      clearNote(key);
+    });
     element.append(body, close);
     container().append(element);
     note = { element, text: body };

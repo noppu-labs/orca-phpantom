@@ -68,7 +68,9 @@ export function modelView(port: ModelPort): ModelView {
     getValue: () => bom + port.getText(),
     load(initial) {
       bom = initial.startsWith(BOM) ? BOM : '';
-      quietly(() => port.setText(initial.slice(bom.length)));
+      quietly(() => {
+        port.setText(initial.slice(bom.length));
+      });
     },
     applyOutside(splice: Splice) {
       const current = view.getValue();

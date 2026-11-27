@@ -42,7 +42,11 @@ const REFRESH_KINDS: Record<string, RefreshKind> = {
 type ProgressValue = { kind?: string; percentage?: number };
 
 async function delay(ms: number): Promise<'timeout'> {
-  return new Promise((resolve) => setTimeout(() => resolve('timeout'), ms).unref());
+  return new Promise((resolve) =>
+    setTimeout(() => {
+      resolve('timeout');
+    }, ms).unref()
+  );
 }
 
 export class PhpantomServer {
@@ -85,11 +89,17 @@ export class PhpantomServer {
     }
     const rpc = new RpcConnection((frame) => void stdin.write(frame), {
       onRequest: (method, params) => this.onRequest(method, params),
-      onNotification: (method, params) => this.onNotification(method, params),
-      onError: (message) => events.log(`PHPantom sent something unexpected: ${message}`),
+      onNotification: (method, params) => {
+        this.onNotification(method, params);
+      },
+      onError: (message) => {
+        events.log(`PHPantom sent something unexpected: ${message}`);
+      },
     });
     this.rpc = rpc;
-    stdout.on('data', (chunk: Buffer) => rpc.feed(chunk));
+    stdout.on('data', (chunk: Buffer) => {
+      rpc.feed(chunk);
+    });
     stderr.on('data', (chunk: Buffer) => {
       this.stderrTail.push(...chunk.toString('utf8').split(/\r?\n/).filter(Boolean));
       this.stderrTail.splice(0, Math.max(0, this.stderrTail.length - STDERR_LINES_KEPT));
@@ -99,7 +109,9 @@ export class PhpantomServer {
     this.exited = new Promise((resolve) => {
       this.resolveExited = resolve;
     });
-    child.on('error', (error) => this.finish(`could not start: ${error.message}`));
+    child.on('error', (error) => {
+      this.finish(`could not start: ${error.message}`);
+    });
     // Why 'close' and not 'exit': at 'exit' the pipes may still hold unread output, so the stderr tail could be empty or cut.
     child.on('exit', (code, signal) => {
       this.exitInfo = `stopped (${signal ? `signal ${signal}` : `code ${code ?? 'unknown'}`})`;
@@ -109,16 +121,17 @@ export class PhpantomServer {
         this.finish(this.exitInfo);
       }, CLOSE_WAIT_MS).unref();
     });
-    child.on('close', () => this.finish(this.exitInfo));
+    child.on('close', () => {
+      this.finish(this.exitInfo);
+    });
 
     let timer: ReturnType<typeof setTimeout> | undefined;
     try {
       const rootUri = pathToFileURL(root).href;
       const timeout = new Promise<never>((_resolve, reject) => {
-        timer = setTimeout(
-          () => reject(new Error('did not answer initialize in time')),
-          this.options.initializeTimeoutMs ?? INITIALIZE_TIMEOUT_MS
-        );
+        timer = setTimeout(() => {
+          reject(new Error('did not answer initialize in time'));
+        }, this.options.initializeTimeoutMs ?? INITIALIZE_TIMEOUT_MS);
         timer.unref();
       });
       const result = (await Promise.race([

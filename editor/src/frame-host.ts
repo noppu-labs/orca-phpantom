@@ -24,10 +24,14 @@ export function frameHost(): BridgeHost {
     readContext: async () => context(await orca.host.call('workspace.readContext', {})),
     // `orca.on` subscribes through `events.subscribe` itself, and a new subscriber hears the current context first.
     onWorkspaceChanged: (listener) =>
-      orca.on('workspace.changed', (payload) => listener(context(payload.context))),
+      orca.on('workspace.changed', (payload) => {
+        listener(context(payload.context));
+      }),
     onFirstInput(listener) {
       // Capture on window: Monaco stops some events, and editor.focus() at start is not input.
-      const handler = (): void => listener();
+      const handler = (): void => {
+        listener();
+      };
       window.addEventListener('pointerdown', handler, true);
       window.addEventListener('keydown', handler, true);
       return {
@@ -43,13 +47,20 @@ export function frameHost(): BridgeHost {
         listener();
       });
     },
-    onSettingsChanged: (listener) => orca.settings.onDidChange(() => listener()),
+    onSettingsChanged: (listener) =>
+      orca.settings.onDidChange(() => {
+        listener();
+      }),
     onVisible(listener) {
       const handler = (): void => {
         if (document.visibilityState === 'visible') listener();
       };
       document.addEventListener('visibilitychange', handler);
-      return { dispose: () => document.removeEventListener('visibilitychange', handler) };
+      return {
+        dispose: () => {
+          document.removeEventListener('visibilitychange', handler);
+        },
+      };
     },
   };
 }

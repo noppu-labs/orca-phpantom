@@ -13,9 +13,9 @@ let router: Router | null = null;
 export default async function activate(orca: OrcaWorkerApi): Promise<void> {
   let workspaces: { rows: Promise<WorkspaceRow[]>; at: number } | null = null;
   const status = (update: StatusBarUpdate): void => {
-    orca.host
-      .call('statusBar.update', update)
-      .catch((error: unknown) => orca.log(`status bar update failed: ${String(error)}`));
+    orca.host.call('statusBar.update', update).catch((error: unknown) => {
+      orca.log(`status bar update failed: ${String(error)}`);
+    });
   };
   const host: RouterHost = {
     async listWorkspaces(options) {
@@ -47,7 +47,9 @@ export default async function activate(orca: OrcaWorkerApi): Promise<void> {
       orca.panels.post(event as 'phpantom.status', payload as never, options);
     },
     status,
-    log: (message) => orca.log(message),
+    log: (message) => {
+      orca.log(message);
+    },
     async settings() {
       const values = await orca.settings.get();
       return {
@@ -72,11 +74,13 @@ export default async function activate(orca: OrcaWorkerApi): Promise<void> {
   orca.panels.handle('phpantom.ping', async (input) => active.ping(input));
   orca.commands.register('phpantom.status', () => active.describe());
   orca.commands.register('phpantom.restart', async () => active.restartAll());
-  orca.settings.onDidChange(() => active.forgetBinary());
+  orca.settings.onDidChange(() => {
+    active.forgetBinary();
+  });
 
-  await orca.host
-    .call('statusBar.update', renderStatus(aggregate([])))
-    .catch((error: unknown) => orca.log(`status bar update failed: ${String(error)}`));
+  await orca.host.call('statusBar.update', renderStatus(aggregate([]))).catch((error: unknown) => {
+    orca.log(`status bar update failed: ${String(error)}`);
+  });
 }
 
 export async function deactivate(): Promise<void> {

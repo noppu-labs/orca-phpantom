@@ -196,9 +196,9 @@ export class Router {
     this.leaseMs = options.leaseMs ?? LEASE_MS;
     this.now = options.now ?? Date.now;
     this.session = options.sessionId ?? randomUUID();
-    this.outbox = new Outbox((event, payload, postOptions) =>
-      host.post(event, payload, postOptions)
-    );
+    this.outbox = new Outbox((event, payload, postOptions) => {
+      host.post(event, payload, postOptions);
+    });
     this.sweepMs = options.sweepMs ?? SWEEP_MS;
     this.lastSweepAt = this.now();
     this.sweepTimer = setInterval(() => void this.sweep(), this.sweepMs);
@@ -642,9 +642,9 @@ export class Router {
           );
           this.chunks.delete(docId);
           this.detach(current);
-        }).catch((error: unknown) =>
-          this.host.log(`releasing ${docId} failed: ${messageOf(error)}`)
-        )
+        }).catch((error: unknown) => {
+          this.host.log(`releasing ${docId} failed: ${messageOf(error)}`);
+        })
       );
     }
     await Promise.all(releases);
@@ -867,7 +867,9 @@ export class Router {
           this.outbox.send(panel, key, 'phpantom.refresh', { kinds: [...kinds] });
         }
       }),
-      log: guard('log', (message: string) => this.host.log(`PHPantom (${entry.root}): ${message}`)),
+      log: guard('log', (message: string) => {
+        this.host.log(`PHPantom (${entry.root}): ${message}`);
+      }),
       exit: guard('exit', (reason: string) => {
         const message = `PHPantom stopped: ${reason}`;
         entry.server = null;
@@ -904,7 +906,9 @@ export class Router {
       }
       this.pool.delete(entry.root);
       this.host.log(`Stopping the idle PHPantom for ${entry.root}`);
-      void this.stopEntry(entry).then(() => this.updateStatus());
+      void this.stopEntry(entry).then(() => {
+        this.updateStatus();
+      });
     }, this.idleMs);
     entry.idle.unref?.();
   }
@@ -968,7 +972,9 @@ export class Router {
         platform: process.platform,
         arch: process.arch,
         home: homedir(),
-        log: (message) => this.host.log(message),
+        log: (message) => {
+          this.host.log(message);
+        },
         onDownload: () => {
           this.downloading = true;
           this.updateStatus();

@@ -198,7 +198,6 @@
         "typescript/explicit-module-boundary-types": "off",
         "typescript/method-signature-style": "off",
         "typescript/no-base-to-string": "off",
-        "typescript/no-confusing-void-expression": "off",
         "typescript/no-explicit-any": "off",
         "typescript/no-non-null-assertion": "off",
         "typescript/no-redundant-type-constituents": "off",

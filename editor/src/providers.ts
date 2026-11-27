@@ -68,7 +68,9 @@ export function showDiagnostics(ctx: EditorContext, bridge: LspBridge): Disposab
     ctx.monaco.editor.setModelMarkers(ctx.model, MARKER_OWNER, diagnostics.map(toMarker));
   };
   return disposeAll([
-    bridge.onDiagnostics((diagnostics) => set(diagnostics as LspDiagnostic[])),
+    bridge.onDiagnostics((diagnostics) => {
+      set(diagnostics as LspDiagnostic[]);
+    }),
     bridge.onStatus((status) => {
       if (status.state !== 'ready') set([]);
     }),
@@ -82,7 +84,9 @@ async function withSignal<T>(
 ): Promise<T> {
   const controller = new AbortController();
   if (token.isCancellationRequested) controller.abort();
-  const listener = token.onCancellationRequested(() => controller.abort());
+  const listener = token.onCancellationRequested(() => {
+    controller.abort();
+  });
   try {
     return await run(controller.signal);
   } finally {

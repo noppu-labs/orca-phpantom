@@ -58,11 +58,14 @@ export async function startEditor(): Promise<EditorContext> {
     getText: () => model.getValue(),
     getEol: () => (model.getEOL() === '\r\n' ? '\r\n' : '\n'),
     // Why setValue for the first text: it starts the undo history, so Cmd+Z never empties the file.
-    setText: (text) => model.setValue(text),
-    setEol: (eol) =>
+    setText: (text) => {
+      model.setValue(text);
+    },
+    setEol: (eol) => {
       model.pushEOL(
         eol === '\r\n' ? monaco.editor.EndOfLineSequence.CRLF : monaco.editor.EndOfLineSequence.LF
-      ),
+      );
+    },
     replace(start, end, text) {
       const range = monaco.Range.fromPositions(
         model.getPositionAt(start),
@@ -71,11 +74,15 @@ export async function startEditor(): Promise<EditorContext> {
       // Why: an edit operation, not setValue, so the person's cursor and undo history survive.
       model.pushEditOperations(created?.getSelections() ?? null, [{ range, text }], () => null);
     },
-    pushStackElement: () => model.pushStackElement(),
+    pushStackElement: () => {
+      model.pushStackElement();
+    },
     onDidChangeContent: (listener) => model.onDidChangeContent(listener),
   });
   const doc = await bindDocument(view, {
-    onConflicts: () => showNote('warning', CONFLICT_NOTE, 'conflict'),
+    onConflicts: () => {
+      showNote('warning', CONFLICT_NOTE, 'conflict');
+    },
   });
   view.load(doc.initial);
   flushWhenHidden(doc.flush, window, document);
@@ -96,7 +103,9 @@ export async function startEditor(): Promise<EditorContext> {
     ...(typography ? typographyOptions(typography) : {}),
   });
   created = editor;
-  orca.on('editor.typography.changed', (next) => editor.updateOptions(typographyOptions(next)));
+  orca.on('editor.typography.changed', (next) => {
+    editor.updateOptions(typographyOptions(next));
+  });
   // Orca has already switched the `--orca-*` variables and the `dark` class when this fires.
   orca.on('theme', () => {
     defineThemes(monaco);
