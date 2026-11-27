@@ -1,0 +1,17 @@
+{
+  "name": "orca-phpantom",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node editor/build.mjs",
+    "test": "orca plugin test .",
+    "typecheck": "tsc -p ."
+  },
+  "devDependencies": {
+    "@types/node": "22.20.7",
+    "esbuild": "0.28.2",
+    "monaco-editor": "0.57.0",
+    "typescript": "5.9.3"
+  }
+}

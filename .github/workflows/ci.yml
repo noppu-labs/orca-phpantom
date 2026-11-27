@@ -1,0 +1,36 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - name: Install the Orca CLI
+        run: |
+          cd "$RUNNER_TEMP"
+          curl -fsSL --proto '=https' --tlsv1.2 --retry 3 -o orca.deb \
+            "https://github.com/stablyai/orca/releases/download/v1.4.277/orca-ide_1.4.277_amd64.deb"
+          echo "46fb018af43fa9e47b4a4c9f681a66ecc871d231be896298301cd0e2c2e8d952  orca.deb" | sha256sum -c -
+          dpkg-deb -x orca.deb orca
+          dirname "$(find "$RUNNER_TEMP/orca" -type f -name orca-ide -path '*resources/bin/*' | head -1)" >> "$GITHUB_PATH"
+      - run: orca-ide --version
+      - run: npm ci --ignore-scripts
+      - name: Check editor/dist matches a fresh build (new files included)
+        run: |
+          node editor/build.mjs
+          git status --porcelain -- editor/dist
+          test -z "$(git status --porcelain -- editor/dist)"
+      - run: orca-ide plugin types .
+      - run: npx tsc -p .
+      - run: orca-ide plugin validate .
+      - run: orca-ide plugin check .
+      - run: orca-ide plugin test .
+      - name: Download and run the real PHPantom release
+        run: PHPANTOM_INTEGRATION=1 orca-ide plugin test .
