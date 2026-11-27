@@ -233,8 +233,7 @@
         "unicorn/prefer-export-from": "off",
         "unicorn/prefer-global-this": "off",
         "unicorn/prefer-query-selector": "off",
-        "unicorn/prefer-top-level-await": "off",
-        "unicorn/require-module-specifiers": "off"
+        "unicorn/prefer-top-level-await": "off"
       }
     }
   ],
