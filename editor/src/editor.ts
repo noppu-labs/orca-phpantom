@@ -44,6 +44,7 @@ async function startEditor(): Promise<EditorContext> {
   if (!root) {
     throw new Error('the page has no #root element');
   }
+  // oxlint-disable-next-line eslint/no-underscore-dangle -- the entry pages (editor/pages/*.html) set this global before the bundle loads
   const language: Language = window.__PHPANTOM_LANGUAGE__ === 'blade' ? 'blade' : 'php';
   const docId = crypto.randomUUID();
   const model = monaco.editor.createModel(
@@ -89,6 +90,7 @@ async function startEditor(): Promise<EditorContext> {
 
   defineThemes(monaco);
   const typography = await orca.host.call('editor.readTypography', {}).catch((error: unknown) => {
+    // oxlint-disable-next-line eslint/no-console -- the editor carries on with Monaco's default typography: Orca copies a frame's console warnings into orca plugin logs
     console.warn('editor.readTypography failed; using Monaco defaults', error);
     return null;
   });

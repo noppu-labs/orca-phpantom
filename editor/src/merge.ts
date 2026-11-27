@@ -19,6 +19,7 @@ function longestIncreasing(values: number[]): number[] {
     let low = 0;
     let high = tails.length;
     while (low < high) {
+      // oxlint-disable-next-line eslint/no-bitwise -- halves the sum of two array indexes, which stay far below 2^31
       const mid = (low + high) >> 1;
       if (values[tails[mid]] < values[index]) {
         low = mid + 1;

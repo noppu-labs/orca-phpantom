@@ -1,6 +1,7 @@
 import type { OrcaWorkerApi } from 'orca/worker';
 
 import { Router, type RouterHost } from './controllers/router.ts';
+// oxlint-disable-next-line import/no-unassigned-import -- brings in the declare module 'orca' block that types the phpantom.* requests; the file has no runtime value
 import './protocol.ts';
 import type { WorkspaceRow } from './services/locate/workspaces.ts';
 import { aggregate, renderStatus, type StatusBarUpdate } from './services/status.ts';

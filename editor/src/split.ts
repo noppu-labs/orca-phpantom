@@ -87,6 +87,7 @@ function chunkText(text: string, budget: number = REQUEST_BUDGET_BYTES): string[
         const midPair =
           code >= LOW_SURROGATE_MIN &&
           code <= LOW_SURROGATE_MAX &&
+          // oxlint-disable-next-line eslint/no-bitwise -- masks a UTF-16 code unit to test for a high surrogate
           (text.charCodeAt(position - 1) & HIGH_SURROGATE_MASK) === HIGH_SURROGATE_MIN;
         return code === LINE_FEED || midPair;
       };

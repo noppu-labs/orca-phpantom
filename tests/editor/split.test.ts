@@ -130,6 +130,7 @@ test('a cut back from an LF never lands inside a surrogate pair', () => {
 
 test('random mixed texts split within budget, without lone surrogates, and rejoin', () => {
   let seed = 12_345;
+  // oxlint-disable-next-line eslint/no-bitwise -- a small seeded generator keeps its state to 31 bits
   const rnd = (n: number) => ((seed = (seed * 1_103_515_245 + 12_345) & 0x7f_ff_ff_ff), seed % n);
   const atoms = ['\r\n', '\n', '\r', '😀', 'é', '"', '\\', 'a', '€', '\t'];
   for (let n = 0; n < 300; n++) {

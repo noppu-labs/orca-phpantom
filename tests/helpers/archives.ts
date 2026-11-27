@@ -103,6 +103,7 @@ function zip(files: ArchiveFiles, options: ZipOptions = {}): Buffer {
     entry.writeUInt32LE(body.length, 20);
     entry.writeUInt32LE(raw.length, 24);
     entry.writeUInt16LE(nameBytes.length, 28);
+    // oxlint-disable-next-line eslint/no-bitwise -- a zip entry keeps the Unix mode in the high 16 bits of its external attributes, read as unsigned
     entry.writeUInt32LE((0o10_0644 << 16) >>> 0, 38);
     entry.writeUInt32LE(offset, 42);
     central.push(entry, nameBytes);

@@ -9,11 +9,13 @@ startEditor().then(
     try {
       attachLanguageServer(ctx);
     } catch (error) {
+      // oxlint-disable-next-line eslint/no-console -- last resort for a failed attach: Orca copies a frame's console errors into orca plugin logs
       console.error('PHPantom could not attach', error);
     }
   },
   (error: unknown) => {
     // Orca copies frame errors into the plugin's log; also say it on screen so the tab is not blank.
+    // oxlint-disable-next-line eslint/no-console -- last resort for an editor that could not start: Orca copies a frame's console errors into orca plugin logs
     console.error(error);
     const failure = document.createElement('div');
     failure.className = 'start-failed';

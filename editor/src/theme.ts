@@ -92,7 +92,9 @@ function themeRules(dark: boolean): ThemeRule[] {
     const nearest = NEAREST[type];
     const colour = nearest ? { foreground: colours[nearest] } : {};
     rules.push({ token: type, ...colour });
+    // oxlint-disable-next-line eslint/no-bitwise -- each bit of mask stands for one semantic modifier, so the loop visits every combination
     for (let mask = 1; mask < 1 << SEMANTIC_MODIFIERS.length; mask++) {
+      // oxlint-disable-next-line eslint/no-bitwise -- keeps the modifiers whose bit is set in mask
       const modifiers = SEMANTIC_MODIFIERS.filter((_, index) => mask & (1 << index));
       const styles = [
         modifiers.includes('static') && 'italic',

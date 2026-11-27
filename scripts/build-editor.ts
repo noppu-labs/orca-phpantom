@@ -49,6 +49,7 @@ function files(dir: string): { bytes: number; path: string }[] {
 
 const built = files(dist);
 const total = built.reduce((sum, file) => sum + file.bytes, 0);
+// oxlint-disable-next-line eslint/no-console -- the build script reports the bundle size to the terminal that ran it
 console.log(`editor/dist: ${(total / BYTES_PER_MIB).toFixed(2)} MiB in ${built.length} files`);
 const problems = [
   ...built
@@ -57,6 +58,7 @@ const problems = [
   ...(built.length > MAX_FILES ? [`${built.length} files, more than ${MAX_FILES}`] : []),
 ];
 if (problems.length > 0) {
+  // oxlint-disable-next-line eslint/no-console -- the build script names the files over Orca's limits before it exits 1
   console.error(problems.join('\n'));
   process.exit(1);
 }

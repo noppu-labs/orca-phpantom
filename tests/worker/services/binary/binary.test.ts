@@ -389,6 +389,7 @@ if (process.env.PHPANTOM_INTEGRATION === '1') {
       if (r.ok) {
         assert.equal(r.source, 'download');
         assert.equal(await readVersion(r.path), '1.1.0');
+        // oxlint-disable-next-line eslint/no-console -- the opt-in integration test prints which release it downloaded and ran
         console.log(`integration: source=${r.source} version=${r.version} path=${r.path}`);
       }
     } finally {

@@ -89,6 +89,7 @@ function attachLanguageServer(ctx: EditorContext): LspBridge {
       try {
         providers.push(run());
       } catch (error) {
+        // oxlint-disable-next-line eslint/no-console -- last resort for a provider that failed to register: Orca copies a frame's console errors into orca plugin logs
         console.error(`PHPantom ${what} failed to register`, error);
       }
     };
@@ -125,6 +126,7 @@ function attachLanguageServer(ctx: EditorContext): LspBridge {
     { once: true }
   );
   bridge.attach().catch((error: unknown) => {
+    // oxlint-disable-next-line eslint/no-console -- last resort for a failed attach: Orca copies a frame's console errors into orca plugin logs
     console.error('PHPantom attach failed', error);
   });
   return bridge;

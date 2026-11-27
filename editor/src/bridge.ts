@@ -1094,6 +1094,7 @@ class LspBridge {
       try {
         listener(value);
       } catch (error) {
+        // oxlint-disable-next-line eslint/no-console -- last resort for a listener that threw: Orca copies a frame's console errors into orca plugin logs
         console.error(`PHPantom ${kind} listener failed`, error);
       }
     }
