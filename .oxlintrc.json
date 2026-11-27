@@ -214,7 +214,6 @@
         "typescript/no-unsafe-type-assertion": "off",
         "typescript/prefer-for-of": "off",
         "typescript/prefer-nullish-coalescing": "off",
-        "typescript/promise-function-async": "off",
         "typescript/require-array-sort-compare": "off",
         "typescript/require-await": "off",
         "typescript/strict-boolean-expressions": "off",

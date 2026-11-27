@@ -41,7 +41,7 @@ const REFRESH_KINDS: Record<string, RefreshKind> = {
 
 type ProgressValue = { kind?: string; percentage?: number };
 
-function delay(ms: number): Promise<'timeout'> {
+async function delay(ms: number): Promise<'timeout'> {
   return new Promise((resolve) => setTimeout(() => resolve('timeout'), ms).unref());
 }
 
@@ -158,9 +158,9 @@ export class PhpantomServer {
     }
   }
 
-  request(method: string, params: unknown, signal?: AbortSignal): Promise<unknown> {
+  async request(method: string, params: unknown, signal?: AbortSignal): Promise<unknown> {
     if (!this.alive || !this.rpc) {
-      return Promise.reject(new Error('the language server is not running'));
+      throw new Error('the language server is not running');
     }
     return this.rpc.request(method, params, signal);
   }

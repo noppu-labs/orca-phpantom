@@ -120,7 +120,7 @@ const isEmpty = (range: LspRange): boolean =>
   range.start.line === range.end.line && range.start.character === range.end.character;
 
 /** Resolves after `ms`, or as soon as `signal` aborts. */
-function sleep(ms: number, signal?: AbortSignal): Promise<void> {
+async function sleep(ms: number, signal?: AbortSignal): Promise<void> {
   return new Promise((resolve) => {
     const done = (): void => {
       clearTimeout(timer);
@@ -423,7 +423,7 @@ export class LspBridge {
   ): Promise<PluginRequestOutput<'phpantom.navigate'> | null> {
     const session = this.attachedTo?.session;
     if (!session) return null;
-    return this.userCall(() =>
+    return this.userCall(async () =>
       this.send('phpantom.navigate', { docId: this.docId, session, uri, range })
     );
   }
@@ -436,7 +436,7 @@ export class LspBridge {
     const session = this.attachedTo?.session;
     if (!session || signal?.aborted) return null;
     return this.userCall(
-      () =>
+      async () =>
         this.send(
           'phpantom.peek',
           { docId: this.docId, session, uris },
@@ -488,14 +488,14 @@ export class LspBridge {
   // --- attaching ---
 
   /** Queues a fresh open (or a resync) behind whatever runs; an open still sending chunks stops at the next one. */
-  private start(resync: boolean): Promise<AttachStatus | null> {
+  private async start(resync: boolean): Promise<AttachStatus | null> {
     const generation = ++this.generation;
     if (!resync) {
       this.targetWorkspace = this.context?.workspaceId ?? null;
       this.retryable = false;
       clearTimeout(this.retryTimer);
     }
-    const run = this.inLane(() => this.open(generation, resync));
+    const run = this.inLane(async () => this.open(generation, resync));
     if (!resync) this.latest = run;
     return run;
   }
@@ -636,7 +636,7 @@ export class LspBridge {
   }
 
   /** One re-attach at a time, at most one per gap; resolves whether it attached. */
-  private reattachNow(): Promise<boolean> {
+  private async reattachNow(): Promise<boolean> {
     if (this.reattaching !== null) return this.reattaching;
     const delay = Math.max(0, this.lastReattachAt + this.reattachGapMs - Date.now());
     this.reattaching = new Promise<boolean>((resolve) => {
@@ -798,10 +798,10 @@ export class LspBridge {
    * Sends what is queued, behind any open in flight. `drain` (a request about to go out) also sends edits
    * typed meanwhile; the timer sends one batch, and edits typed during it wait for the timer they armed.
    */
-  private flush(drain: boolean): Promise<unknown> {
+  private async flush(drain: boolean): Promise<unknown> {
     clearTimeout(this.syncTimer);
     this.syncTimer = undefined;
-    return this.inLane(() => this.sync(drain));
+    return this.inLane(async () => this.sync(drain));
   }
 
   private async sync(drain: boolean): Promise<void> {
@@ -967,7 +967,7 @@ export class LspBridge {
 
   // --- plumbing ---
 
-  private inLane<T>(job: () => Promise<T>): Promise<T> {
+  private async inLane<T>(job: () => Promise<T>): Promise<T> {
     const run = this.lane.then(job, job);
     this.lane = run.catch(() => undefined);
     return run;

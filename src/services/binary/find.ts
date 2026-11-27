@@ -64,7 +64,7 @@ export function atLeast(version: string, minimum: string): boolean {
 }
 
 /** Runs `<path> --version`; null when it fails, times out or prints something else. */
-export function readVersion(path: string, timeoutMs = 5000): Promise<string | null> {
+export async function readVersion(path: string, timeoutMs = 5000): Promise<string | null> {
   return new Promise((resolve) => {
     execFile(path, ['--version'], { timeout: timeoutMs, windowsHide: true }, (error, stdout) => {
       resolve(error ? null : parseVersion(String(stdout)));

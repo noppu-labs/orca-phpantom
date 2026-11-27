@@ -67,12 +67,12 @@ export class RpcConnection {
    * On abort the server is told to stop (`$/cancelRequest`), the promise rejects with `cancelled`, and
    * whatever answer still arrives for that id is ignored.
    */
-  request(method: string, params: unknown, signal?: AbortSignal): Promise<unknown> {
+  async request(method: string, params: unknown, signal?: AbortSignal): Promise<unknown> {
     if (this.closed) {
-      return Promise.reject(new Error('the language server is not running'));
+      throw new Error('the language server is not running');
     }
     if (signal?.aborted) {
-      return Promise.reject(new Error('cancelled'));
+      throw new Error('cancelled');
     }
     const id = this.nextId++;
     return new Promise((resolve, reject) => {

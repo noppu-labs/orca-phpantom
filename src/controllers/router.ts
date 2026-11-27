@@ -225,7 +225,7 @@ export class Router {
     this.chunks.delete(input.docId);
     const text = parts.join('');
     // Why one lane per document: a re-attach can arrive while the first open is still locating or starting.
-    return this.inLane(input.docId, () => this.attach(input, text, caller.panel));
+    return this.inLane(input.docId, async () => this.attach(input, text, caller.panel));
   }
 
   async change(input: Input<'phpantom.change'>): Promise<Output<'phpantom.change'>> {
@@ -285,7 +285,7 @@ export class Router {
     return this.fitAnswer(input.method, result);
   }
 
-  close(input: Input<'phpantom.close'>): Promise<Output<'phpantom.close'>> {
+  async close(input: Input<'phpantom.close'>): Promise<Output<'phpantom.close'>> {
     this.chunks.delete(input.docId);
     return this.inLane(input.docId, async () => {
       const doc = this.docs.get(input.docId);
@@ -394,7 +394,7 @@ export class Router {
     this.reveals.clear();
     this.forgetBinary();
     this.resolveError = null;
-    await Promise.all(entries.map((entry) => this.stopEntry(entry)));
+    await Promise.all(entries.map(async (entry) => this.stopEntry(entry)));
     this.updateStatus();
     const running = entries.filter((entry) => entry.state.phase !== 'error').length;
     return running === 0
@@ -451,7 +451,7 @@ export class Router {
     this.pool.clear();
     this.docs.clear();
     this.chunks.clear();
-    await Promise.all(entries.map((entry) => this.stopEntry(entry)));
+    await Promise.all(entries.map(async (entry) => this.stopEntry(entry)));
   }
 
   private async attach(
@@ -706,7 +706,7 @@ export class Router {
     this.sendChange(server, file, [{ text }], text);
   }
 
-  private inLane<T>(docId: string, task: () => Promise<T>): Promise<T> {
+  private async inLane<T>(docId: string, task: () => Promise<T>): Promise<T> {
     const previous = this.lanes.get(docId) ?? Promise.resolve();
     const run = previous.then(task);
     const settled = run.then(
@@ -927,7 +927,7 @@ export class Router {
     }
   }
 
-  private binary(): Promise<Resolution> {
+  private async binary(): Promise<Resolution> {
     if (
       this.resolution &&
       this.failedAt !== null &&

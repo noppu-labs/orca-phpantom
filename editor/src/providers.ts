@@ -115,14 +115,14 @@ export function registerReadingProviders(
   const language = model.getLanguageId();
   const registered: Disposable[] = [];
   const ours = (candidate: Model): boolean => candidate === model;
-  const ask = (
+  const ask = async (
     method: string,
     params: Record<string, unknown>,
     token: monaco.CancellationToken,
     kind: RequestKind,
     silent = false
   ): Promise<any> =>
-    withSignal(token, (signal) => bridge.ask(method, params, signal, { kind, silent }));
+    withSignal(token, async (signal) => bridge.ask(method, params, signal, { kind, silent }));
   const atCursor = (position: monaco.Position) => ({ position: toLspPosition(position) });
   const edits = (list: LspTextEdit[]): monaco.languages.TextEdit[] => list.map(toMonacoEdit);
 
@@ -371,13 +371,15 @@ export function registerEditingProviders(
   const modelUri = model.uri.toString();
   // Read on each answer: a re-target to another worktree changes it, and providers are registered again then.
   const documentUri = (): string => (bridge.status?.state === 'ready' ? bridge.status.uri : '');
-  const ask = (
+  const ask = async (
     method: string,
     params: Record<string, unknown>,
     token: monaco.CancellationToken,
     options: AskOptions = {}
   ): Promise<any> =>
-    withSignal(token, (signal) => bridge.ask(method, params, signal, { kind: 'user', ...options }));
+    withSignal(token, async (signal) =>
+      bridge.ask(method, params, signal, { kind: 'user', ...options })
+    );
   const atCursor = (position: monaco.Position) => ({ position: toLspPosition(position) });
   const edits = (list: LspTextEdit[] | null | undefined): monaco.languages.TextEdit[] | null =>
     Array.isArray(list) ? list.map(toMonacoEdit) : null;
@@ -423,7 +425,9 @@ export function registerEditingProviders(
     peekModels.touch(files);
     const wanted = files.filter((uri) => !monaco.editor.getModel(monaco.Uri.parse(uri)));
     if (wanted.length === 0) return locations;
-    const answer = await withSignal(token, (signal) => bridge.peek(peekBatch(wanted), signal));
+    const answer = await withSignal(token, async (signal) =>
+      bridge.peek(peekBatch(wanted), signal)
+    );
     // No answer at all: keep every result, so going to one still works without its preview.
     if (!answer) return locations;
     peekModels.ensure(answer.files);
@@ -446,7 +450,7 @@ export function registerEditingProviders(
     extra: Record<string, unknown> = {}
   ) => {
     if (!ours(m)) return null;
-    const answer = await withSignal(token, (signal) =>
+    const answer = await withSignal(token, async (signal) =>
       bridge.askDetailed(method, { ...atCursor(position), ...extra }, signal, { kind: 'user' })
     );
     const found = normalizeLocations(answer?.result);
@@ -470,7 +474,7 @@ export function registerEditingProviders(
   if (caps.definitionProvider) {
     registered.push(
       monaco.languages.registerDefinitionProvider(language, {
-        provideDefinition: (m, position, token) =>
+        provideDefinition: async (m, position, token) =>
           locate('textDocument/definition', m, position, token, true),
       })
     );
@@ -478,7 +482,7 @@ export function registerEditingProviders(
   if (caps.declarationProvider) {
     registered.push(
       monaco.languages.registerDeclarationProvider(language, {
-        provideDeclaration: (m, position, token) =>
+        provideDeclaration: async (m, position, token) =>
           locate('textDocument/declaration', m, position, token, true),
       })
     );
@@ -486,7 +490,7 @@ export function registerEditingProviders(
   if (caps.typeDefinitionProvider) {
     registered.push(
       monaco.languages.registerTypeDefinitionProvider(language, {
-        provideTypeDefinition: (m, position, token) =>
+        provideTypeDefinition: async (m, position, token) =>
           locate('textDocument/typeDefinition', m, position, token, true),
       })
     );
@@ -494,7 +498,7 @@ export function registerEditingProviders(
   if (caps.implementationProvider) {
     registered.push(
       monaco.languages.registerImplementationProvider(language, {
-        provideImplementation: (m, position, token) =>
+        provideImplementation: async (m, position, token) =>
           locate('textDocument/implementation', m, position, token, false),
       })
     );
@@ -502,7 +506,7 @@ export function registerEditingProviders(
   if (caps.referencesProvider) {
     registered.push(
       monaco.languages.registerReferenceProvider(language, {
-        provideReferences: (m, position, context, token) =>
+        provideReferences: async (m, position, context, token) =>
           locate('textDocument/references', m, position, token, false, {
             context: { includeDeclaration: context.includeDeclaration },
           }),

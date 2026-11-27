@@ -17,7 +17,7 @@ function context(
 
 export function frameHost(): BridgeHost {
   return {
-    request: (name, input, options) =>
+    request: async (name, input, options) =>
       // Why the cast: the declared overload takes its arguments as a tuple.
       orca.plugin.request(name, ...([input, options] as unknown as PluginRequestArgs<typeof name>)),
     on: (event, handler) => orca.plugin.on(event as 'phpantom.diagnostics', handler),
