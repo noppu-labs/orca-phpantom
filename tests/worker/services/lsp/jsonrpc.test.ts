@@ -26,7 +26,7 @@ test('a request resolves with the matching response', async () => {
   const answer = connection.request('textDocument/hover', { a: 1 });
   assert.match(
     sent[0],
-    /^Content-Length: \d+\r\n\r\n\{"jsonrpc":"2.0","id":1,"method":"textDocument\/hover"/
+    /^Content-Length: \d+\r\n\r\n\{"jsonrpc":"2.0","id":1,"method":"textDocument\/hover"/u
   );
   connection.feed(frame({ jsonrpc: '2.0', id: 1, result: { contents: 'x' } }));
   assert.deepEqual(await answer, { contents: 'x' });
@@ -38,7 +38,7 @@ test('an error response rejects with its message', async () => {
   connection.feed(
     frame({ jsonrpc: '2.0', id: 1, error: { code: -32_601, message: 'no such method' } })
   );
-  await assert.rejects(answer, /no such method/);
+  await assert.rejects(answer, /no such method/u);
 });
 
 test('messages split across chunks, and several in one chunk, are all delivered', () => {
@@ -66,15 +66,15 @@ test('a request from the server is answered with the handler result', async () =
   const { connection, sent } = connect();
   connection.feed(frame({ jsonrpc: '2.0', id: 7, method: 'workspace/configuration', params: {} }));
   await new Promise((resolve) => setTimeout(resolve, 0));
-  assert.match(sent[0], /"id":7,"result":\[null\]/);
+  assert.match(sent[0], /"id":7,"result":\[null\]/u);
 });
 
 test('closing fails every waiting request instead of hanging', async () => {
   const { connection } = connect();
   const waiting = connection.request('x', {});
   connection.close('gone');
-  await assert.rejects(waiting, /gone/);
-  await assert.rejects(connection.request('y', {}), /not running/);
+  await assert.rejects(waiting, /gone/u);
+  await assert.rejects(connection.request('y', {}), /not running/u);
 });
 
 test('junk before a header is skipped', () => {
@@ -92,8 +92,8 @@ test('cancelling a request sends $/cancelRequest and rejects', async () => {
   const controller = new AbortController();
   const answer = connection.request('textDocument/hover', {}, controller.signal);
   controller.abort();
-  await assert.rejects(answer, /cancelled/);
-  assert.match(sent[1], /"method":"\$\/cancelRequest","params":\{"id":1\}/);
+  await assert.rejects(answer, /cancelled/u);
+  assert.match(sent[1], /"method":"\$\/cancelRequest","params":\{"id":1\}/u);
   // The server may still answer; that answer is dropped without error.
   connection.feed(frame({ jsonrpc: '2.0', id: 1, result: 'late' }));
 });
@@ -102,7 +102,7 @@ test('an already aborted signal rejects without sending', async () => {
   const { connection, sent } = connect();
   const controller = new AbortController();
   controller.abort();
-  await assert.rejects(connection.request('x', {}, controller.signal), /cancelled/);
+  await assert.rejects(connection.request('x', {}, controller.signal), /cancelled/u);
   assert.equal(sent.length, 0);
 });
 
@@ -134,7 +134,7 @@ test('a notification handler that throws is reported, and the next message in th
   connection.feed(chunk);
   assert.deepEqual(seen, ['good']);
   assert.equal(errors.length, 1);
-  assert.match(errors[0], /bad.*cannot read bad/);
+  assert.match(errors[0], /bad.*cannot read bad/u);
 });
 
 test('a batch or a bare value is skipped, and the next message still arrives', () => {
@@ -155,7 +155,7 @@ test('a batch or a bare value is skipped, and the next message still arrives', (
 // Pins today's behaviour: a null body throws out of feed(). Making it skip is a separate fix.
 test('a null body throws out of feed', () => {
   const { connection } = connect();
-  assert.throws(() => connection.feed(bare('null')), /body is null/);
+  assert.throws(() => connection.feed(bare('null')), /body is null/u);
 });
 
 test('frames keep the envelope key order on the wire', async () => {

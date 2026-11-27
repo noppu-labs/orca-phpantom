@@ -27,7 +27,7 @@ interface RpcMessage {
 const isRpcMessage = (value: unknown): value is RpcMessage => isRecord(value);
 
 const HEADER_END = Buffer.from('\r\n\r\n');
-const LENGTH_HEADER = /content-length:\s*(\d+)/i;
+const LENGTH_HEADER = /content-length:\s*(?<bytes>\d+)/iu;
 
 class RpcError extends Error {
   public readonly code: number;
@@ -60,7 +60,8 @@ class RpcConnection {
       if (headerEnd === -1) {
         return;
       }
-      const length = LENGTH_HEADER.exec(this.buffer.subarray(0, headerEnd).toString('ascii'))?.[1];
+      const length = LENGTH_HEADER.exec(this.buffer.subarray(0, headerEnd).toString('ascii'))
+        ?.groups?.bytes;
       if (!length) {
         // Why: a frame without a length cannot be skipped; drop the junk and wait for the next header.
         this.buffer = this.buffer.subarray(headerEnd + HEADER_END.length);

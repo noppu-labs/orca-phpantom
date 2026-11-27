@@ -16,10 +16,10 @@ interface Token {
 
 function compile(grammar: Grammar, regex: RegExp): RegExp {
   const source = regex.source.replaceAll('@@', '\u0001');
-  const attribute = /@(\w+)/.exec(source);
+  const attribute = /@(?<name>\w+)/u.exec(source);
   if (attribute) {
     throw new Error(
-      `regex refers to @${attribute[1]}, which this walker does not expand: /${regex.source}/`
+      `regex refers to @${attribute.groups?.name}, which this walker does not expand: /${regex.source}/`
     );
   }
   const flags = grammar.language.ignoreCase ? 'i' : '';
@@ -43,7 +43,7 @@ function rulesOf(grammar: Grammar, state: string, seen: string[] = []): unknown[
   for (const rule of tokenizer[name]) {
     if (rule && typeof rule === 'object' && !Array.isArray(rule) && 'include' in rule) {
       rules.push(
-        ...rulesOf(grammar, String((rule as { include: string }).include).replace(/^@/, ''), [
+        ...rulesOf(grammar, String((rule as { include: string }).include).replace(/^@/u, ''), [
           ...seen,
           name,
         ])
@@ -84,8 +84,8 @@ function tokenizeLine(grammar: Grammar, line: string, stack: string[] = ['root']
   };
   const move = (next: string | undefined, switchTo: string | undefined): void => {
     if (switchTo) {
-      rulesOf(grammar, switchTo.replace(/^@/, ''));
-      stack[stack.length - 1] = switchTo.replace(/^@/, '');
+      rulesOf(grammar, switchTo.replace(/^@/u, ''));
+      stack[stack.length - 1] = switchTo.replace(/^@/u, '');
     }
     if (!next) {
       return;
@@ -103,8 +103,8 @@ function tokenizeLine(grammar: Grammar, line: string, stack: string[] = ['root']
       if (next.includes('$')) {
         throw new Error(`this walker does not substitute ${next}`);
       }
-      rulesOf(grammar, next.replace(/^@/, ''));
-      stack.push(next.replace(/^@/, ''));
+      rulesOf(grammar, next.replace(/^@/u, ''));
+      stack.push(next.replace(/^@/u, ''));
     }
   };
   const apply = (action: Action, text: string): void => {

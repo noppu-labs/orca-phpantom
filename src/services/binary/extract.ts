@@ -20,7 +20,7 @@ function fromTar(tar: Buffer, member: string): Buffer | null {
     const size = Number.parseInt(cString(header.subarray(124, 136)).trim() || '0', 8);
     const type = String.fromCharCode(header[156] || 48);
     const start = offset + 512;
-    const base = name.replace(/^\.\//, '');
+    const base = name.replace(/^\.\//u, '');
     if (type === '0' && base === member) {
       return Buffer.from(tar.subarray(start, start + size));
     }

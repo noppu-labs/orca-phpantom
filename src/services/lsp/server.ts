@@ -117,7 +117,7 @@ class PhpantomServer {
       rpc.feed(chunk);
     });
     stderr.on('data', (chunk: Buffer) => {
-      this.stderrTail.push(...chunk.toString('utf8').split(/\r?\n/).filter(Boolean));
+      this.stderrTail.push(...chunk.toString('utf8').split(/\r?\n/u).filter(Boolean));
       this.stderrTail.splice(0, Math.max(0, this.stderrTail.length - STDERR_LINES_KEPT));
     });
     // Why: writing to a child that just died raises EPIPE here; that is the exit, not a second failure.
@@ -157,7 +157,7 @@ class PhpantomServer {
           processId: process.pid,
           rootUri,
           workspaceFolders: [
-            { name: root.split(/[\\/]/).filter(Boolean).pop() ?? 'workspace', uri: rootUri },
+            { name: root.split(/[\\/]/u).filter(Boolean).pop() ?? 'workspace', uri: rootUri },
           ],
         }),
         timeout,

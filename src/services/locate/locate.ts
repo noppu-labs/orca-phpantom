@@ -81,7 +81,7 @@ function nameMatches(name: string, language: Language): boolean {
 /** The lines that say something: trimmed, without the empty ones. */
 function meaningfulLines(text: string): string[] {
   return text
-    .split(/\r?\n/)
+    .split(/\r?\n/u)
     .map((line) => line.trim())
     .filter(Boolean);
 }
@@ -200,7 +200,7 @@ async function locateCandidates(input: LocateInput, options: Options): Promise<L
     if (!info?.isFile()) {
       continue;
     }
-    const text = (await readFile(path, 'utf8').catch(() => null))?.replace(/^﻿/, '');
+    const text = (await readFile(path, 'utf8').catch(() => null))?.replace(/^﻿/u, '');
     if (text === input.content) {
       matches.push(path);
     } else {
@@ -239,7 +239,7 @@ function knownRelatives(known: readonly string[], tiers: readonly (readonly stri
   for (const path of known) {
     const root = rootOf(path, tiers);
     if (root) {
-      relatives.add(path.slice(root.length).replace(/^[\\/]+/, ''));
+      relatives.add(path.slice(root.length).replace(/^[\\/]+/u, ''));
     }
   }
   return [...relatives];
@@ -275,7 +275,7 @@ async function locateKnown(
       if (!info?.isFile() || (info.size !== size && info.size !== size + BOM_BYTES)) {
         continue;
       }
-      const text = (await readFile(path, 'utf8').catch(() => null))?.replace(/^\uFEFF/, '');
+      const text = (await readFile(path, 'utf8').catch(() => null))?.replace(/^\uFEFF/u, '');
       if (text === content) {
         matches.push({ path, root });
       }
@@ -337,7 +337,7 @@ async function locateInRoots(
         }
         let same = false;
         if (info.size === size || info.size === size + BOM_BYTES) {
-          const text = (await readFile(path, 'utf8').catch(() => null))?.replace(/^﻿/, '');
+          const text = (await readFile(path, 'utf8').catch(() => null))?.replace(/^﻿/u, '');
           same = text === content;
         }
         if (same) {

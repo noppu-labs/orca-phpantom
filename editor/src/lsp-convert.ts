@@ -157,7 +157,7 @@ function toMarkdown(contents: MarkedString | MarkedString[] | Markup | undefined
 }
 
 function escapeMarkdown(text: string): string {
-  return text.replaceAll(/([\\`*_{}[\]()#+\-.!|>])/g, String.raw`\$1`);
+  return text.replaceAll(/[\\`*_{}[\]()#+\-.!|>]/gu, String.raw`\$&`);
 }
 
 interface LspHover {

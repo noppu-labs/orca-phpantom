@@ -89,7 +89,7 @@ test('groups keep order and respect the budget', () => {
 
 test('never splits a surrogate pair', () => {
   for (const piece of chunkText('😀'.repeat(40_000), 1024)) {
-    assert.ok(!/^[\uDC00-\uDFFF]|[\uD800-\uDBFF]$/.test(piece));
+    assert.ok(!/^[\uDC00-\uDFFF]|[\uD800-\uDBFF]$/u.test(piece));
   }
 });
 
@@ -112,7 +112,7 @@ test('an insertion after a lone CR whose text starts with LF rebuilds exactly', 
   assert.equal(actual.text, expected.text);
 });
 
-const loneSurrogate = /^[\uDC00-\uDFFF]|[\uD800-\uDBFF]$/;
+const loneSurrogate = /^[\uDC00-\uDFFF]|[\uD800-\uDBFF]$/u;
 
 test('a cut back from an LF never lands inside a surrogate pair', () => {
   for (const [text, budget] of [

@@ -966,7 +966,7 @@ test('reports the status bar at most once a second, ending on the latest state',
   await sleep(1200);
   assert.ok(statuses.length > 0 && statuses.length <= 3, `saw ${statuses.length} updates`);
   assert.equal(statuses.at(-1)?.icon, 'check');
-  assert.match(statuses.at(-1)!.tooltip, /1\.1\.0/);
+  assert.match(statuses.at(-1)!.tooltip, /1\.1\.0/u);
 });
 
 test('a resolver failure answers error and shows it in the status bar', async () => {
@@ -985,7 +985,7 @@ test('a resolver failure answers error and shows it in the status bar', async ()
   );
   assert.equal(started.length, 0);
   await until(() => statuses.at(-1)?.icon === 'error', 2500);
-  assert.match(statuses.at(-1)!.tooltip, /no phpantom_lsp here/);
+  assert.match(statuses.at(-1)!.tooltip, /no phpantom_lsp here/u);
 });
 
 test('documents of one composer root share one server, and Blade opens as blade', async () => {
@@ -1029,7 +1029,7 @@ test('restartAll tells open documents and detaches them', async () => {
     workspaceId: 'ws-a',
     text: '<?php // ok\n',
   });
-  assert.match(await router.restartAll(), /stopped 1 server/);
+  assert.match(await router.restartAll(), /stopped 1 server/u);
   assert.equal(started[0].server.alive, false);
   await until(() =>
     posts.some((p) => p.event === 'phpantom.status' && p.payload.state === 'restarting')
@@ -1175,7 +1175,7 @@ test('two holders on one file: the one that expires leaves the file open for the
     panel: 'panel-2',
   });
   assert.equal(one.uri, two.uri);
-  assert.match(router.describe(), /2 open document\(s\)/);
+  assert.match(router.describe(), /2 open document\(s\)/u);
   // `d2` edits, so PHPantom holds d2's text when d1 leaves.
   assert.deepEqual(
     await worker.request('phpantom.change', {
@@ -1315,7 +1315,7 @@ test("three holders: the first expiring hands PHPantom the most recently seen te
   // `f1` last seen 61 s ago, f2 51 s, f3 31 s: only f1 is past its lease.
   clock += 31_000;
   await router.sweep();
-  assert.match(router.describe(), /2 open document\(s\)/);
+  assert.match(router.describe(), /2 open document\(s\)/u);
   assert.equal(await serverText(started), `YX${saved}`);
 });
 
@@ -1374,7 +1374,7 @@ test('a departing holder skips a holder waiting for its resync', async () => {
   );
   clock += 31_000;
   await router.sweep();
-  assert.match(router.describe(), /2 open document\(s\)/);
+  assert.match(router.describe(), /2 open document\(s\)/u);
   assert.equal(await serverText(started), `X${saved}`);
 });
 
@@ -1480,7 +1480,7 @@ test('a sweep that fires late (the computer slept) releases nothing; the next on
   // An hour asleep: no editor could ping meanwhile, so the lease says nothing about them.
   clock += 3_600_000;
   await router.sweep();
-  assert.match(router.describe(), /2 open document\(s\)/);
+  assert.match(router.describe(), /2 open document\(s\)/u);
   // Awake again: da's editor pings, db's never does.
   clock += 10_000;
   assert.deepEqual(await worker.request('phpantom.ping', { docId: 'da', session: a.session }), {
@@ -1488,7 +1488,7 @@ test('a sweep that fires late (the computer slept) releases nothing; the next on
   });
   clock += 50_000;
   await router.sweep();
-  assert.match(router.describe(), /1 open document\(s\)/);
+  assert.match(router.describe(), /1 open document\(s\)/u);
   assert.deepEqual(await worker.request('phpantom.ping', { docId: 'da', session: a.session }), {
     ok: true,
   });

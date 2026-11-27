@@ -87,8 +87,8 @@ test('maps all six platforms and nothing else', () => {
 test('extracts the one file from each archive kind', () => {
   assert.equal(extractSingleFile(oneTarGz(), 'tar.gz', 'phpantom_lsp').toString(), 'fake-binary');
   assert.equal(extractSingleFile(oneZip(), 'zip', 'phpantom_lsp.exe').toString(), 'fake-exe');
-  assert.throws(() => extractSingleFile(oneZip(), 'zip', 'other'), /archive has no other/);
-  assert.throws(() => extractSingleFile(oneTarGz(), 'tar.gz', 'other'), /archive has no other/);
+  assert.throws(() => extractSingleFile(oneZip(), 'zip', 'other'), /archive has no other/u);
+  assert.throws(() => extractSingleFile(oneTarGz(), 'tar.gz', 'other'), /archive has no other/u);
 });
 test('a pax header named like the member is skipped for the file entry', () => {
   const archive = tarGz([
@@ -98,7 +98,7 @@ test('a pax header named like the member is skipped for the file entry', () => {
   assert.equal(extractSingleFile(archive, 'tar.gz', 'phpantom_lsp').toString(), 'real-bytes');
 });
 test('the generated tar refuses a name over 100 bytes', () => {
-  assert.throws(() => tar({ ['n'.repeat(101)]: 'x' }), /over 100 bytes/);
+  assert.throws(() => tar({ ['n'.repeat(101)]: 'x' }), /over 100 bytes/u);
 });
 test('generated archives carry real gzip and zip framing', () => {
   const gz = oneTarGz();
@@ -185,7 +185,7 @@ test('readVersion runs the binary and returns null for a missing one', async () 
 });
 test('rejects a download whose hash differs', async () => {
   await withServer(Buffer.from('tampered'), async (url) => {
-    await assert.rejects(downloadVerified(url, '0'.repeat(64)), /checksum mismatch/);
+    await assert.rejects(downloadVerified(url, '0'.repeat(64)), /checksum mismatch/u);
   });
 });
 test('accepts a download whose hash matches', async () => {
@@ -199,7 +199,7 @@ test('reports an HTTP error', async () => {
   const fetchImpl = (async () => new Response('no', { status: 404 })) as unknown as typeof fetch;
   await assert.rejects(
     downloadVerified('http://x/y', '0'.repeat(64), fetchImpl),
-    /download failed: HTTP 404/
+    /download failed: HTTP 404/u
   );
 });
 test('an explicit setting that does not work is an error, not a fallback', async () => {

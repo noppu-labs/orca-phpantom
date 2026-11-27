@@ -68,7 +68,7 @@ test('legend and theme names match PHPantom and Monaco', () => {
   assert.equal(themeRules(false).length, 15 * 128);
   assert.ok(themeRules(false).some((r) => r.token === 'class.readonly.abstract.defaultLibrary'));
   // Monaco refuses theme names outside [a-z0-9-].
-  for (const name of Object.values(THEME_NAME)) assert.match(name, /^[a-z0-9-]+$/);
+  for (const name of Object.values(THEME_NAME)) assert.match(name, /^[a-z0-9-]+$/u);
 });
 test('colours a type like the base theme colours its nearest token', () => {
   const byToken = new Map(themeRules(true).map((r) => [r.token, r]));

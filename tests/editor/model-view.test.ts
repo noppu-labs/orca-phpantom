@@ -17,9 +17,9 @@ function fakeMonacoModel() {
   const calls: string[] = [];
   const changed = (): void => listeners.forEach((l) => l());
   const kind = (s: string): 'none' | Eol | 'invalid' => {
-    const lf = /(?<!\r)\n/.test(s);
+    const lf = /(?<!\r)\n/u.test(s);
     const crlf = s.includes('\r\n');
-    const cr = /\r(?!\n)/.test(s);
+    const cr = /\r(?!\n)/u.test(s);
     if (cr || (lf && crlf)) return 'invalid';
     return lf ? '\n' : crlf ? '\r\n' : 'none';
   };
@@ -28,12 +28,12 @@ function fakeMonacoModel() {
     getEol: () => eol,
     setText(value) {
       const body = value.startsWith('﻿') ? value.slice(1) : value;
-      const crlf = (body.match(/\r\n/g) ?? []).length;
-      const cr = (body.match(/\r(?!\n)/g) ?? []).length;
-      const lf = (body.match(/(?<!\r)\n/g) ?? []).length;
+      const crlf = (body.match(/\r\n/gu) ?? []).length;
+      const cr = (body.match(/\r(?!\n)/gu) ?? []).length;
+      const lf = (body.match(/(?<!\r)\n/gu) ?? []).length;
       const total = crlf + cr + lf;
       eol = total === 0 ? '\n' : cr + crlf > total / 2 ? '\r\n' : '\n';
-      text = body.replaceAll(/\r\n|\r|\n/g, eol);
+      text = body.replaceAll(/\r\n|\r|\n/gu, eol);
       calls.push('setText');
       changed();
     },
@@ -41,14 +41,14 @@ function fakeMonacoModel() {
       calls.push(`setEol:${JSON.stringify(next)}`);
       if (next !== eol) {
         eol = next;
-        text = text.replaceAll(/\r\n|\r|\n/g, eol);
+        text = text.replaceAll(/\r\n|\r|\n/gu, eol);
         changed();
       }
     },
     replace(start, end, inserted) {
       calls.push('replace');
       const k = kind(inserted);
-      const valid = k === 'none' || k === eol ? inserted : inserted.replaceAll(/\r\n|\r|\n/g, eol);
+      const valid = k === 'none' || k === eol ? inserted : inserted.replaceAll(/\r\n|\r|\n/gu, eol);
       text = text.slice(0, start) + valid + text.slice(end);
       changed();
     },

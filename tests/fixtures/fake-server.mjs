@@ -31,7 +31,7 @@ function offsetAt(position) {
 
 function publish() {
   const diagnostics = [];
-  for (const match of text.matchAll(/BAD/g)) {
+  for (const match of text.matchAll(/BAD/gu)) {
     diagnostics.push({
       range: {
         start: { line: 0, character: match.index },
@@ -184,7 +184,8 @@ process.stdin.on('data', (chunk) => {
       return;
     }
     const length = Number(
-      /content-length:\s*(\d+)/i.exec(buffer.subarray(0, end).toString('ascii'))[1]
+      /content-length:\s*(?<bytes>\d+)/iu.exec(buffer.subarray(0, end).toString('ascii')).groups
+        .bytes
     );
     if (buffer.length < end + 4 + length) {
       return;

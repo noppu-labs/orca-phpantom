@@ -154,7 +154,7 @@ test('a config that cannot be written logs a warning and still starts PHPantom',
     const r = await resolveBinary(downloading(home, logs));
     assert.equal(r.ok && r.source, 'download');
     assert.equal(logs.length, 1);
-    assert.match(logs[0], /^Warning: /);
+    assert.match(logs[0], /^Warning: /u);
   } finally {
     rmSync(home, { recursive: true, force: true });
   }

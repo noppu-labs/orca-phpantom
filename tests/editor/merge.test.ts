@@ -52,7 +52,7 @@ test('keeps everything when the file is converted to CRLF while a line is edited
 test('keeps everything when every line is re-indented while a line is edited', () => {
   const base = big((i) => `line ${i} ${'x'.repeat(20)}\n`);
   const mine = base.replace('line 10 ', 'line ten ');
-  const outside = base.replaceAll(/^/gm, '    ');
+  const outside = base.replaceAll(/^/gmu, '    ');
   const merged = timed(base, outside, mine);
   assert.ok(merged.conflicts > 0);
   assert.ok(merged.text.includes('line ten ') && merged.text.includes('    line 29000 '));

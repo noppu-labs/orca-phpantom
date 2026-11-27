@@ -10,7 +10,7 @@ interface WorkspaceRow {
   hostId: string | null;
 }
 
-const WSL_PATH = /^(\\\\|\/\/)wsl(\.localhost|\$)[\\/]/i;
+const WSL_PATH = /^(?:\\\\|\/\/)wsl(?:\.localhost|\$)[\\/]/iu;
 
 /** A workspace on this machine: host `local` or none recorded, and not a WSL share. */
 function isLocal(row: WorkspaceRow): boolean {

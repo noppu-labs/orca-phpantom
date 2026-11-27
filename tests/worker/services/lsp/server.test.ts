@@ -120,7 +120,7 @@ test('a request can be cancelled', async () => {
   const controller = new AbortController();
   const pending = server.request('textDocument/hover', {}, controller.signal);
   controller.abort();
-  await assert.rejects(pending, /cancelled/);
+  await assert.rejects(pending, /cancelled/u);
   await server.stop();
 });
 
@@ -163,9 +163,9 @@ test('reports an exit with the stderr tail', async () => {
   server.notify('textDocument/didOpen', open('<?php CRASH'));
   await until(() => events.exits.length > 0);
   assert.equal(events.exits.length, 1);
-  assert.match(events.exits[0], /code 3.*fake server crashed on purpose/);
+  assert.match(events.exits[0], /code 3.*fake server crashed on purpose/u);
   assert.equal(server.alive, false);
-  await assert.rejects(server.request('textDocument/hover', {}), /not running/);
+  await assert.rejects(server.request('textDocument/hover', {}), /not running/u);
   await server.stop();
   assert.equal(events.exits.length, 1);
 });
@@ -180,7 +180,7 @@ test('a deliberate stop does not report an exit', async () => {
 test('a start that times out kills the child and reports no exit', async () => {
   const { server, events, children } = fakeServer({ FAKE_MODE: 'silent' });
   (server as any).options.initializeTimeoutMs = 200;
-  await assert.rejects(server.start(), /in time/);
+  await assert.rejects(server.start(), /in time/u);
   assert.notEqual(children[0].exitCode ?? children[0].signalCode, null);
   assert.equal(server.alive, false);
   assert.deepEqual(events.exits, []);

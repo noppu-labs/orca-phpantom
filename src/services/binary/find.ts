@@ -50,7 +50,7 @@ function wellKnownDirs(env: NodeJS.ProcessEnv, platform: string): string[] {
 
 /** `1.1.0` from `phpantom_lsp 1.1.0`. */
 function parseVersion(output: string): string | null {
-  return /^phpantom_lsp (\d+\.\d+\.\d+)\b/m.exec(output.trim())?.[1] ?? null;
+  return /^phpantom_lsp (?<version>\d+\.\d+\.\d+)\b/mu.exec(output.trim())?.groups?.version ?? null;
 }
 
 function atLeast(version: string, minimum: string): boolean {

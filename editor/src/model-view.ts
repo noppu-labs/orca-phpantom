@@ -47,7 +47,7 @@ function monacoEol(text: string, fallback: Eol): Eol {
   return withCr > breaks / 2 ? '\r\n' : '\n';
 }
 
-const normalizeEol = (text: string, eol: Eol): string => text.replaceAll(/\r\n|\r|\n/g, eol);
+const normalizeEol = (text: string, eol: Eol): string => text.replaceAll(/\r\n|\r|\n/gu, eol);
 
 function modelView(port: ModelPort): ModelView {
   let bom = '';

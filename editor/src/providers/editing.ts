@@ -56,7 +56,7 @@ const renameReachesOtherFiles = (count: number): string =>
   `Renaming here would also change ${count} other ${count === 1 ? 'file' : 'files'}. Cross-file rename isn't supported yet.`;
 
 /** Blade or PHP by the file name, as PHPantom tells them apart. */
-const languageOfUri = (uri: string): string => (/\.blade\.php$/i.test(uri) ? 'blade' : 'php');
+const languageOfUri = (uri: string): string => (/\.blade\.php$/iu.test(uri) ? 'blade' : 'php');
 
 function registerEditingProviders(
   ctx: EditorContext,

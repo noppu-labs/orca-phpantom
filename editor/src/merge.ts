@@ -1,6 +1,6 @@
 import { diff3Merge } from './vendor/diff3.mjs';
 
-const lines = (text: string): string[] => (text === '' ? [] : text.split(/(?<=\n)/));
+const lines = (text: string): string[] => (text === '' ? [] : text.split(/(?<=\n)/u));
 const terminated = (chunk: string[]): string => {
   const text = chunk.join('');
   return text === '' || text.endsWith('\n') ? text : `${text}\n`;

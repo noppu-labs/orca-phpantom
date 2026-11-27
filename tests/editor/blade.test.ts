@@ -14,22 +14,25 @@ function fakeHtml() {
       ignoreCase: true,
       tokenizer: {
         root: [
-          [/(<)((?:[\w\-]+:)?[\w\-]+)/, ['delimiter', { token: 'tag', next: '@tag' }]],
-          [/(<\/)((?:[\w\-]+:)?[\w\-]+)/, ['delimiter', { token: 'tag', next: '@tag' }]],
-          [/</, 'delimiter'],
-          [/[^<]+/],
+          // oxlint-disable-next-line eslint/prefer-named-capture-group -- Monarch maps each group to the action at its position, as in Monaco's HTML grammar
+          [/(<)((?:[\w-]+:)?[\w-]+)/u, ['delimiter', { token: 'tag', next: '@tag' }]],
+          // oxlint-disable-next-line eslint/prefer-named-capture-group -- Monarch maps each group to the action at its position, as in Monaco's HTML grammar
+          [/(<\/)((?:[\w-]+:)?[\w-]+)/u, ['delimiter', { token: 'tag', next: '@tag' }]],
+          [/</u, 'delimiter'],
+          [/[^<]+/u],
         ],
         tag: [
-          [/\/?>/, 'delimiter', '@pop'],
-          [/"/, 'attribute.value', '@attributeValue'],
-          [/'([^']*)'/, 'attribute.value'],
-          [/[\w\-]+/, 'attribute.name'],
-          [/=/, 'delimiter'],
-          [/[ \t\r\n]+/],
+          [/\/?>/u, 'delimiter', '@pop'],
+          [/"/u, 'attribute.value', '@attributeValue'],
+          // oxlint-disable-next-line eslint/prefer-named-capture-group -- bladeGrammar finds this rule by its source, as Monaco's HTML grammar writes it
+          [/'([^']*)'/u, 'attribute.value'],
+          [/[\w-]+/u, 'attribute.name'],
+          [/[=]/u, 'delimiter'],
+          [/[ \t\r\n]+/u],
         ],
         attributeValue: [
-          [/"/, 'attribute.value', '@pop'],
-          [/[^"]+/, 'attribute.value'],
+          [/"/u, 'attribute.value', '@pop'],
+          [/[^"]+/u, 'attribute.value'],
         ],
       },
     },
@@ -180,9 +183,9 @@ test('the walker compiles `@@` to a literal `@`', () => {
 });
 test('leaves comments, the doctype and embedded script and style states without Blade rules', () => {
   const html = fakeHtml();
-  const comment = [[/-->/, 'comment', '@pop']];
-  const doctype = [[/>/, 'metatag', '@pop']];
-  const scriptEmbedded = [[/<\/script/, { token: '@rematch', next: '@pop' }]];
+  const comment = [[/-->/u, 'comment', '@pop']];
+  const doctype = [[/>/u, 'metatag', '@pop']];
+  const scriptEmbedded = [[/<\/script/u, { token: '@rematch', next: '@pop' }]];
   const tokenizer: Record<string, unknown[]> = {
     ...html.language.tokenizer,
     comment,

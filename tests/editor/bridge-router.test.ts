@@ -247,7 +247,7 @@ test('integration: three frames of one tab, two of them dead, keep PHPantom on t
   assert.equal((await b3.attach()).state, 'ready');
   d3.edit(0, 0, 'Y');
   await until(async () => (await world.holds()) === d3.text, "the third frame's edit");
-  assert.match(world.router.describe(), /3 open document\(s\)/);
+  assert.match(world.router.describe(), /3 open document\(s\)/u);
 
   // The first dead frame's lease ends while the second still holds the file.
   await until(
