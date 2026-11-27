@@ -1,6 +1,6 @@
 // A tiny language server for tests, plain JavaScript with its own framing so `node` runs it directly.
 // FAKE_CONFIG_ITEMS=n: after `initialized`, asks for n configuration items and logs the answer as a warning.
-// Hover answers `len=<text length>`; `fake/text` answers the whole text it holds; completion answers 5000 items of about 400 bytes each; references answer 6000 small locations (over Orca's object limit); formatting answers one 1.2 MB edit; semanticTokens/full answers 40,000 tokens (200,000 numbers).
+// Hover answers `len=<text length>`; `fake/text` answers the whole text it holds; `fake/initialize` answers the initialize params it was sent; completion answers 5000 items of about 400 bytes each; references answer 6000 small locations (over Orca's object limit); formatting answers one 1.2 MB edit; semanticTokens/full answers 40,000 tokens (200,000 numbers).
 // FAKE_NULL_PARAMS=1: after `initialized`, sends publishDiagnostics, $/progress and window/logMessage with `params: null`.
 // FAKE_CAPABILITIES=<json>: initialize answers these capabilities instead of the usual ones.
 // FAKE_MODE=silent: never answers initialize. FAKE_MODE=stubborn: answers, then ignores shutdown, exit, stdin end.
@@ -13,6 +13,7 @@ if (mode) {
 let buffer = Buffer.alloc(0);
 let text = '';
 let uri = '';
+let initializeParams = null;
 
 function send(message) {
   const body = JSON.stringify(message);
@@ -53,6 +54,7 @@ function handle(message) {
     return;
   }
   if (method === 'initialize') {
+    initializeParams = params;
     send({
       jsonrpc: '2.0',
       id,
@@ -133,6 +135,8 @@ function handle(message) {
     });
   } else if (method === 'fake/text') {
     send({ jsonrpc: '2.0', id, result: text });
+  } else if (method === 'fake/initialize') {
+    send({ jsonrpc: '2.0', id, result: initializeParams });
   } else if (method === 'textDocument/completion') {
     const items = Array.from({ length: 5000 }, (_, i) => ({
       label: `item${i}`,

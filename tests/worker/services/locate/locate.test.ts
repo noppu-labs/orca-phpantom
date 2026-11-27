@@ -4,7 +4,7 @@ import { dirname, join } from 'node:path';
 
 import { assert, test } from 'orca/testing';
 
-import { PHP_EXTENSIONS, locateFile } from '../../../../src/services/locate/locate.ts';
+import { PHP_EXTENSIONS, locateFile, sharedLines } from '../../../../src/services/locate/locate.ts';
 
 const made: string[] = [];
 
@@ -332,6 +332,58 @@ test("a path remembered in a sibling worktree still attaches to the focused work
   } finally {
     await cleanup();
   }
+});
+
+test('a byte order mark does not stop a pending reveal path or a remembered path from matching', async () => {
+  const root = await tree({
+    'composer.json': '{}',
+    'vendor/x/Bom.php': `\uFEFF${SRC}`,
+    'vendor/x/Plain.php': SRC,
+  });
+  try {
+    for (const name of ['Bom.php', 'Plain.php']) {
+      const path = join(root, 'vendor/x', name);
+      assert.deepEqual(
+        await locateFile({ tiers: [[root]], candidates: [path], language: 'php', content: SRC }),
+        { status: 'found', path, root }
+      );
+      assert.deepEqual(
+        await locateFile({
+          tiers: [[root]],
+          candidates: [],
+          known: [path],
+          language: 'php',
+          content: SRC,
+        }),
+        { status: 'found', path, root }
+      );
+    }
+  } finally {
+    await cleanup();
+  }
+});
+
+test('a remembered path is placed under a workspace written with a trailing separator', async () => {
+  const root = await tree({ 'composer.json': '{}', 'vendor/x/Y.php': SRC });
+  try {
+    assert.deepEqual(
+      await locateFile({
+        tiers: [[`${root}/`]],
+        candidates: [],
+        known: [join(root, 'vendor/x/Y.php')],
+        language: 'php',
+        content: SRC,
+      }),
+      { status: 'found', path: join(root, 'vendor/x/Y.php'), root: `${root}/` }
+    );
+  } finally {
+    await cleanup();
+  }
+});
+
+test('likeness reads CRLF and LF lines alike', () => {
+  assert.equal(sharedLines('a\r\nb\r\nc\r\n', 'a\nb\nc\n'), 1);
+  assert.equal(sharedLines('a b c', 'a b c'), 0);
 });
 
 test('a remembered file with an identical copy beside it is still ambiguous', async () => {

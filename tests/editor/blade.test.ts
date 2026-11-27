@@ -178,3 +178,20 @@ test('the walker compiles `@@` to a literal `@`', () => {
   assert.match('@endphp', endphp);
   assert.ok(!endphp.test('@@endphp'));
 });
+test('leaves comments, the doctype and embedded script and style states without Blade rules', () => {
+  const html = fakeHtml();
+  const comment = [[/-->/, 'comment', '@pop']];
+  const doctype = [[/>/, 'metatag', '@pop']];
+  const scriptEmbedded = [[/<\/script/, { token: '@rematch', next: '@pop' }]];
+  const tokenizer: Record<string, unknown[]> = {
+    ...html.language.tokenizer,
+    comment,
+    doctype,
+    scriptEmbedded,
+  };
+  const g = bladeGrammar({ ...html, language: { ...html.language, tokenizer } });
+  assert.deepEqual(g.language.tokenizer.comment, comment);
+  assert.deepEqual(g.language.tokenizer.doctype, doctype);
+  assert.deepEqual(g.language.tokenizer.scriptEmbedded, scriptEmbedded);
+  assert.match('{{ $x }}', firstRuleRegex(g, 'tag'));
+});

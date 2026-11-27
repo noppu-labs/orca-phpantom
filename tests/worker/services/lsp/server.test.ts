@@ -1,4 +1,5 @@
 import { spawn, type ChildProcess } from 'node:child_process';
+import { basename } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { assert, test } from 'orca/testing';
@@ -71,6 +72,16 @@ test('starts, initializes and reports capabilities', async () => {
   await server.stop();
   assert.equal(server.alive, false);
   assert.notEqual(children[0].exitCode ?? children[0].signalCode, null);
+});
+
+test('names the workspace folder after the last segment of its root', async () => {
+  const { server } = fakeServer();
+  await server.start();
+  const params = (await server.request('fake/initialize', {})) as {
+    workspaceFolders: { name: string }[];
+  };
+  assert.equal(params.workspaceFolders[0].name, basename(process.cwd()));
+  await server.stop();
 });
 
 test('forwards diagnostics, progress and refresh', async () => {
