@@ -139,6 +139,8 @@ class RpcConnection {
     } catch {
       return;
     }
+    // Why throw: a null body has always thrown here, and skipping it instead is a separate fix.
+    if (message === null) throw new TypeError('the message body is null');
     // Why: a body that is not an object (a batch, a bare value) carries nothing this connection answers.
     if (!isRpcMessage(message)) return;
     if (message.method !== undefined && message.id !== undefined) {

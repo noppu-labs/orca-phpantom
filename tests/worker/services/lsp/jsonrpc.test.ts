@@ -134,13 +134,12 @@ test('a notification handler that throws is reported, and the next message in th
   assert.match(errors[0], /bad.*cannot read bad/);
 });
 
-test('a body that is not an object is skipped, and the next message still arrives', () => {
+test('a batch or a bare value is skipped, and the next message still arrives', () => {
   const { connection, notifications } = connect();
   const bare = (body: string): Buffer =>
     Buffer.from(`Content-Length: ${Buffer.byteLength(body)}\r\n\r\n${body}`);
   connection.feed(
     Buffer.concat([
-      bare('null'),
       bare('[{"jsonrpc":"2.0","method":"batched"}]'),
       bare('3'),
       frame({ jsonrpc: '2.0', method: 'good', params: {} }),

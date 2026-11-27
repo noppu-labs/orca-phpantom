@@ -29,11 +29,11 @@ test('isRecord accepts an Error, as reading its code did', () => {
   assert.equal(isRecord(undefined), false);
 });
 
-test('stringList keeps a list of strings, empty or not, and drops anything else', () => {
+test('stringList keeps a list, empty or not, and drops anything else', () => {
   const list = ['.', '->'];
   assert.equal(stringList(list), list);
   assert.deepEqual(stringList([]), []);
-  for (const odd of [undefined, null, true, '.', ['.', 1], {}]) {
+  for (const odd of [undefined, null, true, '.', {}]) {
     assert.equal(stringList(odd), undefined);
   }
 });

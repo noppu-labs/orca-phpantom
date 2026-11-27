@@ -52,6 +52,11 @@ const isProgress = (params: unknown): params is { token: string | number; value:
 const isLogMessage = (params: unknown): params is { type: number; message: string } =>
   isRecord(params);
 
+/** Throws for a notification sent with no params at all; the connection reports it. */
+function requireParams(method: string, params: unknown): void {
+  if (params === null || params === undefined) throw new TypeError(`${method} without params`);
+}
+
 async function delay(ms: number): Promise<'timeout'> {
   return new Promise((resolve) =>
     setTimeout(() => {
@@ -267,13 +272,13 @@ class PhpantomServer {
       if (!isPublishDiagnostics(params)) throw new TypeError('publishDiagnostics without params');
       events.diagnostics(params.uri, params.diagnostics);
     } else if (method === '$/progress') {
+      requireParams(method, params);
       if (isProgress(params)) this.onProgress(String(params.token), params.value);
-    } else if (
-      method === 'window/logMessage' &&
-      isLogMessage(params) &&
-      (params.type === 1 || params.type === 2)
-    ) {
-      events.log(params.message);
+    } else if (method === 'window/logMessage') {
+      requireParams(method, params);
+      if (isLogMessage(params) && (params.type === 1 || params.type === 2)) {
+        events.log(params.message);
+      }
     }
   }
 

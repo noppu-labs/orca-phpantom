@@ -2,6 +2,7 @@
 // FAKE_CONFIG_ITEMS=n: after `initialized`, asks for n configuration items and logs the answer as a warning.
 // Hover answers `len=<text length>`; `fake/text` answers the whole text it holds; completion answers 5000 items of about 400 bytes each; references answer 6000 small locations (over Orca's object limit); formatting answers one 1.2 MB edit; semanticTokens/full answers 40,000 tokens (200,000 numbers).
 // FAKE_NULL_PARAMS=1: after `initialized`, sends publishDiagnostics, $/progress and window/logMessage with `params: null`.
+// FAKE_CAPABILITIES=<json>: initialize answers these capabilities instead of the usual ones.
 // FAKE_MODE=silent: never answers initialize. FAKE_MODE=stubborn: answers, then ignores shutdown, exit, stdin end.
 // Both ignore SIGTERM, so only SIGKILL removes them.
 const mode = process.env.FAKE_MODE ?? '';
@@ -56,15 +57,17 @@ function handle(message) {
       jsonrpc: '2.0',
       id,
       result: {
-        capabilities: {
-          textDocumentSync: 2,
-          hoverProvider: true,
-          definitionProvider: true,
-          semanticTokensProvider: {
-            legend: { tokenTypes: ['parameter'], tokenModifiers: [] },
-            full: true,
-          },
-        },
+        capabilities: process.env.FAKE_CAPABILITIES
+          ? JSON.parse(process.env.FAKE_CAPABILITIES)
+          : {
+              textDocumentSync: 2,
+              hoverProvider: true,
+              definitionProvider: true,
+              semanticTokensProvider: {
+                legend: { tokenTypes: ['parameter'], tokenModifiers: [] },
+                full: true,
+              },
+            },
       },
     });
   } else if (method === 'initialized') {

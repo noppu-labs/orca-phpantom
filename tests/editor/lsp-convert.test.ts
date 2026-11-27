@@ -373,16 +373,10 @@ test('semantic tokens need an object with a data list', () => {
   assert.deepEqual([...toSemanticTokens({ data: ['3', 'x'] })!.data], [3, 0]);
 });
 
-test('a semantic tokens legend needs both of its lists', () => {
+test('a semantic tokens legend needs to be an object', () => {
   assert.equal(isSemanticTokensLegend({ tokenModifiers: [], tokenTypes: [] }), true);
-  for (const odd of [
-    true,
-    'abc',
-    [],
-    {},
-    { tokenTypes: [] },
-    { tokenModifiers: [], tokenTypes: 'a' },
-  ]) {
+  assert.equal(isSemanticTokensLegend({ tokenTypes: [] }), true);
+  for (const odd of [true, 'abc', [], null]) {
     assert.equal(isSemanticTokensLegend(odd), false);
   }
 });

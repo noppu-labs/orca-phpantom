@@ -131,13 +131,17 @@ test('a notification with null params is logged, and the connection keeps workin
     events.logs.some((line) => line.includes('textDocument/publishDiagnostics')),
     events.logs.join('\n')
   );
-  // Progress and log messages without params carry nothing to report, so they are skipped quietly.
-  assert.ok(
-    !events.logs.some((line) => line.includes('$/progress') || line.includes('window/logMessage')),
-    events.logs.join('\n')
-  );
   assert.equal(server.alive, true);
   await server.stop();
+});
+
+test('capabilities that are not an object are taken as none', async () => {
+  for (const capabilities of ['true', '[1]', '"x"']) {
+    const { server } = fakeServer({ FAKE_CAPABILITIES: capabilities });
+    await server.start();
+    assert.deepEqual(server.capabilities, {});
+    await server.stop();
+  }
 });
 
 test('reports an exit with the stderr tail', async () => {

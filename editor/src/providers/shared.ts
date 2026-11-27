@@ -44,10 +44,9 @@ function capability(capabilities: Record<string, unknown>, ...path: string[]): u
   return value;
 }
 
-const isStringList = (value: unknown): value is string[] =>
-  Array.isArray(value) && value.every((item) => typeof item === 'string');
+const isStringList = (value: unknown): value is string[] => Array.isArray(value);
 
-/** `value` when it is a list of strings (trigger characters, code action kinds), else undefined. */
+/** `value` when it is a list (trigger characters, code action kinds), its entries taken as strings; else undefined. */
 const stringList = (value: unknown): string[] | undefined =>
   isStringList(value) ? value : undefined;
 

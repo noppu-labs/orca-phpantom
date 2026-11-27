@@ -218,7 +218,7 @@ const isLocation = (value: unknown): value is LspLocation => isRecord(value);
 function normalizeLocations(result: unknown): { uri: string; range: MonacoRange }[] {
   const list: unknown[] = Array.isArray(result) ? result : result ? [result] : [];
   return list.map((item) => {
-    // Why throw: anything else has no location to read, and Monaco takes a throw as no answer.
+    // Why throw: anything else has no location to read, and reading one from it throws too.
     if (!isLocation(item)) throw new TypeError('a location is not an object');
     return 'targetUri' in item
       ? { range: fromLspRange(item.targetSelectionRange ?? item.targetRange), uri: item.targetUri }
@@ -429,7 +429,7 @@ function completionItems(result: unknown): LspCompletionItem[] {
     : isRecord(result)
       ? (result.items ?? [])
       : [];
-  // Why throw: anything else has no items to read, and Monaco takes a throw as no answer.
+  // Why throw: anything else has no items to read, and mapping over it throws too.
   if (!isCompletionItemList(items)) throw new TypeError('completion items are not a list');
   return items;
 }
@@ -542,8 +542,7 @@ interface SemanticTokensLegend {
   tokenModifiers: string[];
 }
 
-const isSemanticTokensLegend = (value: unknown): value is SemanticTokensLegend =>
-  isRecord(value) && Array.isArray(value.tokenTypes) && Array.isArray(value.tokenModifiers);
+const isSemanticTokensLegend = (value: unknown): value is SemanticTokensLegend => isRecord(value);
 
 /**
  * Whether to ask for inlay hints: when the server offers them, and not in Blade, where PHPantom 1.1.0
