@@ -33,7 +33,7 @@ function fakeMonacoModel() {
       const lf = (body.match(/(?<!\r)\n/g) ?? []).length;
       const total = crlf + cr + lf;
       eol = total === 0 ? '\n' : cr + crlf > total / 2 ? '\r\n' : '\n';
-      text = body.replace(/\r\n|\r|\n/g, eol);
+      text = body.replaceAll(/\r\n|\r|\n/g, eol);
       calls.push('setText');
       changed();
     },
@@ -41,14 +41,14 @@ function fakeMonacoModel() {
       calls.push(`setEol:${JSON.stringify(next)}`);
       if (next !== eol) {
         eol = next;
-        text = text.replace(/\r\n|\r|\n/g, eol);
+        text = text.replaceAll(/\r\n|\r|\n/g, eol);
         changed();
       }
     },
     replace(start, end, inserted) {
       calls.push('replace');
       const k = kind(inserted);
-      const valid = k === 'none' || k === eol ? inserted : inserted.replace(/\r\n|\r|\n/g, eol);
+      const valid = k === 'none' || k === eol ? inserted : inserted.replaceAll(/\r\n|\r|\n/g, eol);
       text = text.slice(0, start) + valid + text.slice(end);
       changed();
     },

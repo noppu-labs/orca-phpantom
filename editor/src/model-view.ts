@@ -50,7 +50,7 @@ export function monacoEol(text: string, fallback: Eol): Eol {
   return withCr > breaks / 2 ? '\r\n' : '\n';
 }
 
-export const normalizeEol = (text: string, eol: Eol): string => text.replace(/\r\n|\r|\n/g, eol);
+export const normalizeEol = (text: string, eol: Eol): string => text.replaceAll(/\r\n|\r|\n/g, eol);
 
 export function modelView(port: ModelPort): ModelView {
   let bom = '';

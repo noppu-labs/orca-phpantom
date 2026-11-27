@@ -14,7 +14,7 @@ type Grammar = {
 export type Token = { type: string; text: string };
 
 function compile(grammar: Grammar, regex: RegExp): RegExp {
-  const source = regex.source.replace(/@@/g, '\u0001');
+  const source = regex.source.replaceAll('@@', '\u0001');
   const attribute = /@(\w+)/.exec(source);
   if (attribute) {
     throw new Error(
