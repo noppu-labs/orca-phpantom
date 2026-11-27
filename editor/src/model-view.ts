@@ -110,5 +110,5 @@ function modelView(port: ModelPort): ModelView {
   return view;
 }
 
-export { monacoEol, normalizeEol, modelView };
+export { modelView };
 export type { Eol, ModelPort, ModelView };

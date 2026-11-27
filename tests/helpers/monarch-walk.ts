@@ -173,5 +173,5 @@ function tokenTypes(grammar: Grammar, ...lines: string[]): string[] {
     .filter((type) => type !== '' && type !== 'delimiter');
 }
 
-export { firstRuleRegex, tokenizeLine, tokenTypes };
+export { firstRuleRegex, tokenTypes };
 export type { Token };

@@ -239,7 +239,6 @@ export {
   themeRules,
   themeColors,
   typographyOptions,
-  readOrcaVars,
   defineThemes,
 };
 export type { EditorTypography, ThemeRule };
