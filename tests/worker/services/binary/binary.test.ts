@@ -136,6 +136,23 @@ test('a negative tar size is a corrupt header, not an endless loop', () => {
   assert.equal(child.stdout.trim(), 'corrupt tar header', child.stderr);
 });
 
+/** `archive` with its local data cut to `keep` bytes, the central directory and end record kept and pointed at. */
+function zipWithLocalCut(archive: Buffer, keep: number): Buffer {
+  const directoryAt = archive.readUInt32LE(archive.length - 22 + 16);
+  const cut = Buffer.concat([archive.subarray(0, keep), archive.subarray(directoryAt)]);
+  cut.writeUInt32LE(keep, cut.length - 22 + 16);
+  return cut;
+}
+
+for (const keep of [4, 46, 53]) {
+  test(`a zip whose local data is cut to ${keep} bytes is a corrupt entry`, () => {
+    assert.throws(
+      () => extractSingleFile(zipWithLocalCut(oneZip(), keep), 'zip', 'phpantom_lsp.exe'),
+      /corrupt zip entry/u
+    );
+  });
+}
+
 test('the generated tar refuses a name over 100 bytes', () => {
   assert.throws(() => tar({ ['n'.repeat(101)]: 'x' }), /over 100 bytes/u);
 });
