@@ -137,16 +137,14 @@ class PhpantomServer {
         timer.unref();
       });
       const result = (await Promise.race([
-        // oxlint-disable-next-line eslint/sort-keys -- order matters because the initialize request goes to PHPantom as written
         rpc.request('initialize', {
-          processId: process.pid,
+          capabilities: CLIENT_CAPABILITIES,
           clientInfo: { name: 'orca-phpantom', version: '0.2.1' },
+          processId: process.pid,
           rootUri,
           workspaceFolders: [
-            // oxlint-disable-next-line eslint/sort-keys -- order matters because the initialize request goes to PHPantom as written
-            { uri: rootUri, name: root.split(/[\\/]/).filter(Boolean).pop() ?? 'workspace' },
+            { name: root.split(/[\\/]/).filter(Boolean).pop() ?? 'workspace', uri: rootUri },
           ],
-          capabilities: CLIENT_CAPABILITIES,
         }),
         timeout,
       ])) as { capabilities?: Record<string, unknown> } | null;
