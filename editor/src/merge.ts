@@ -100,7 +100,7 @@ export function mergeText(
       return;
     }
     // Why: diff3's LCS grows roughly cubically on repeated lines and runs on the editor's thread,
-    // so a stretch with no anchors that is too big to diff within budget keeps both sides whole.
+    // So a stretch with no anchors that is too big to diff within budget keeps both sides whole.
     if (Math.max(m.length, b.length, o.length) > MAX_DIFF_LINES) {
       conflict(m, o);
       return;

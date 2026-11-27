@@ -1,6 +1,6 @@
 // Orca refuses frame calls past 120 in 10 s, counted per plugin across all its tabs and windows, with
 // `rate_limited` ("too many panel requests"; Orca 1.4.278 sends no retryAfterMs with it). This keeps
-// one editor's share of that budget and holds its calls back after a refusal. No Monaco here.
+// One editor's share of that budget and holds its calls back after a refusal. No Monaco here.
 
 export type PacerOptions = {
   windowMs?: number;

@@ -95,7 +95,7 @@ test('the composer root is the nearest composer.json inside the workspace', () =
     composerRoot(join(ws, 'app/B.php'), ws, () => false),
     ws
   );
-  // never climbs above the workspace
+  // Never climbs above the workspace
   assert.equal(
     composerRoot(join(ws, 'app/B.php'), ws, (p) => p === '/w/composer.json'),
     ws

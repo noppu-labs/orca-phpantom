@@ -1,6 +1,6 @@
 // The worker's switchboard: editors send `phpantom.*` requests, the router finds the file each
-// document is, runs one PHPantom per composer root, forwards LSP traffic, and posts diagnostics
-// and status back to the editors.
+// Document is, runs one PHPantom per composer root, forwards LSP traffic, and posts diagnostics
+// And status back to the editors.
 import { randomUUID } from 'node:crypto';
 import { readFile, stat } from 'node:fs/promises';
 import { homedir } from 'node:os';
@@ -106,7 +106,7 @@ type Doc = {
 };
 
 // Orca takes an answer of at most 1 MiB and 10,000 objects by its own measure (see size.ts); this
-// leaves room for what the measure may miss.
+// Leaves room for what the measure may miss.
 const ANSWER_LIMIT = { bytes: 900 * 1024, objects: 9000 };
 // Lists whose leading items are still a useful answer. Never edits: half a formatting is a broken file.
 const CUTTABLE_LISTS = new Set([
@@ -122,7 +122,7 @@ const CUTTABLE_LISTS = new Set([
 ]);
 const PEEK_MAX_FILES = 25;
 // Files attached before, tried again when a tab of theirs is shown: a new frame must locate its file anew,
-// and the walk never reaches Composer's vendor folder, where go to definition often leads.
+// And the walk never reaches Composer's vendor folder, where go to definition often leads.
 const REMEMBERED_FILES = 50;
 const PEEK_MAX_BYTES = 600 * 1024;
 const IDLE_MS = 10 * 60_000;
@@ -270,7 +270,7 @@ export class Router {
       return { error: 'the document is being sent again' };
     }
     // Why: several documents can hold one file, and PHPantom holds whichever sent last. Positions in the
-    // question, and edits in the answer, are this document's.
+    // Question, and edits in the answer, are this document's.
     this.sendFull(doc.server, doc.file, doc.mirror.text);
     const params = input.method.startsWith('textDocument/')
       ? { ...input.params, textDocument: { uri: doc.uri } }
@@ -482,7 +482,7 @@ export class Router {
     let rows = await this.host.listWorkspaces();
     if (input.workspaceId !== null && !rows.some((row) => row.id === input.workspaceId)) {
       // Why ask again: a worktree made in the last few seconds is missing from the cached list, and
-      // without its row the file would attach to a sibling's copy (or a remote one to a local look-alike).
+      // Without its row the file would attach to a sibling's copy (or a remote one to a local look-alike).
       rows = await this.host.listWorkspaces({ fresh: true });
     }
     const context =
@@ -615,7 +615,7 @@ export class Router {
     this.lastSweepAt = now;
     if (gap > 2 * this.sweepMs) {
       // The computer slept or the worker was held up: editors could not ping meanwhile either, so silence
-      // says nothing yet. The next tick, on time, judges after they have had the chance.
+      // Says nothing yet. The next tick, on time, judges after they have had the chance.
       this.host.log(
         `Lease check ran ${Math.round((gap - this.sweepMs) / 1000)} s late; releasing nothing this time`
       );
@@ -630,7 +630,7 @@ export class Router {
       }
       const docId = doc.docId;
       // Why in its lane and checked again there: an open in flight for this docId finishes first, and a
-      // document it attached anew has just been seen.
+      // Document it attached anew has just been seen.
       releases.push(
         this.inLane(docId, async () => {
           const current = this.docs.get(docId);
@@ -658,8 +658,8 @@ export class Router {
       .filter((other) => other !== undefined);
     if (remaining.length > 0) {
       // Why resend: PHPantom holds whatever the leaving document sent last. The one heard from most recently is
-      // the tab on screen; the others are frames Orca replaced that hold on until their lease ends. One waiting
-      // for its resync has a copy that is not its editor's text, and sends the whole text soon anyway.
+      // The tab on screen; the others are frames Orca replaced that hold on until their lease ends. One waiting
+      // For its resync has a copy that is not its editor's text, and sends the whole text soon anyway.
       const current = remaining
         .filter((other) => !other.needsResync)
         .sort((a, b) => b.lastSeen - a.lastSeen)[0];
@@ -1016,7 +1016,7 @@ export class Router {
         : undefined;
     if (Array.isArray(tokens)) {
       // Why whole tokens: `data` is five numbers per token, each relative to the one before, so a leading
-      // run of whole tokens is still correct colouring; a number is 8 bytes plus 4 for its slot in the array.
+      // Run of whole tokens is still correct colouring; a number is 8 bytes plus 4 for its slot in the array.
       const shell = orcaSize({ result: { ...(result as object), data: [] } });
       const room = Math.floor((ANSWER_LIMIT.bytes - shell.bytes) / 12);
       const count = Math.max(

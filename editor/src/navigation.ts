@@ -1,7 +1,7 @@
 import { sameUri } from '../../src/utils/uri.ts';
 // Going to code in other files. Monaco shows only models it has, so the files a result points at get
-// read-only models for its previews (peek, Cmd-hover), and opening one goes to the worker, which opens
-// the file in an Orca tab. The pure parts here take no Monaco, so Node can test them.
+// Read-only models for its previews (peek, Cmd-hover), and opening one goes to the worker, which opens
+// The file in an Orca tab. The pure parts here take no Monaco, so Node can test them.
 import type { LspBridge } from './bridge.ts';
 import type { EditorContext } from './editor.ts';
 import { toLspRange, type MonacoRange } from './lsp-convert.ts';
@@ -41,7 +41,7 @@ export function afterPeek(
 }
 
 // The worker reads at most this many files per peek (PEEK_MAX_FILES in src/controllers/router.ts); asking for more
-// only makes the request bigger, and a long list of URIs could pass Orca's 64 KiB request limit.
+// Only makes the request bigger, and a long list of URIs could pass Orca's 64 KiB request limit.
 const PEEK_MAX_FILES = 25;
 
 /** The files one peek asks for. Pass the whole list to `afterPeek`, so locations in the rest are left out with a note. */

@@ -157,7 +157,6 @@
     {
       "files": ["**/*"],
       "rules": {
-        "eslint/capitalized-comments": "off",
         "eslint/complexity": "off",
         "eslint/curly": "off",
         "eslint/default-case": "off",

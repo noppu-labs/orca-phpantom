@@ -1,8 +1,8 @@
 // Adapted from actus7/orca-autocomplete editor/src/lsp.ts @ da5a680 (MIT). See THIRD_PARTY_NOTICES.md.
 // Monaco's language features answered by PHPantom through the bridge: diagnostics, completion, hover,
-// signature help, semantic colouring, inlay hints and the outline; then going to definitions and
-// references, formatting, rename and code actions. Only what the server says it supports is registered,
-// for the model's own language, and only this editor's model is answered.
+// Signature help, semantic colouring, inlay hints and the outline; then going to definitions and
+// References, formatting, rename and code actions. Only what the server says it supports is registered,
+// For the model's own language, and only this editor's model is answered.
 import type { AskOptions, LspBridge, RequestKind } from './bridge.ts';
 import type { EditorContext } from './editor.ts';
 import {
@@ -45,7 +45,7 @@ import {
 import { clearNote, showNote } from './notes.ts';
 
 type Disposable = { dispose(): void };
-type Capabilities = Record<string, any>; // the server's own JSON
+type Capabilities = Record<string, any>; // The server's own JSON
 type Model = monaco.editor.ITextModel;
 
 const MARKER_OWNER = 'phpantom';
@@ -202,7 +202,7 @@ export function registerReadingProviders(
               const raw = serverItems.get(suggestion);
               if (!raw) return suggestion;
               // Why user, not passive: Monaco also resolves here when the item is accepted, and a dropped
-              // answer would lose the import. Silent: it resolves every item that gets focus, too.
+              // Answer would lose the import. Silent: it resolves every item that gets focus, too.
               const resolved = await ask('completionItem/resolve', raw, token, 'user', true);
               // Monaco resolves an item once; one with no answer must say so to be resolved again later.
               if (resolved === null) throw canceled();
@@ -293,7 +293,7 @@ export function registerReadingProviders(
             await ask('textDocument/semanticTokens/full', {}, token, 'background')
           );
           // Why throw: Monaco wipes the colouring on an empty answer but keeps it on an error, and a
-          // message with "busy" in it is not reported. No answer means not now, not "no tokens".
+          // Message with "busy" in it is not reported. No answer means not now, not "no tokens".
           if (!tokens) throw new Error('PHPantom is busy');
           return tokens;
         },
@@ -392,7 +392,7 @@ export function registerEditingProviders(
   registered.push(
     peekModels,
     // Peek models stand for files on disk that nothing here saves: an editor showing one (the peek's
-    // preview) is read-only, so nobody types into a copy that goes nowhere.
+    // Preview) is read-only, so nobody types into a copy that goes nowhere.
     monaco.editor.onDidCreateEditor((created) => {
       if (created === ctx.editor) return;
       // Why not at once: the event fires inside the editor's constructor, before it has a model.
@@ -400,7 +400,7 @@ export function registerEditingProviders(
         const shown = created.getModel();
         const peek = Boolean(shown && peekModels.has(shown.uri.toString()));
         // An embedded editor keeps what it is given over its parent's options: never make it writable
-        // when the editor it belongs to is read-only.
+        // When the editor it belongs to is read-only.
         created.updateOptions({
           readOnly: peek || ctx.editor.getOption(monaco.editor.EditorOption.readOnly),
         });
@@ -607,7 +607,7 @@ export function registerEditingProviders(
   // --- code actions ---
   if (caps.codeActionProvider) {
     // The server's own action for each one shown, and the model version it was computed against:
-    // resolving needs exactly what the server sent, and an edit applies only to that version's text.
+    // Resolving needs exactly what the server sent, and an edit applies only to that version's text.
     const serverActions = new WeakMap<object, { raw: LspCodeAction; versionId: number }>();
     const kinds =
       typeof caps.codeActionProvider === 'object'
@@ -645,7 +645,7 @@ export function registerEditingProviders(
               },
               token,
               // The lightbulb asks on every cursor move; only an invoked one (1) is someone asking. Silent:
-              // hovering a diagnostic asks as invoked too.
+              // Hovering a diagnostic asks as invoked too.
               context.trigger === 1 ? { kind: 'user', silent: true } : { kind: 'background' }
             );
             const actions: monaco.languages.CodeAction[] = [];
@@ -660,7 +660,7 @@ export function registerEditingProviders(
                 ...(converted.isPreferred ? { isPreferred: true } : {}),
                 ...(converted.disabled ? { disabled: converted.disabled } : {}),
                 // Why not when it reaches other files: Monaco resolves an action that has no edit, and
-                // resolving is where that case says why nothing happens.
+                // Resolving is where that case says why nothing happens.
                 ...(converted.edit && converted.otherFiles === 0
                   ? { edit: toMonacoWorkspaceEdit(converted.edit) }
                   : {}),
@@ -676,7 +676,7 @@ export function registerEditingProviders(
             if (!offered) return action;
             const { raw, versionId } = offered;
             // The action's own ranges are against the text it was offered for; resolving it now would
-            // place its edit wrongly.
+            // Place its edit wrongly.
             if (model.getVersionId() !== versionId) {
               showNote('info', MOVED_FIX, EDIT_NOTE);
               return action;

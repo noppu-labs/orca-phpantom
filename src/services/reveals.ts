@@ -1,5 +1,5 @@
 // Where to put the cursor in a file the person is navigating to. The editor that opens the file
-// attaches later, so the range waits here until that open takes it, or goes stale.
+// Attaches later, so the range waits here until that open takes it, or goes stale.
 import type { LspRange } from '../protocol.ts';
 
 const MAX_ENTRIES = 5;

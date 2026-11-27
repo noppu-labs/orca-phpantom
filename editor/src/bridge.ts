@@ -1,6 +1,6 @@
 // Keeps one editor's document attached to PHPantom through the worker: opens it in chunks, streams
-// incremental changes, forwards LSP requests, and opens it again when the worker or its server restarts
-// or the frame turns out to belong to another workspace. No Monaco here, so Node can test it with fakes.
+// Incremental changes, forwards LSP requests, and opens it again when the worker or its server restarts
+// Or the frame turns out to belong to another workspace. No Monaco here, so Node can test it with fakes.
 import type { PluginRequestInput, PluginRequestOutput, PluginRequests } from 'orca';
 
 import type { AttachStatus, Language, LspContentChange, LspRange } from '../../src/protocol.ts';
@@ -672,7 +672,7 @@ export class LspBridge {
   // --- the lease ---
 
   // Why: Orca remounts an editor frame (with a new docId) each time its tab shows, and the old frame's
-  // pagehide close may never reach the worker, so the worker releases what it stops hearing from.
+  // Pagehide close may never reach the worker, so the worker releases what it stops hearing from.
   private startPinging(): void {
     if (this.pingTimer !== undefined || this.disposed) return;
     const timer: { unref?: () => void } | number = setInterval(() => void this.ping(), this.pingMs);

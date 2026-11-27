@@ -1,11 +1,11 @@
-// blade.test.ts — run the Monarch rules' regexes over sample lines; no Monaco import.
+// Blade.test.ts — run the Monarch rules' regexes over sample lines; no Monaco import.
 import { assert, test } from 'orca/testing';
 
 import { bladeGrammar, type MonarchLanguage } from '../../editor/src/blade.ts';
 import { firstRuleRegex, tokenTypes } from '../helpers/monarch-walk.ts';
 
 // The parts of Monaco's HTML grammar that matter here: a catch-all text rule in root, a one-regex
-// quoted value (as Monaco's `otherTag` has) and a quoted value with a state of its own.
+// Quoted value (as Monaco's `otherTag` has) and a quoted value with a state of its own.
 function fakeHtml() {
   return {
     conf: { comments: { blockComment: ['<!--', '-->'] as [string, string] } },

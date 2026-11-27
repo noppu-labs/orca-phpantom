@@ -1,8 +1,8 @@
 // Blade for Monaco: a copy of Monaco's HTML grammar with Blade's comments, echoes, directives and
-// components layered on top. No Monaco import, so Node can test it.
+// Components layered on top. No Monaco import, so Node can test it.
 //
 // Monarch quirks the rules below depend on: a rule only matches at the current position (no
-// lookbehind past it), `@name` in a regex expands a grammar attribute so a literal `@` is written
+// Lookbehind past it), `@name` in a regex expands a grammar attribute so a literal `@` is written
 // `@@`, and the first matching rule of a state wins.
 
 export type MonarchLanguage = { tokenizer: { [state: string]: unknown[] } };
@@ -93,7 +93,7 @@ const componentAttributes: Rule[] = [
 ];
 
 // States that are not tags or text: HTML comments, the doctype, and script and style bodies, which
-// belong to the embedded JavaScript and CSS grammars.
+// Belong to the embedded JavaScript and CSS grammars.
 const NOT_BLADE = /comment|doctype|embedded/i;
 
 /** HTML's one-regex quoted values (`/"([^"]*)"/`), which would swallow `{{ }}` inside a value. */
@@ -162,8 +162,8 @@ export function bladeGrammar<C extends object, L extends MonarchLanguage>(html: 
     bladeComponent: [
       ...bladeRules(''),
       // Monarch matches every rule at the current position anyway; the `^` inside the group says so,
-      // so an unanchored search cannot restart inside a run of `:`s. A `^` as the very first character
-      // would instead make Monarch try the rule only at the start of a line.
+      // So an unanchored search cannot restart inside a run of `:`s. A `^` as the very first character
+      // Would instead make Monarch try the rule only at the start of a line.
       [
         /(^:[\w\-.:]+)(\s*)(=)(\s*)(")/,
         ['attribute.name', '', 'delimiter', '', { token: 'delimiter', next: '@bladeBoundDouble' }],

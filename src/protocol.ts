@@ -13,7 +13,7 @@ export type AttachStatus =
       approximate?: true;
       reveal?: LspRange;
     }
-  | { state: 'pending' } // more chunks expected
+  | { state: 'pending' } // More chunks expected
   | { state: 'single-file'; reason: 'no-file' | 'ambiguous' }
   | { state: 'remote'; host: string }
   | { state: 'error'; message: string };
