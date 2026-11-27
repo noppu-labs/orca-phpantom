@@ -268,8 +268,9 @@ export class LspBridge {
       payload?.docId === this.docId;
     this.subscriptions.push(
       host.on('phpantom.diagnostics', (payload) => {
-        if (mine(payload) && Array.isArray(payload.diagnostics))
+        if (mine(payload) && Array.isArray(payload.diagnostics)) {
           this.emit('diagnostics', payload.diagnostics);
+        }
       }),
       host.on('phpantom.reveal', (payload) => {
         if (mine(payload)) this.emit('reveal', payload.range);
@@ -283,8 +284,9 @@ export class LspBridge {
           mine(payload) &&
           this.attachedTo &&
           (payload.state === 'restarting' || payload.state === 'error')
-        )
+        ) {
           this.lost();
+        }
       }),
       host.onWorkspaceChanged((context) => this.workspaceChanged(context)),
       host.onVisible(() => {
@@ -406,8 +408,9 @@ export class LspBridge {
       }
       if ('error' in answer) return null;
       // Why: the session outlives a re-target to another worktree; that answer is about the other copy.
-      if (this.attachedTo?.session !== session || this.attachedTo.uri !== attachment.uri)
+      if (this.attachedTo?.session !== session || this.attachedTo.uri !== attachment.uri) {
         return null;
+      }
       if (VERSION_GUARDED.has(method) && this.source.getVersion() !== version) return null;
       return { result: answer.result ?? null, truncated: answer.truncated ?? 0 };
     }
@@ -547,8 +550,9 @@ export class LspBridge {
             break;
           } catch (error) {
             // Orca refused the chunk before the worker saw it: the same chunk goes again after the hold.
-            if (!isRateLimited(error) || generation !== this.generation || this.disposed)
+            if (!isRateLimited(error) || generation !== this.generation || this.disposed) {
               throw error;
+            }
             await sleep(Math.max(this.pacer.wait(), 1));
             if (generation !== this.generation || this.disposed) return null;
           }
@@ -715,16 +719,18 @@ export class LspBridge {
       generation === this.generation &&
       this.attachedTo === attachment &&
       !this.disposed
-    )
+    ) {
       this.lost();
+    }
   }
 
   // --- the workspace (R2) ---
 
   private workspaceChanged(context: WorkspaceContext | null): void {
     this.lastSwitchAt = Date.now();
-    if (this.mountMoved || this.confirmed || Date.now() - this.mountedAt > this.mountWindowMs)
+    if (this.mountMoved || this.confirmed || Date.now() - this.mountedAt > this.mountWindowMs) {
       return;
+    }
     const id = context?.workspaceId ?? null;
     if (id === null) return;
     if (this.targetWorkspace === undefined) {
@@ -907,8 +913,9 @@ export class LspBridge {
     this.refreshTimer = setTimeout(
       () => {
         this.refreshTimer = undefined;
-        if (!this.disposed && this.attachedTo)
+        if (!this.disposed && this.attachedTo) {
           this.emit('refresh', ['semanticTokens', 'inlayHints']);
+        }
       },
       Math.max(this.pacer.wait(), 1000)
     );

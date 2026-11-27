@@ -12,8 +12,9 @@ import {
 test('every semantic token type has a rule in both themes', () => {
   for (const dark of [true, false]) {
     const tokens = new Set(themeRules(dark).map((r) => r.token));
-    for (const type of SEMANTIC_TYPES)
+    for (const type of SEMANTIC_TYPES) {
       assert.ok(tokens.has(type), `${type} (${dark ? 'dark' : 'light'})`);
+    }
   }
 });
 test('modifier combinations get exact rules', () => {

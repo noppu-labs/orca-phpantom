@@ -1140,8 +1140,9 @@ test("passive requests past this editor's share answer null without asking", asy
     await until(() => host.mirror?.text === doc.text, 'the change');
   }
   const answers = [];
-  for (let i = 0; i < 5; i++)
+  for (let i = 0; i < 5; i++) {
     answers.push(await bridge.ask('textDocument/hover', {}, undefined, { kind: 'passive' }));
+  }
   assert.equal(answers.filter((answer) => answer !== null).length, 3);
   assert.equal(host.calls('phpantom.request').length, 3);
   // A user request still goes out.

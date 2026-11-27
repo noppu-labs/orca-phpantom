@@ -158,7 +158,6 @@
       "files": ["**/*"],
       "rules": {
         "eslint/complexity": "off",
-        "eslint/curly": "off",
         "eslint/default-case": "off",
         "eslint/id-length": "off",
         "eslint/max-classes-per-file": "off",

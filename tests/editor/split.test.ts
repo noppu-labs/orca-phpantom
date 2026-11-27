@@ -88,8 +88,9 @@ test('groups keep order and respect the budget', () => {
 });
 
 test('never splits a surrogate pair', () => {
-  for (const piece of chunkText('😀'.repeat(40_000), 1024))
+  for (const piece of chunkText('😀'.repeat(40_000), 1024)) {
     assert.ok(!/^[\uDC00-\uDFFF]|[\uD800-\uDBFF]$/.test(piece));
+  }
 });
 
 test('chunkText pieces fit the budget and join back', () => {

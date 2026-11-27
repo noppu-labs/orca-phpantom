@@ -39,8 +39,9 @@ function fakeHtml() {
 
 test('keeps every HTML state and puts Blade rules first in root', () => {
   const g = bladeGrammar(fakeHtml());
-  for (const state of Object.keys(fakeHtml().language.tokenizer))
+  for (const state of Object.keys(fakeHtml().language.tokenizer)) {
     assert.ok(state in g.language.tokenizer);
+  }
   assert.match('{{ $user->name }}', firstRuleRegex(g, 'root'));
 });
 test('tokenizes the Blade constructs', () => {

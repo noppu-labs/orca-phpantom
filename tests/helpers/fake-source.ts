@@ -50,8 +50,9 @@ export function source(initial: string, language: Language = 'php'): FakeSource 
         rangeLength: end - start,
         text,
       }));
-      for (const [start, end, text] of sorted)
+      for (const [start, end, text] of sorted) {
         value = value.slice(0, start) + text + value.slice(end);
+      }
       emit(changes, false);
     },
     replaceAll(text) {

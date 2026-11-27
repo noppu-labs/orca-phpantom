@@ -560,7 +560,7 @@ export function registerEditingProviders(
               const result = await ask('textDocument/prepareRename', atCursor(position), token);
               if (token.isCancellationRequested) throw canceled();
               // Why reject: with nothing returned Monaco would offer to rename the word under the cursor.
-              if (!result)
+              if (!result) {
                 return {
                   range: new monaco.Range(
                     position.lineNumber,
@@ -571,6 +571,7 @@ export function registerEditingProviders(
                   text: '',
                   rejectReason: "This can't be renamed.",
                 };
+              }
               // The server either leaves the range to the client ...
               if (result.defaultBehavior) return null;
               // ... or sends a range, alone or with a placeholder. Why not show the placeholder: for a class

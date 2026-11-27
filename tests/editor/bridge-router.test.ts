@@ -105,8 +105,9 @@ function harness(options: { leaseMs?: number; sweepMs?: number } = {}) {
           action: 'plugin.request',
           params: { name, input },
         });
-        if (size.bytes > 64 * 1024 || size.objects > ORCA_MAX_OBJECTS)
+        if (size.bytes > 64 * 1024 || size.objects > ORCA_MAX_OBJECTS) {
           oversized.push(`${name}: ${JSON.stringify(size)}`);
+        }
         const current = router;
         const typed = input as any;
         switch (name) {

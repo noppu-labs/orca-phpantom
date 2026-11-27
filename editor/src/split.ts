@@ -17,8 +17,9 @@ export function encodedSize(value: unknown): number {
 /** UTF-8 bytes one UTF-16 unit (or a surrogate pair, when `next` completes it) adds to a JSON string. */
 function jsonCost(unit: number, pairedWith: number | null): number {
   if (unit === 0x22 || unit === 0x5c) return 2;
-  if (unit < 0x20)
+  if (unit < 0x20) {
     return unit === 8 || unit === 9 || unit === 10 || unit === 12 || unit === 13 ? 2 : 6;
+  }
   if (unit < 0x80) return 1;
   if (unit < 0x8_00) return 2;
   if (unit >= 0xd8_00 && unit <= 0xdf_ff) return pairedWith !== null ? 4 : 6;
@@ -85,8 +86,9 @@ function splitOne(change: LspContentChange, budget: number): LspContentChange[] 
   const out: LspContentChange[] = [
     'range' in change ? { range: change.range, text: last } : { text: last },
   ];
-  for (let i = pieces.length - 2; i >= 0; i--)
+  for (let i = pieces.length - 2; i >= 0; i--) {
     out.push({ range: { start: at, end: at }, text: pieces[i] });
+  }
   return out;
 }
 
@@ -121,8 +123,9 @@ export function splitChanges(
       size + added > budget ||
       orcaBytes + 4 + ownOrca.bytes > budget ||
       objects + ownOrca.objects > maxObjects
-    )
+    ) {
       flush();
+    }
     size += own + (current.length > 0 ? 1 : 0);
     orcaBytes += 4 + ownOrca.bytes;
     objects += ownOrca.objects;
