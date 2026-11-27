@@ -161,12 +161,15 @@ export function bladeGrammar<C extends object, L extends MonarchLanguage>(html: 
     ],
     bladeComponent: [
       ...bladeRules(''),
+      // Monarch matches every rule at the current position anyway; the `^` inside the group says so,
+      // so an unanchored search cannot restart inside a run of `:`s. A `^` as the very first character
+      // would instead make Monarch try the rule only at the start of a line.
       [
-        /(:[\w\-.:]+)(\s*)(=)(\s*)(")/,
+        /(^:[\w\-.:]+)(\s*)(=)(\s*)(")/,
         ['attribute.name', '', 'delimiter', '', { token: 'delimiter', next: '@bladeBoundDouble' }],
       ],
       [
-        /(:[\w\-.:]+)(\s*)(=)(\s*)(')/,
+        /(^:[\w\-.:]+)(\s*)(=)(\s*)(')/,
         ['attribute.name', '', 'delimiter', '', { token: 'delimiter', next: '@bladeBoundSingle' }],
       ],
       ...componentAttributes,

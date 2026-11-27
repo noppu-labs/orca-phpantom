@@ -139,3 +139,35 @@ test('tokenizes @php blocks and multi-line directive arguments as PHP', () => {
 test('comments Blade with {{-- --}}', () => {
   assert.deepEqual(bladeGrammar(fakeHtml()).conf.comments, { blockComment: ['{{--', '--}}'] });
 });
+test('tokenizes bound component attributes in both quotes', () => {
+  const g = bladeGrammar(fakeHtml());
+  for (const line of [`<x-alert :user="$u" />`, `<x-alert :user='$u' />`]) {
+    assert.deepEqual(tokenTypes(g, line), ['tag.blade', 'attribute.name', 'variable']);
+  }
+});
+test('scans a 5,000-character bound attribute name in linear time', () => {
+  const g = bladeGrammar(fakeHtml());
+  const bound = g.language.tokenizer.bladeComponent.filter(
+    (rule): rule is [RegExp, unknown[]] =>
+      Array.isArray(rule) && Array.isArray(rule[1]) && rule[1][0] === 'attribute.name'
+  );
+  assert.equal(bound.length, 2);
+  const name = 'a'.repeat(5000);
+  const run = ':'.repeat(5000);
+  const started = performance.now();
+  for (const [regex] of bound) {
+    // A leading `^` would make Monarch try the rule only at the start of a line.
+    assert.ok(!regex.source.startsWith('^'), regex.source);
+    assert.ok(!regex.test(`${run} `));
+  }
+  assert.deepEqual(tokenTypes(g, `<x-alert :${name}="$u" :${name}='$u' />`), [
+    'tag.blade',
+    'attribute.name',
+    'variable',
+    'attribute.name',
+    'variable',
+  ]);
+  assert.deepEqual(tokenTypes(g, `<x-alert :${name} />`), ['tag.blade', 'attribute.name']);
+  const elapsed = performance.now() - started;
+  assert.ok(elapsed < 50, `took ${elapsed} ms`);
+});
