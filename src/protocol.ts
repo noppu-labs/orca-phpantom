@@ -1,7 +1,13 @@
 // The editor <-> worker contract, declared once. Types only: the editor imports this file as
 // `../../src/protocol.ts` and the worker reads the same declarations.
-export type LspPosition = { line: number; character: number };
-export type LspRange = { start: LspPosition; end: LspPosition };
+export interface LspPosition {
+  line: number;
+  character: number;
+}
+export interface LspRange {
+  start: LspPosition;
+  end: LspPosition;
+}
 export type LspContentChange = { range: LspRange; text: string } | { text: string };
 export type Language = 'php' | 'blade';
 export type AttachStatus =

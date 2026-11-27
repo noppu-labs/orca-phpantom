@@ -7,13 +7,13 @@ import { showNote } from './notes.ts';
 import { bindDocument, flushWhenHidden } from './sync.ts';
 import { defineThemes, THEME_NAME, typographyOptions } from './theme.ts';
 
-export type EditorContext = {
+export interface EditorContext {
   monaco: typeof monaco;
   editor: monaco.editor.IStandaloneCodeEditor;
   model: monaco.editor.ITextModel;
   docId: string;
   language: Language;
-};
+}
 
 const CONFLICT_NOTE =
   'An outside change overlapped your unsaved edits. Both versions are in the file between <<<<<<< and >>>>>>> markers.';

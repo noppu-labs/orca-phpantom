@@ -2,7 +2,7 @@
 // `rate_limited` ("too many panel requests"; Orca 1.4.278 sends no retryAfterMs with it). This keeps
 // One editor's share of that budget and holds its calls back after a refusal. No Monaco here.
 
-export type PacerOptions = {
+export interface PacerOptions {
   windowMs?: number;
   /** Most passive calls (hover, completion, colouring...) this editor makes in a window. */
   passiveCap?: number;
@@ -10,7 +10,7 @@ export type PacerOptions = {
   firstBackoffMs?: number;
   maxBackoffMs?: number;
   now?: () => number;
-};
+}
 
 const MIN_HOLD_MS = 250;
 

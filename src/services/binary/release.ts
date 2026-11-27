@@ -1,11 +1,11 @@
 export const PHPANTOM_VERSION = '1.1.0';
 
-export type ReleaseAsset = {
+export interface ReleaseAsset {
   asset: string;
   sha256: string;
   member: 'phpantom_lsp' | 'phpantom_lsp.exe';
   kind: 'tar.gz' | 'zip';
-};
+}
 
 const tar = (asset: string, sha256: string): ReleaseAsset => ({
   asset,

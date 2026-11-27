@@ -19,12 +19,12 @@ export function tarChecksum(header: Buffer): number {
   return sum;
 }
 
-export type TarEntry = {
+export interface TarEntry {
   name: string;
   data: string | Buffer;
   /** The ustar typeflag: '0' for a regular file (the default), 'x' for a pax extended header. */
   type?: string;
-};
+}
 
 function tarHeader(name: string, size: number, type: string): Buffer {
   if (Buffer.byteLength(name) > 100) {
@@ -67,10 +67,10 @@ export function tarGz(files: ArchiveFiles | TarEntry[]): Buffer {
   return gzipSync(tar(files));
 }
 
-export type ZipOptions = {
+export interface ZipOptions {
   /** Store entries uncompressed (method 0) or deflate them (method 8). Defaults to stored. */
   method?: 'stored' | 'deflate';
-};
+}
 
 /** A zip with a local header and a central-directory record per file, then the end record. */
 export function zip(files: ArchiveFiles, options: ZipOptions = {}): Buffer {

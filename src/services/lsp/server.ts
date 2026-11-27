@@ -9,21 +9,21 @@ import { RpcConnection } from './jsonrpc.ts';
 
 export type RefreshKind = 'semanticTokens' | 'inlayHints' | 'codeLens' | 'diagnostics';
 
-export type ServerEvents = {
+export interface ServerEvents {
   diagnostics(uri: string, diagnostics: unknown[]): void;
   progress(state: ServerState): void;
   refresh(kind: RefreshKind): void;
   log(message: string): void;
   exit(reason: string): void;
-};
+}
 
-export type PhpantomServerOptions = {
+export interface PhpantomServerOptions {
   executable: string;
   root: string;
   events: ServerEvents;
   spawnImpl?: typeof spawn;
   initializeTimeoutMs?: number;
-};
+}
 
 // Why 60 s: the first index of a large project can take that long before `initialize` is answered.
 const INITIALIZE_TIMEOUT_MS = 60_000;
@@ -39,7 +39,10 @@ const REFRESH_KINDS: Record<string, RefreshKind> = {
   'workspace/diagnostic/refresh': 'diagnostics',
 };
 
-type ProgressValue = { kind?: string; percentage?: number };
+interface ProgressValue {
+  kind?: string;
+  percentage?: number;
+}
 
 async function delay(ms: number): Promise<'timeout'> {
   return new Promise((resolve) =>

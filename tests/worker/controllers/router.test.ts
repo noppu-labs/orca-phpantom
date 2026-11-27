@@ -25,8 +25,16 @@ class RecordingServer extends PhpantomServer {
   }
 }
 
-type Post = { event: string; payload: any; panel: string };
-type Started = { root: string; server: RecordingServer; events: ServerEvents };
+interface Post {
+  event: string;
+  payload: any;
+  panel: string;
+}
+interface Started {
+  root: string;
+  server: RecordingServer;
+  events: ServerEvents;
+}
 
 const cleanups: (() => Promise<void> | void)[] = [];
 afterEach(async () => {

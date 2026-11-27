@@ -5,7 +5,12 @@ import { assert, test } from 'orca/testing';
 import { Outbox } from '../../../src/services/outbox.ts';
 import { orcaSize } from '../../../src/utils/size.ts';
 
-type Sent = { event: string; payload: unknown; panel: string; at: number };
+interface Sent {
+  event: string;
+  payload: unknown;
+  panel: string;
+  at: number;
+}
 
 function maxInAnyWindow(times: number[], windowMs: number): number {
   let most = 0;

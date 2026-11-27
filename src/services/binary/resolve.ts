@@ -25,7 +25,7 @@ export function cacheDir(env: NodeJS.ProcessEnv, platform: string, home: string)
   return posix.join(env.XDG_CACHE_HOME || posix.join(home, '.cache'), 'noppu-labs.phpantom');
 }
 
-export type ResolveOptions = {
+export interface ResolveOptions {
   settingPath: string;
   allowDownload: boolean;
   env: NodeJS.ProcessEnv;
@@ -38,7 +38,7 @@ export type ResolveOptions = {
   readVersionImpl?: typeof readVersion;
   /** Test seam: where the release assets come from. */
   assets?: (platform: string, arch: string) => ReleaseAsset | null;
-};
+}
 
 const inFlight = new Map<string, Promise<Resolution>>();
 

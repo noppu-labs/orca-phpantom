@@ -49,7 +49,11 @@ const ALIKE_BUDGET_MS = 1500;
 /** A file this many times bigger or smaller than the document cannot share enough lines with it. */
 const ALIKE_SIZE_RATIO = 3;
 
-type Options = { maxFiles?: number; budgetMs?: number; alikeBudgetMs?: number };
+interface Options {
+  maxFiles?: number;
+  budgetMs?: number;
+  alikeBudgetMs?: number;
+}
 
 /** The extensions a php document can have: .php and the ones Drupal uses for PHP. */
 export const PHP_EXTENSIONS: readonly string[] = [
@@ -107,7 +111,11 @@ export function sharedLines(a: string, b: string): number {
   return shared / Math.max(linesA.length, linesB.length);
 }
 
-type Candidate = { path: string; root: string; size: number };
+interface Candidate {
+  path: string;
+  root: string;
+  size: number;
+}
 
 /** The one file that is clearly the document with a few edits on top, if there is such a file. */
 async function locateAlike(
@@ -157,14 +165,14 @@ async function locateAlike(
   return { status: 'found', path: best.file.path, root: best.file.root, approximate: true };
 }
 
-export type LocateInput = {
+export interface LocateInput {
   tiers: string[][];
   candidates: string[];
   /** Files located before (open now or not long ago), which the walk may not reach: Composer's vendor folder. */
   known?: string[];
   language: Language;
   content: string;
-};
+}
 
 /** The workspace path among the tiers that holds the file, the longest when they nest; empty when none does. */
 function rootOf(path: string, tiers: readonly (readonly string[])[]): string {

@@ -7,8 +7,13 @@ import type { EditorContext } from './editor.ts';
 import { toLspRange, type MonacoRange } from './lsp-convert.ts';
 import { showNote } from './notes.ts';
 
-type Disposable = { dispose(): void };
-type Location = { uri: string; range: MonacoRange };
+interface Disposable {
+  dispose(): void;
+}
+interface Location {
+  uri: string;
+  range: MonacoRange;
+}
 
 export const NAVIGATION_NOTE = 'phpantom-navigation';
 

@@ -32,7 +32,7 @@ import {
 import { fitsIn, leadingThatFit, orcaSize } from '../utils/size.ts';
 import { sameUri, uriKey } from '../utils/uri.ts';
 
-export type RouterHost = {
+export interface RouterHost {
   /** May answer from a short cache; `fresh` asks Orca again. */
   listWorkspaces(options?: { fresh?: boolean }): Promise<WorkspaceRow[]>;
   /** `path` is relative to the workspace, with forward slashes: `editor.open` refuses absolute paths. */
@@ -41,9 +41,9 @@ export type RouterHost = {
   status(update: StatusBarUpdate): void;
   log(message: string): void;
   settings(): Promise<{ phpantomPath: string; allowDownload: boolean }>;
-};
+}
 
-export type RouterOptions = {
+export interface RouterOptions {
   resolve?: typeof resolveBinary;
   createServer?: (executable: string, root: string, events: ServerEvents) => PhpantomServer;
   idleMs?: number;
@@ -54,12 +54,12 @@ export type RouterOptions = {
   sessionId?: string;
   /** The clock for leases and the binary-failure cache; tests drive it. */
   now?: () => number;
-};
+}
 
 type Input<K extends keyof PluginRequests> = PluginRequests[K]['input'];
 type Output<K extends keyof PluginRequests> = PluginRequests[K]['output'];
 
-type Entry = {
+interface Entry {
   root: string;
   server: PhpantomServer | null;
   starting: Promise<PhpantomServer> | null;
@@ -71,10 +71,10 @@ type Entry = {
   restarts: number[];
   crashed: boolean;
   idle: ReturnType<typeof setTimeout> | null;
-};
+}
 
 /** One file as PHPantom knows it, and the documents attached to it. */
-type SharedFile = {
+interface SharedFile {
   uri: string;
   holders: Set<string>;
   /** The text PHPantom holds now. Each holder's edits are computed against its own copy, so they are
@@ -84,9 +84,9 @@ type SharedFile = {
   version: number;
   /** What PHPantom last published for it: a document joining with the same text gets nothing newer. */
   diagnostics: unknown[] | null;
-};
+}
 
-type Doc = {
+interface Doc {
   docId: string;
   panel: string;
   uri: string;
@@ -103,7 +103,7 @@ type Doc = {
   diagnostics: number;
   /** When its editor was last heard from; see `leaseMs`. */
   lastSeen: number;
-};
+}
 
 // Orca takes an answer of at most 1 MiB and 10,000 objects by its own measure (see size.ts); this
 // Leaves room for what the measure may miss.

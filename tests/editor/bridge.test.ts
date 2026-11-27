@@ -32,7 +32,11 @@ const ctx = (workspaceId: string): WorkspaceContext => ({
   displayName: workspaceId,
 });
 
-type Call = { name: string; input: any; options?: { timeoutMs?: number; signal?: AbortSignal } };
+interface Call {
+  name: string;
+  input: any;
+  options?: { timeoutMs?: number; signal?: AbortSignal };
+}
 type OpenHandler = (input: any, host: FakeHost) => AttachStatus | Promise<AttachStatus>;
 type Answer = unknown | Promise<unknown>;
 

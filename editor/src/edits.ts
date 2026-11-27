@@ -1,7 +1,11 @@
 // Adapted from actus7/orca-autocomplete editor/src/edits.ts @ da5a680 (MIT). See THIRD_PARTY_NOTICES.md.
 // Pure text helpers for the editor; no Monaco here so Node can test them.
 
-export type Splice = { start: number; end: number; text: string };
+export interface Splice {
+  start: number;
+  end: number;
+  text: string;
+}
 
 const isHighSurrogate = (code: number): boolean => code >= 0xd8_00 && code <= 0xdb_ff;
 

@@ -7,12 +7,18 @@ import type { AttachStatus, Language, LspContentChange, LspRange } from '../../s
 import { isRateLimited, Pacer } from './pacer.ts';
 import { chunkText, splitChanges } from './split.ts';
 
-type Disposable = { dispose(): void };
+interface Disposable {
+  dispose(): void;
+}
 type Ready = AttachStatus & { state: 'ready' };
 
-export type WorkspaceContext = { workspaceId: string | null; branch: string; displayName: string };
+export interface WorkspaceContext {
+  workspaceId: string | null;
+  branch: string;
+  displayName: string;
+}
 
-export type BridgeHost = {
+export interface BridgeHost {
   request<K extends keyof PluginRequests>(
     name: K,
     input: PluginRequestInput<K>,
@@ -32,12 +38,16 @@ export type BridgeHost = {
   onSaved(listener: () => void): Disposable;
   /** The plugin's settings changed (say, the PHPantom path), which can fix a failed attach. */
   onSettingsChanged(listener: () => void): Disposable;
-};
+}
 
 /** A content change with the length of the text it replaced, as Monaco reports it. */
-export type SourceChange = { range: LspRange; rangeLength: number; text: string };
+export interface SourceChange {
+  range: LspRange;
+  rangeLength: number;
+  text: string;
+}
 
-export type DocumentSource = {
+export interface DocumentSource {
   language: Language;
   getText(): string;
   getLength(): number;
@@ -45,7 +55,7 @@ export type DocumentSource = {
   getVersion(): number;
   /** `isFlush`: the whole text was replaced (or its line endings changed), so send it whole. */
   onChanges(listener: (changes: SourceChange[], isFlush: boolean) => void): Disposable;
-};
+}
 
 /**
  * How a request is paced. `user`: someone asked (go to definition, rename, format, an invoked fix); it
@@ -57,9 +67,13 @@ export type DocumentSource = {
 export type RequestKind = 'user' | 'passive' | 'background';
 
 /** `silent`: a user request Monaco also makes on its own (resolving a focused item); it never shows the busy note. */
-export type AskOptions = { timeoutMs?: number; kind?: RequestKind; silent?: boolean };
+export interface AskOptions {
+  timeoutMs?: number;
+  kind?: RequestKind;
+  silent?: boolean;
+}
 
-export type BridgeOptions = {
+export interface BridgeOptions {
   docId?: string;
   /** Most time a typed change waits before it is sent; changes typed meanwhile go with it in one request. */
   syncDelayMs?: number;
@@ -89,7 +103,7 @@ export type BridgeOptions = {
   backgroundMinWaitMs?: number;
   /** The longest hold a user request waits out before it says the editor is busy instead. */
   userMaxWaitMs?: number;
-};
+}
 
 // Requests whose answer edits the text: applied to a text that moved since, they would corrupt it.
 const VERSION_GUARDED = new Set([
@@ -101,16 +115,22 @@ const VERSION_GUARDED = new Set([
 // The last chunk waits for PHPantom to start, which can mean a cold index or a download.
 const LAST_CHUNK_TIMEOUT_MS = 120_000;
 
-type Events = {
+interface Events {
   ready: Ready;
   status: AttachStatus;
   diagnostics: unknown[];
   refresh: string[];
   reveal: LspRange;
   busy: undefined;
-};
-type QueuedEvent = { changes: SourceChange[]; lengthAfter: number };
-type Group = { changes: LspContentChange[]; length: number };
+}
+interface QueuedEvent {
+  changes: SourceChange[];
+  lengthAfter: number;
+}
+interface Group {
+  changes: LspContentChange[];
+  length: number;
+}
 
 const codeOf = (error: unknown): unknown =>
   typeof error === 'object' && error !== null ? (error as { code?: unknown }).code : undefined;

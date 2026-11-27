@@ -190,7 +190,6 @@
         "import/unambiguous": "off",
         "oxc/no-barrel-file": "off",
         "typescript/consistent-return": "off",
-        "typescript/consistent-type-definitions": "off",
         "typescript/explicit-function-return-type": "off",
         "typescript/explicit-member-accessibility": "off",
         "typescript/explicit-module-boundary-types": "off",

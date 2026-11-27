@@ -2,15 +2,18 @@
 // A minimal JSON-RPC 2.0 connection over the framing every language server uses on stdio:
 // `Content-Length: n`, a blank line, then n bytes of JSON.
 
-export type RpcHandlers = {
+export interface RpcHandlers {
   /** A request the server makes of us (configuration, registering capabilities ...); its result is the answer. */
   onRequest(method: string, params: unknown): Promise<unknown> | unknown;
   onNotification(method: string, params: unknown): void;
   /** A handler threw on a message; the connection carries on with the next one. */
   onError?(message: string): void;
-};
+}
 
-type Pending = { resolve(value: unknown): void; reject(error: Error): void };
+interface Pending {
+  resolve(value: unknown): void;
+  reject(error: Error): void;
+}
 
 const HEADER_END = Buffer.from('\r\n\r\n');
 const LENGTH_HEADER = /content-length:\s*(\d+)/i;

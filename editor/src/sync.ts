@@ -1,11 +1,11 @@
 import { smallestEdit, type Splice } from './edits.ts';
 import { mergeText } from './merge.ts';
 
-export type TextView = {
+export interface TextView {
   getValue(): string;
   applyOutside(splice: Splice): void;
   onUserChange(listener: () => void): { dispose(): void };
-};
+}
 
 /** Keeps `view` and the Orca document in sync; resolves once the first document is in. */
 export async function bindDocument(

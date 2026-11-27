@@ -6,18 +6,25 @@
 import { fitsIn, orcaSize, type Size } from '../utils/size.ts';
 
 // Orca drops a post over 256 KiB or 10,000 objects by its own measure; this leaves room for what it may miss.
-export type OutboxOptions = {
+export interface OutboxOptions {
   windowMs?: number;
   maxPosts?: number;
   maxBytes?: number;
   maxObjects?: number;
   delayMs?: number;
   now?: () => number;
-};
+}
 
 type PostFn = (event: string, payload: unknown, options: { panel: string }) => void;
-type Queued = { panel: string; event: string; payload: unknown };
-type DiagnosticsPayload = { diagnostics: unknown[]; truncated?: number };
+interface Queued {
+  panel: string;
+  event: string;
+  payload: unknown;
+}
+interface DiagnosticsPayload {
+  diagnostics: unknown[];
+  truncated?: number;
+}
 
 function severityOf(diagnostic: unknown): number {
   const severity = (diagnostic as { severity?: unknown } | null)?.severity;

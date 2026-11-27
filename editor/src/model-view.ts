@@ -13,7 +13,7 @@ export type Eol = '\n' | '\r\n';
 const BOM = '﻿';
 
 /** The parts of a Monaco text model this needs; offsets never count the BOM. */
-export type ModelPort = {
+export interface ModelPort {
   /** `model.getValue()`: the text without the BOM, in the model's line ending. */
   getText(): string;
   getEol(): Eol;
@@ -25,7 +25,7 @@ export type ModelPort = {
   replace(start: number, end: number, text: string): void;
   pushStackElement(): void;
   onDidChangeContent(listener: () => void): { dispose(): void };
-};
+}
 
 export type ModelView = TextView & {
   /** Puts the first document in without sending it back and without an undo step to empty it. */

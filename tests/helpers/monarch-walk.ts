@@ -4,14 +4,17 @@
 // Node without Monaco. It throws where Monarch would, so a broken rule fails here and not in the frame.
 
 type Action = string | { token?: string; next?: string; switchTo?: string; [key: string]: unknown };
-type Grammar = {
+interface Grammar {
   language: {
     tokenizer: Record<string, readonly unknown[]>;
     ignoreCase?: boolean;
     defaultToken?: string;
   };
-};
-export type Token = { type: string; text: string };
+}
+export interface Token {
+  type: string;
+  text: string;
+}
 
 function compile(grammar: Grammar, regex: RegExp): RegExp {
   const source = regex.source.replaceAll('@@', '\u0001');

@@ -3,7 +3,11 @@ import { execFile } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { posix, win32 } from 'node:path';
 
-type Environment = { PATH?: string; Path?: string; PATHEXT?: string };
+interface Environment {
+  PATH?: string;
+  Path?: string;
+  PATHEXT?: string;
+}
 
 /** The full path of a command on PATH, or null. Windows also tries the PATHEXT extensions. */
 export function findExecutable(

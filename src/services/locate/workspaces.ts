@@ -2,13 +2,13 @@ import { existsSync } from 'node:fs';
 import { basename, dirname, sep } from 'node:path';
 
 /** The fields of a `workspace.list` row this plugin uses. */
-export type WorkspaceRow = {
+export interface WorkspaceRow {
   id: string;
   name: string;
   branch: string | null;
   path: string;
   hostId: string | null;
-};
+}
 
 const WSL_PATH = /^(\\\\|\/\/)wsl(\.localhost|\$)[\\/]/i;
 

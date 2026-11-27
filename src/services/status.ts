@@ -1,25 +1,25 @@
-export type ServerState = {
+export interface ServerState {
   phase: 'downloading' | 'starting' | 'indexing' | 'ready' | 'error';
   percent?: number;
   message?: string;
-};
+}
 
-export type StatusState = {
+export interface StatusState {
   phase: 'idle' | ServerState['phase'];
   percent?: number;
   message?: string;
   version?: string;
   source?: 'setting' | 'path' | 'cache' | 'download';
-};
+}
 
 // A literal union rather than `string`, so the update can go straight to `statusBar.update`.
-export type StatusBarUpdate = {
+export interface StatusBarUpdate {
   id: 'phpantom';
   text: string;
   icon: 'code' | 'check' | 'error' | 'download' | 'refresh';
   tone: 'neutral' | 'accent' | 'success' | 'warning' | 'danger';
   tooltip: string;
-};
+}
 
 const URGENCY: ServerState['phase'][] = ['error', 'downloading', 'starting', 'indexing', 'ready'];
 

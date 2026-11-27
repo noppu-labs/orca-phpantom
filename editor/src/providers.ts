@@ -44,7 +44,9 @@ import {
 } from './navigation.ts';
 import { clearNote, showNote } from './notes.ts';
 
-type Disposable = { dispose(): void };
+interface Disposable {
+  dispose(): void;
+}
 type Capabilities = Record<string, any>; // The server's own JSON
 type Model = monaco.editor.ITextModel;
 

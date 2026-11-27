@@ -8,7 +8,10 @@
 // Objects and numbers, so it hits these limits long before its JSON would. Depth is not tracked here:
 // Nothing the plugin sends nests anywhere near 100.
 
-export type Size = { bytes: number; objects: number };
+export interface Size {
+  bytes: number;
+  objects: number;
+}
 
 export const ORCA_MAX_OBJECTS = 10_000;
 

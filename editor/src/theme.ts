@@ -74,7 +74,11 @@ const NEAREST: Record<string, Base | null> = {
   comment: 'comment',
 };
 
-export type ThemeRule = { token: string; foreground?: string; fontStyle?: string };
+export interface ThemeRule {
+  token: string;
+  foreground?: string;
+  fontStyle?: string;
+}
 
 /**
  * Monaco styles a semantic token by the rule matching `type.mod1.mod2…` (modifiers in legend order)
@@ -185,7 +189,7 @@ export function readOrcaVars(): Record<string, string> {
 }
 
 /** The structural slice of Monaco this file needs. */
-type ThemeHost = {
+interface ThemeHost {
   editor: {
     defineTheme(
       name: string,
@@ -197,7 +201,7 @@ type ThemeHost = {
       }
     ): void;
   };
-};
+}
 
 /** Defines both themes from Orca's current variables; run again on each `theme` event. */
 export function defineThemes(monaco: ThemeHost): void {
