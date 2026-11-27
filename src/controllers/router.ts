@@ -1,4 +1,5 @@
 // The worker's switchboard: editors send `phpantom.*` requests, the router finds the file each document is, runs one PHPantom per composer root, forwards LSP traffic, and posts diagnostics
+// And status back to the editors.
 import { randomUUID } from 'node:crypto';
 import { readFile, stat } from 'node:fs/promises';
 import { homedir } from 'node:os';
@@ -657,6 +658,7 @@ class Router {
       // Why resend: PHPantom holds whatever the leaving document sent last.
       // The one heard from most recently is the tab on screen; the others are frames Orca replaced that hold on until their lease ends.
       // One waiting
+      // For its resync has a copy that is not its editor's text, and sends the whole text soon anyway.
       const current = remaining
         .filter((other) => !other.needsResync)
         .sort((a, b) => b.lastSeen - a.lastSeen)[0];

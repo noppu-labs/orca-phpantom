@@ -1,6 +1,7 @@
 // Adapted from actus7/orca-autocomplete editor/src/lsp.ts @ da5a680 (MIT). See THIRD_PARTY_NOTICES.md.
 // Monaco's language features answered by PHPantom through the bridge: diagnostics, completion, hover, signature help, semantic colouring, inlay hints and the outline; then going to definitions and references, formatting, rename and code actions.
 // Only what the server says it supports is registered,
+// For the model's own language, and only this editor's model is answered.
 import type { AskOptions, LspBridge, RequestKind } from './bridge.ts';
 import type { EditorContext } from './editor.ts';
 import {

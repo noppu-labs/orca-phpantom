@@ -4,6 +4,7 @@
 // A raw splice of
 // Orca's text can therefore cut a `\r\n` pair and leave an extra line.
 // So an outside write is applied as Orca's whole new text: switch the model to the line ending Monaco would pick for it, then apply
+// The smallest edit between texts that use that one line ending.
 import { smallestEdit, type Splice } from './edits.ts';
 import type { TextView } from './sync.ts';
 

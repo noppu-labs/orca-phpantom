@@ -6,6 +6,7 @@
 // (64 KiB, the whole `{ sessionToken, action, params }` message)).
 // A list of locations is mostly small objects and numbers, so it hits these limits long before its JSON would.
 // Depth is not tracked here:
+// Nothing the plugin sends nests anywhere near 100.
 
 interface Size {
   bytes: number;
