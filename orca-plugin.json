@@ -4,7 +4,7 @@
   "execution": "trusted-worker",
   "id": "phpantom",
   "name": "PHP, Laravel, Symfony, WP",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Errors as you type, completion, go to definition and quick fixes for PHP. Understands Laravel, Symfony, WordPress, Drupal, Yii 3, Tempest, PHPUnit and Pest with nothing to switch on. Powered by PHPantom.",
   "license": "MIT",
   "repository": "https://github.com/noppu-labs/orca-phpantom",
