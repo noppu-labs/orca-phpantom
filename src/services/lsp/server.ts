@@ -166,7 +166,7 @@ class PhpantomServer {
       const result = await Promise.race([
         rpc.request('initialize', {
           capabilities: CLIENT_CAPABILITIES,
-          clientInfo: { name: 'orca-phpantom', version: '0.3.0' },
+          clientInfo: { name: 'orca-phpantom', version: '0.3.1' },
           processId: process.pid,
           rootUri,
           workspaceFolders: [
