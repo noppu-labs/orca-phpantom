@@ -1,20 +1,21 @@
-// A small Monarch tokenizer for tests: it runs a grammar's rules over a line the way Monaco's
-// monarchLexer does (rules anchored at the position, first match wins, `@@` is a literal `@`, groups,
-// `include`, `next`/`switchTo`/`@pop`, repeated token types merged), so grammars can be tested in
-// Node without Monaco. It throws where Monarch would, so a broken rule fails here and not in the frame.
+// A small Monarch tokenizer for tests: it runs a grammar's rules over a line the way Monaco's monarchLexer does (rules anchored at the position, first match wins, `@@` is a literal `@`, groups, `include`, `next`/`switchTo`/`@pop`, repeated token types merged), so grammars can be tested in Node without Monaco.
+// It throws where Monarch would, so a broken rule fails here and not in the frame.
 
 type Action = string | { token?: string; next?: string; switchTo?: string; [key: string]: unknown };
-type Grammar = {
+interface Grammar {
   language: {
-    tokenizer: { [state: string]: readonly unknown[] };
+    tokenizer: Record<string, readonly unknown[]>;
     ignoreCase?: boolean;
     defaultToken?: string;
   };
-};
-export type Token = { type: string; text: string };
+}
+interface Token {
+  type: string;
+  text: string;
+}
 
 function compile(grammar: Grammar, regex: RegExp): RegExp {
-  const source = regex.source.replace(/@@/g, '\x01');
+  const source = regex.source.replaceAll('@@', '\u0001');
   const attribute = /@(\w+)/.exec(source);
   if (attribute) {
     throw new Error(
@@ -22,11 +23,11 @@ function compile(grammar: Grammar, regex: RegExp): RegExp {
     );
   }
   const flags = grammar.language.ignoreCase ? 'i' : '';
-  return new RegExp(`^(?:${source.replaceAll('\x01', '@')})`, flags);
+  return new RegExp(`^(?:${source.replaceAll('\u0001', '@')})`, flags);
 }
 
 function rulesOf(grammar: Grammar, state: string, seen: string[] = []): unknown[] {
-  const tokenizer = grammar.language.tokenizer;
+  const { tokenizer } = grammar.language;
   let name = state;
   // Monarch's parent matching: `scriptWithCustomType.text/javascript` uses `scriptWithCustomType`.
   while (!(name in tokenizer) && name.includes('.')) {
@@ -62,18 +63,18 @@ function asRule(rule: unknown): { regex: RegExp; action: Action | Action[]; next
 }
 
 /** The first rule of `state`, compiled as Monarch compiles it. */
-export function firstRuleRegex(grammar: Grammar, state: string): RegExp {
+function firstRuleRegex(grammar: Grammar, state: string): RegExp {
   return compile(grammar, asRule(rulesOf(grammar, state)[0]).regex);
 }
 
 /** Tokenizes one line from `stack` (which it updates), returning Monaco's merged tokens. */
-export function tokenizeLine(grammar: Grammar, line: string, stack: string[] = ['root']): Token[] {
+function tokenizeLine(grammar: Grammar, line: string, stack: string[] = ['root']): Token[] {
   const tokens: Token[] = [];
   const emit = (type: string, text: string): void => {
     if (text === '') {
       return;
     }
-    const last = tokens[tokens.length - 1];
+    const last = tokens.at(-1);
     // Monaco's token collector drops a token of the same type as the one before it.
     if (last && last.type === type) {
       last.text += text;
@@ -95,7 +96,7 @@ export function tokenizeLine(grammar: Grammar, line: string, stack: string[] = [
       }
       stack.pop();
     } else if (next === '@push') {
-      stack.push(stack[stack.length - 1]);
+      stack.push(stack.at(-1)!);
     } else if (next === '@popall') {
       stack.splice(1);
     } else {
@@ -120,7 +121,7 @@ export function tokenizeLine(grammar: Grammar, line: string, stack: string[] = [
 
   let pos = 0;
   while (pos < line.length) {
-    const state = stack[stack.length - 1];
+    const state = stack.at(-1)!;
     const rest = line.slice(pos);
     let matched: { rule: ReturnType<typeof asRule>; match: RegExpMatchArray } | null = null;
     for (const raw of rulesOf(grammar, state)) {
@@ -153,7 +154,7 @@ export function tokenizeLine(grammar: Grammar, line: string, stack: string[] = [
       apply(rule.action, match[0]);
     }
     move(rule.next, undefined);
-    if (match[0].length === 0 && stack.length === depth && stack[stack.length - 1] === state) {
+    if (match[0].length === 0 && stack.length === depth && stack.at(-1) === state) {
       throw new Error(`no progress in tokenizer in rule: /${rule.regex.source}/`);
     }
     pos += match[0].length;
@@ -162,10 +163,13 @@ export function tokenizeLine(grammar: Grammar, line: string, stack: string[] = [
 }
 
 /** Token types of `lines` (tokenized in order), without plain text ('') and bare HTML punctuation ('delimiter'). */
-export function tokenTypes(grammar: Grammar, ...lines: string[]): string[] {
+function tokenTypes(grammar: Grammar, ...lines: string[]): string[] {
   const stack = ['root'];
   return lines
     .flatMap((line) => tokenizeLine(grammar, line, stack))
     .map((token) => token.type)
     .filter((type) => type !== '' && type !== 'delimiter');
 }
+
+export { firstRuleRegex, tokenizeLine, tokenTypes };
+export type { Token };

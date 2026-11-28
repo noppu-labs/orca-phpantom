@@ -2,18 +2,18 @@ import { existsSync } from 'node:fs';
 import { basename, dirname, sep } from 'node:path';
 
 /** The fields of a `workspace.list` row this plugin uses. */
-export type WorkspaceRow = {
+interface WorkspaceRow {
   id: string;
   name: string;
   branch: string | null;
   path: string;
   hostId: string | null;
-};
+}
 
 const WSL_PATH = /^(\\\\|\/\/)wsl(\.localhost|\$)[\\/]/i;
 
 /** A workspace on this machine: host `local` or none recorded, and not a WSL share. */
-export function isLocal(row: WorkspaceRow): boolean {
+function isLocal(row: WorkspaceRow): boolean {
   return (row.hostId === 'local' || row.hostId === null) && !WSL_PATH.test(row.path);
 }
 
@@ -21,7 +21,7 @@ export function isLocal(row: WorkspaceRow): boolean {
  * The focused workspace's row: by id, else by branch and name when exactly one row has both
  * (the pair is not unique in practice: several worktrees share main/main).
  */
-export function resolveFocused(
+function resolveFocused(
   rows: WorkspaceRow[],
   workspaceId: string | null,
   context?: { branch: string; displayName: string }
@@ -45,7 +45,7 @@ function contains(root: string, path: string): boolean {
   return (
     path === root ||
     path.startsWith(root.endsWith(sep) || root.endsWith('/') ? root : root + sep) ||
-    path.startsWith(root + '/')
+    path.startsWith(`${root}/`)
   );
 }
 
@@ -54,13 +54,13 @@ function contains(root: string, path: string): boolean {
  * A file inside a Composer vendor folder (a `vendor` folder beside a composer.json) belongs to the
  * project that holds that vendor folder, not to the package's own composer.json.
  */
-export function composerRoot(
+function composerRoot(
   filePath: string,
   workspacePath: string,
   exists: (path: string) => boolean = existsSync
 ): string {
-  const hasComposer = (directory: string) =>
-    exists((directory.endsWith(sep) ? directory : directory + sep) + 'composer.json');
+  const hasComposer = (directory: string): boolean =>
+    exists(`${directory.endsWith(sep) ? directory : directory + sep}composer.json`);
   const chain: string[] = [];
   let directory = dirname(filePath);
   while (contains(workspacePath, directory)) {
@@ -82,7 +82,7 @@ export function composerRoot(
 }
 
 /** The local row with the longest path that contains the file. */
-export function workspaceFor(filePath: string, rows: WorkspaceRow[]): WorkspaceRow | null {
+function workspaceFor(filePath: string, rows: WorkspaceRow[]): WorkspaceRow | null {
   let best: WorkspaceRow | null = null;
   for (const row of rows) {
     if (
@@ -95,3 +95,6 @@ export function workspaceFor(filePath: string, rows: WorkspaceRow[]): WorkspaceR
   }
   return best;
 }
+
+export { isLocal, resolveFocused, composerRoot, workspaceFor };
+export type { WorkspaceRow };

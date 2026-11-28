@@ -1,23 +1,29 @@
 // Every post to an editor goes through here, so the plugin stays inside Orca's limits (200 posts per
 // 10 s, 256 KiB each, measured by Orca's own function: see size.ts) even when PHPantom publishes diagnostics for hundreds of files at once.
-// Posts are keyed: a newer payload for a key replaces the queued one, so the latest state always
-// arrives and stale ones are never sent.
+// Posts are keyed: a newer payload for a key replaces the queued one, so the latest state always arrives and stale ones are never sent.
 
 import { fitsIn, orcaSize, type Size } from '../utils/size.ts';
 
 // Orca drops a post over 256 KiB or 10,000 objects by its own measure; this leaves room for what it may miss.
-export type OutboxOptions = {
+interface OutboxOptions {
   windowMs?: number;
   maxPosts?: number;
   maxBytes?: number;
   maxObjects?: number;
   delayMs?: number;
   now?: () => number;
-};
+}
 
 type PostFn = (event: string, payload: unknown, options: { panel: string }) => void;
-type Queued = { panel: string; event: string; payload: unknown };
-type DiagnosticsPayload = { diagnostics: unknown[]; truncated?: number };
+interface Queued {
+  panel: string;
+  event: string;
+  payload: unknown;
+}
+interface DiagnosticsPayload {
+  diagnostics: unknown[];
+  truncated?: number;
+}
 
 function severityOf(diagnostic: unknown): number {
   const severity = (diagnostic as { severity?: unknown } | null)?.severity;
@@ -25,7 +31,7 @@ function severityOf(diagnostic: unknown): number {
   return typeof severity === 'number' ? severity : 1;
 }
 
-export class Outbox {
+class Outbox {
   private readonly post: PostFn;
   private readonly windowMs: number;
   private readonly maxPosts: number;
@@ -37,7 +43,7 @@ export class Outbox {
   private timer: ReturnType<typeof setTimeout> | null = null;
   private disposed = false;
 
-  constructor(post: PostFn, options: OutboxOptions = {}) {
+  public constructor(post: PostFn, options: OutboxOptions = {}) {
     this.post = post;
     this.windowMs = options.windowMs ?? 10_000;
     this.maxPosts = options.maxPosts ?? 180;
@@ -46,26 +52,26 @@ export class Outbox {
     this.now = options.now ?? Date.now;
   }
 
-  send(panel: string, key: string, event: string, payload: unknown): void {
+  public send(panel: string, key: string, event: string, payload: unknown): void {
     if (this.disposed) {
       return;
     }
     // Why set on the existing key: Map keeps its first position, so a busy key cannot starve the others.
-    this.queue.set(key, { panel, event, payload });
+    this.queue.set(key, { event, panel, payload });
     this.arm(this.delayMs);
   }
 
   /** The payload waiting under `key`, so a caller can merge into it. */
-  queued(key: string): unknown {
+  public queued(key: string): unknown {
     return this.queue.get(key)?.payload;
   }
 
   /** Forgets what waits under `key`, so it is never sent. */
-  drop(key: string): void {
+  public drop(key: string): void {
     this.queue.delete(key);
   }
 
-  dispose(): void {
+  public dispose(): void {
     this.disposed = true;
     if (this.timer) {
       clearTimeout(this.timer);
@@ -140,8 +146,8 @@ export class Outbox {
       diagnostics: [],
       truncated: earlier + original.diagnostics.length,
     });
-    let bytes = shell.bytes;
-    let objects = shell.objects;
+    let { bytes } = shell;
+    let { objects } = shell;
     const kept: typeof ranked = [];
     for (const entry of ranked) {
       const size = orcaSize(entry.diagnostic);
@@ -163,3 +169,6 @@ export class Outbox {
     };
   }
 }
+
+export { Outbox };
+export type { OutboxOptions };

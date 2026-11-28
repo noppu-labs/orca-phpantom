@@ -3,7 +3,7 @@ import { assert, mockEditorHost, test } from 'orca/testing';
 import { frameHost } from '../../editor/src/frame-host.ts';
 import { bindDocument, type TextView } from '../../editor/src/sync.ts';
 
-function view(): TextView & { type(text: string): void } {
+function view(): TextView & { type: (text: string) => void } {
   let value = '';
   const listeners = new Set<() => void>();
   return {

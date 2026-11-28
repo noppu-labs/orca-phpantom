@@ -42,7 +42,7 @@ const timed = (base: string, outside: string, mine: string) => {
 test('keeps everything when the file is converted to CRLF while a line is edited', () => {
   const base = big((i) => `line ${i} ${'x'.repeat(20)}\n`);
   const mine = base.replace('line 10 ', 'line ten ');
-  const outside = base.replace(/\n/g, '\r\n');
+  const outside = base.replaceAll('\n', '\r\n');
   const merged = timed(base, outside, mine);
   assert.ok(merged.conflicts > 0);
   assert.ok(
@@ -52,7 +52,7 @@ test('keeps everything when the file is converted to CRLF while a line is edited
 test('keeps everything when every line is re-indented while a line is edited', () => {
   const base = big((i) => `line ${i} ${'x'.repeat(20)}\n`);
   const mine = base.replace('line 10 ', 'line ten ');
-  const outside = base.replace(/^/gm, '    ');
+  const outside = base.replaceAll(/^/gm, '    ');
   const merged = timed(base, outside, mine);
   assert.ok(merged.conflicts > 0);
   assert.ok(merged.text.includes('line ten ') && merged.text.includes('    line 29000 '));
@@ -61,7 +61,7 @@ test('keeps everything in a file of mostly repeated lines', () => {
   const base = big(() => '    $x = 1;                      \n');
   const mine = base.replace('$x = 1;', '$x = mine;');
   const at = base.lastIndexOf('$x = 1;');
-  const outside = base.slice(0, at) + '$x = outside;' + base.slice(at + 7);
+  const outside = `${base.slice(0, at)}$x = outside;${base.slice(at + 7)}`;
   const merged = timed(base, outside, mine);
   assert.ok(merged.text.includes('$x = mine;') && merged.text.includes('$x = outside;'));
 });

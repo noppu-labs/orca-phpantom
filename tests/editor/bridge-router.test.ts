@@ -4,8 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-// The bridge against the real router (and the fake language server), not against a scripted host: the
-// two halves of the protocol have to agree on chunks, versions, lengths, resyncs and sessions.
+// The bridge against the real router (and the fake language server), not against a scripted host: the two halves of the protocol have to agree on chunks, versions, lengths, resyncs and sessions.
 import { afterEach, assert, test } from 'orca/testing';
 
 import { LspBridge, type BridgeHost } from '../../editor/src/bridge.ts';
@@ -105,27 +104,36 @@ function harness(options: { leaseMs?: number; sweepMs?: number } = {}) {
           action: 'plugin.request',
           params: { name, input },
         });
-        if (size.bytes > 64 * 1024 || size.objects > ORCA_MAX_OBJECTS)
+        if (size.bytes > 64 * 1024 || size.objects > ORCA_MAX_OBJECTS) {
           oversized.push(`${name}: ${JSON.stringify(size)}`);
+        }
         const current = router;
         const typed = input as any;
         switch (name) {
-          case 'phpantom.open':
+          case 'phpantom.open': {
             return current.open(typed, { panel });
-          case 'phpantom.change':
+          }
+          case 'phpantom.change': {
             return current.change(typed);
-          case 'phpantom.request':
+          }
+          case 'phpantom.request': {
             return current.request(typed, new AbortController().signal);
-          case 'phpantom.close':
+          }
+          case 'phpantom.close': {
             return current.close(typed);
-          case 'phpantom.navigate':
+          }
+          case 'phpantom.navigate': {
             return current.navigate(typed);
-          case 'phpantom.peek':
+          }
+          case 'phpantom.peek': {
             return current.peek(typed);
-          case 'phpantom.ping':
+          }
+          case 'phpantom.ping': {
             return current.ping(typed);
-          default:
+          }
+          default: {
             throw new Error(`unknown request ${String(name)}`);
+          }
         }
       },
       on(event, handler) {
@@ -176,7 +184,7 @@ test('integration: a paste over 64 KiB reaches PHPantom split into groups, and a
   ]);
   await until(async () => (await world.holds()) === doc.text, 'PHPantom to hold the pasted text');
   // A whole-text replace goes as a resync; typing after it goes on as changes.
-  doc.replaceAll(SAVED + '// replaced\n');
+  doc.replaceAll(`${SAVED}// replaced\n`);
   doc.edit(0, 0, '// top\n');
   await until(async () => (await world.holds()) === doc.text, 'PHPantom to hold the resynced text');
   assert.equal(
@@ -243,14 +251,14 @@ test('integration: three frames of one tab, two of them dead, keep PHPantom on t
 
   // The first dead frame's lease ends while the second still holds the file.
   await until(
-    () => /2 open document\(s\)/.test(world.router.describe()),
+    () => world.router.describe().includes('2 open document(s)'),
     'the first frame to be released'
   );
   assert.equal(await world.holds(), d3.text);
   // Whatever PHPantom holds, the live frame's question is asked of its own text.
   assert.equal(await b3.ask('fake/text', {}), d3.text);
   await until(
-    () => /1 open document\(s\)/.test(world.router.describe()),
+    () => world.router.describe().includes('1 open document(s)'),
     'the second frame to be released'
   );
   assert.equal(await world.holds(), d3.text);

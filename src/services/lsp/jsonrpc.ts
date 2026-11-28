@@ -2,30 +2,33 @@
 // A minimal JSON-RPC 2.0 connection over the framing every language server uses on stdio:
 // `Content-Length: n`, a blank line, then n bytes of JSON.
 
-export type RpcHandlers = {
+interface RpcHandlers {
   /** A request the server makes of us (configuration, registering capabilities ...); its result is the answer. */
-  onRequest(method: string, params: unknown): Promise<unknown> | unknown;
-  onNotification(method: string, params: unknown): void;
+  onRequest: (method: string, params: unknown) => Promise<unknown> | unknown;
+  onNotification: (method: string, params: unknown) => void;
   /** A handler threw on a message; the connection carries on with the next one. */
-  onError?(message: string): void;
-};
+  onError?: (message: string) => void;
+}
 
-type Pending = { resolve(value: unknown): void; reject(error: Error): void };
+interface Pending {
+  resolve: (value: unknown) => void;
+  reject: (error: Error) => void;
+}
 
 const HEADER_END = Buffer.from('\r\n\r\n');
 const LENGTH_HEADER = /content-length:\s*(\d+)/i;
 
 class RpcError extends Error {
-  readonly code: number;
+  public readonly code: number;
 
-  constructor(code: number, message: string) {
+  public constructor(code: number, message: string) {
     super(message);
     this.name = 'RpcError';
     this.code = code;
   }
 }
 
-export class RpcConnection {
+class RpcConnection {
   private buffer: Buffer = Buffer.alloc(0);
   private nextId = 1;
   private readonly pending = new Map<number, Pending>();
@@ -33,13 +36,13 @@ export class RpcConnection {
   private readonly write: (frame: string) => void;
   private readonly handlers: RpcHandlers;
 
-  constructor(write: (frame: string) => void, handlers: RpcHandlers) {
+  public constructor(write: (frame: string) => void, handlers: RpcHandlers) {
     this.write = write;
     this.handlers = handlers;
   }
 
   /** Feed bytes as they arrive from the server's stdout; whole messages are dispatched. */
-  feed(chunk: Buffer): void {
+  public feed(chunk: Buffer): void {
     this.buffer = Buffer.concat([this.buffer, chunk]);
     for (;;) {
       const headerEnd = this.buffer.indexOf(HEADER_END);
@@ -67,12 +70,12 @@ export class RpcConnection {
    * On abort the server is told to stop (`$/cancelRequest`), the promise rejects with `cancelled`, and
    * whatever answer still arrives for that id is ignored.
    */
-  request(method: string, params: unknown, signal?: AbortSignal): Promise<unknown> {
+  public async request(method: string, params: unknown, signal?: AbortSignal): Promise<unknown> {
     if (this.closed) {
-      return Promise.reject(new Error('the language server is not running'));
+      throw new Error('the language server is not running');
     }
     if (signal?.aborted) {
-      return Promise.reject(new Error('cancelled'));
+      throw new Error('cancelled');
     }
     const id = this.nextId++;
     return new Promise((resolve, reject) => {
@@ -83,28 +86,29 @@ export class RpcConnection {
         }
       };
       this.pending.set(id, {
-        resolve: (value) => {
-          signal?.removeEventListener('abort', onAbort);
-          resolve(value);
-        },
         reject: (error) => {
           signal?.removeEventListener('abort', onAbort);
           reject(error);
         },
+        resolve: (value) => {
+          signal?.removeEventListener('abort', onAbort);
+          resolve(value);
+        },
       });
       signal?.addEventListener('abort', onAbort, { once: true });
+      // oxlint-disable-next-line eslint/sort-keys -- keeps the conventional envelope order (jsonrpc, id first) on the wire, pinned by jsonrpc.test.ts
       this.send({ jsonrpc: '2.0', id, method, params });
     });
   }
 
-  notify(method: string, params: unknown): void {
+  public notify(method: string, params: unknown): void {
     if (!this.closed) {
       this.send({ jsonrpc: '2.0', method, params });
     }
   }
 
   /** The server went away: everything still waiting fails instead of hanging. */
-  close(reason = 'the language server stopped'): void {
+  public close(reason = 'the language server stopped'): void {
     this.closed = true;
     for (const waiting of this.pending.values()) {
       waiting.reject(new Error(reason));
@@ -155,13 +159,18 @@ export class RpcConnection {
   private async answer(id: number | string, method: string, params: unknown): Promise<void> {
     try {
       const result = await this.handlers.onRequest(method, params);
+      // oxlint-disable-next-line eslint/sort-keys -- keeps the conventional envelope order (jsonrpc, id first) on the wire, pinned by jsonrpc.test.ts
       this.send({ jsonrpc: '2.0', id, result: result ?? null });
     } catch (error) {
+      // oxlint-disable-next-line eslint/sort-keys -- keeps the conventional envelope order (jsonrpc, id first) on the wire, pinned by jsonrpc.test.ts
       this.send({
         jsonrpc: '2.0',
         id,
-        error: { code: -32603, message: error instanceof Error ? error.message : String(error) },
+        error: { code: -32_603, message: error instanceof Error ? error.message : String(error) },
       });
     }
   }
 }
+
+export { RpcConnection };
+export type { RpcHandlers };

@@ -39,7 +39,7 @@ test('split changes rebuild the same text', () => {
 });
 
 test('split full-text and lone-CR changes rebuild the same text', () => {
-  for (const big of ['line\r'.repeat(30000) + 'é', 'a\r\n'.repeat(30000)]) {
+  for (const big of [`${'line\r'.repeat(30_000)}é`, 'a\r\n'.repeat(30_000)]) {
     for (const change of [
       { text: big },
       { range: { start: { line: 1, character: 0 }, end: { line: 1, character: 1 } }, text: big },
@@ -88,8 +88,9 @@ test('groups keep order and respect the budget', () => {
 });
 
 test('never splits a surrogate pair', () => {
-  for (const piece of chunkText('😀'.repeat(40_000), 1024))
+  for (const piece of chunkText('😀'.repeat(40_000), 1024)) {
     assert.ok(!/^[\uDC00-\uDFFF]|[\uD800-\uDBFF]$/.test(piece));
+  }
 });
 
 test('chunkText pieces fit the budget and join back', () => {
@@ -101,7 +102,7 @@ test('chunkText pieces fit the budget and join back', () => {
 });
 
 test('an insertion after a lone CR whose text starts with LF rebuilds exactly', () => {
-  const change = ins(1, 0, '\n' + 'x\n'.repeat(3000));
+  const change = ins(1, 0, `\n${'x\n'.repeat(3000)}`);
   const expected = new DocumentMirror('a\rb\rc');
   expected.apply([change]);
   const actual = new DocumentMirror('a\rb\rc');
@@ -128,8 +129,8 @@ test('a cut back from an LF never lands inside a surrogate pair', () => {
 });
 
 test('random mixed texts split within budget, without lone surrogates, and rejoin', () => {
-  let seed = 12345;
-  const rnd = (n: number) => ((seed = (seed * 1103515245 + 12345) & 0x7fffffff), seed % n);
+  let seed = 12_345;
+  const rnd = (n: number) => ((seed = (seed * 1_103_515_245 + 12_345) & 0x7f_ff_ff_ff), seed % n);
   const atoms = ['\r\n', '\n', '\r', '😀', 'é', '"', '\\', 'a', '€', '\t'];
   for (let n = 0; n < 300; n++) {
     let text = '';

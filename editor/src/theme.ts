@@ -1,12 +1,11 @@
-// The editor's two themes: Monaco's stock dark and light token colours, a rule for every semantic token
-// PHPantom sends, and editor chrome in Orca's colours. Monaco comes in as a parameter, so Node can test it.
+// The editor's two themes: Monaco's stock dark and light token colours, a rule for every semantic token PHPantom sends, and editor chrome in Orca's colours. Monaco comes in as a parameter, so Node can test it.
 import type { HostResult } from 'orca/host';
 
 /** What `editor.readTypography` answers and `editor.typography.changed` carries. */
-export type EditorTypography = HostResult<'editor.readTypography'>;
+type EditorTypography = HostResult<'editor.readTypography'>;
 
 /** PHPantom's semantic token legend, in its order. */
-export const SEMANTIC_TYPES: readonly string[] = [
+const SEMANTIC_TYPES: readonly string[] = [
   'namespace',
   'class',
   'interface',
@@ -23,7 +22,7 @@ export const SEMANTIC_TYPES: readonly string[] = [
   'keyword',
   'comment',
 ];
-export const SEMANTIC_MODIFIERS: readonly string[] = [
+const SEMANTIC_MODIFIERS: readonly string[] = [
   'declaration',
   'static',
   'readonly',
@@ -33,55 +32,59 @@ export const SEMANTIC_MODIFIERS: readonly string[] = [
   'defaultLibrary',
 ];
 
-export const THEME_NAME = { dark: 'phpantom-dark', light: 'phpantom-light' } as const;
+const THEME_NAME = { dark: 'phpantom-dark', light: 'phpantom-light' } as const;
 
 type Base = 'variable' | 'type' | 'keyword' | 'comment' | 'annotation';
 
-// Monaco's own `vs-dark` and `vs` rules (editor/standalone/common/themes.js). Neither has a function
-// colour, so functions and methods keep the editor's foreground, as they do without semantic tokens.
+// Monaco's own `vs-dark` and `vs` rules (editor/standalone/common/themes.js).
+// Neither has a function colour, so functions and methods keep the editor's foreground, as they do without semantic tokens.
 const BASE_COLOURS: Record<'dark' | 'light', Record<Base, string>> = {
   dark: {
-    variable: '74B0DF',
-    type: '3DC9B0',
-    keyword: '569CD6',
-    comment: '608B4E',
     annotation: 'cc6666',
+    comment: '608B4E',
+    keyword: '569CD6',
+    type: '3DC9B0',
+    variable: '74B0DF',
   },
   light: {
-    variable: '001188',
-    type: '008080',
-    keyword: '0000FF',
-    comment: '008000',
     annotation: '808080',
+    comment: '008000',
+    keyword: '0000FF',
+    type: '008080',
+    variable: '001188',
   },
 };
 
 const NEAREST: Record<string, Base | null> = {
-  namespace: 'type',
   class: 'type',
-  interface: 'type',
+  comment: 'comment',
+  decorator: 'annotation',
   enum: 'type',
-  type: 'type',
-  typeParameter: 'type',
-  parameter: 'variable',
-  variable: 'variable',
-  property: 'variable',
   enumMember: 'variable',
   function: null,
-  method: null,
-  decorator: 'annotation',
+  interface: 'type',
   keyword: 'keyword',
-  comment: 'comment',
+  method: null,
+  namespace: 'type',
+  parameter: 'variable',
+  property: 'variable',
+  type: 'type',
+  typeParameter: 'type',
+  variable: 'variable',
 };
 
-export type ThemeRule = { token: string; foreground?: string; fontStyle?: string };
+interface ThemeRule {
+  token: string;
+  foreground?: string;
+  fontStyle?: string;
+}
 
 /**
  * Monaco styles a semantic token by the rule matching `type.mod1.mod2…` (modifiers in legend order)
  * or its longest dot-prefix, with no wildcards. So every type gets a rule for each non-empty subset of
  * the modifiers: static ones are italic and deprecated ones struck through, whatever else they carry.
  */
-export function themeRules(dark: boolean): ThemeRule[] {
+function themeRules(dark: boolean): ThemeRule[] {
   const colours = BASE_COLOURS[dark ? 'dark' : 'light'];
   const rules: ThemeRule[] = [];
   for (const type of SEMANTIC_TYPES) {
@@ -125,7 +128,7 @@ const FRAME_COLOURS: [string, string[]][] = [
 ];
 
 /** Editor chrome from Orca's frame variables (already `#rrggbb`); a missing one keeps the base colour. */
-export function themeColors(vars: Record<string, string>): Record<string, string> {
+function themeColors(vars: Record<string, string>): Record<string, string> {
   const colors: Record<string, string> = {};
   for (const [variable, keys] of FRAME_COLOURS) {
     const value = vars[variable];
@@ -137,15 +140,23 @@ export function themeColors(vars: Record<string, string>): Record<string, string
 }
 
 /** Orca's file editor typography as Monaco options. */
-export function typographyOptions(t: EditorTypography) {
+function typographyOptions(t: EditorTypography): {
+  fontFamily: string;
+  fontSize: number;
+  fontWeight: string;
+  lineHeight: number;
+  fontLigatures: boolean;
+  wordWrap: 'on' | 'off';
+  minimap: { enabled: boolean };
+} {
   return {
     fontFamily: t.cssFontFamily,
+    fontLigatures: t.fontLigatures,
     fontSize: t.fontSize,
     fontWeight: t.fontWeight,
     lineHeight: t.lineHeight,
-    fontLigatures: t.fontLigatures,
-    wordWrap: t.wordWrap,
     minimap: { enabled: t.minimap },
+    wordWrap: t.wordWrap,
   };
 }
 
@@ -153,7 +164,7 @@ export function typographyOptions(t: EditorTypography) {
  * Reads Orca's frame variables as `#rrggbb`, whatever CSS colour syntax they use, by painting each on
  * a 1×1 canvas. A translucent colour is painted over the background first, as the page shows it.
  */
-export function readOrcaVars(): Record<string, string> {
+function readOrcaVars(): Record<string, string> {
   const style = getComputedStyle(document.documentElement);
   const canvas = document.createElement('canvas');
   canvas.width = 1;
@@ -185,9 +196,9 @@ export function readOrcaVars(): Record<string, string> {
 }
 
 /** The structural slice of Monaco this file needs. */
-type ThemeHost = {
+interface ThemeHost {
   editor: {
-    defineTheme(
+    defineTheme: (
       name: string,
       data: {
         base: 'vs' | 'vs-dark';
@@ -195,23 +206,35 @@ type ThemeHost = {
         rules: ThemeRule[];
         colors: Record<string, string>;
       }
-    ): void;
+    ) => void;
   };
-};
+}
 
 /** Defines both themes from Orca's current variables; run again on each `theme` event. */
-export function defineThemes(monaco: ThemeHost): void {
+function defineThemes(monaco: ThemeHost): void {
   const colors = themeColors(readOrcaVars());
   monaco.editor.defineTheme(THEME_NAME.dark, {
     base: 'vs-dark',
+    colors,
     inherit: true,
     rules: themeRules(true),
-    colors,
   });
   monaco.editor.defineTheme(THEME_NAME.light, {
     base: 'vs',
+    colors,
     inherit: true,
     rules: themeRules(false),
-    colors,
   });
 }
+
+export {
+  SEMANTIC_TYPES,
+  SEMANTIC_MODIFIERS,
+  THEME_NAME,
+  themeRules,
+  themeColors,
+  typographyOptions,
+  readOrcaVars,
+  defineThemes,
+};
+export type { EditorTypography, ThemeRule };

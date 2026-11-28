@@ -1,10 +1,10 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { posix, win32 } from 'node:path';
 
-export const FULL_COLOUR_CONFIG = '[semantic-tokens]\nmode = "full"\n';
+const FULL_COLOUR_CONFIG = '[semantic-tokens]\nmode = "full"\n';
 
 /** Where PHPantom reads its global `.phpantom.toml`, by the same rules as its `etcetera` base strategy. */
-export function globalConfigPath(env: NodeJS.ProcessEnv, platform: string, home: string): string {
+function globalConfigPath(env: NodeJS.ProcessEnv, platform: string, home: string): string {
   if (platform === 'win32') {
     return win32.join(
       env.APPDATA || win32.join(home, 'AppData', 'Roaming'),
@@ -21,7 +21,7 @@ export function globalConfigPath(env: NodeJS.ProcessEnv, platform: string, home:
 }
 
 /** Writes the full-colour global config unless one is already there. Never throws. */
-export function writeFullColourDefault(
+function writeFullColourDefault(
   env: NodeJS.ProcessEnv,
   platform: string,
   home: string,
@@ -44,3 +44,5 @@ export function writeFullColourDefault(
     );
   }
 }
+
+export { FULL_COLOUR_CONFIG, globalConfigPath, writeFullColourDefault };

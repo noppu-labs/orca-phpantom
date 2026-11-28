@@ -1,8 +1,6 @@
 // Adapted from actus7/orca-autocomplete editor/src/lsp.ts @ da5a680 (MIT). See THIRD_PARTY_NOTICES.md.
-// Monaco's language features answered by PHPantom through the bridge: diagnostics, completion, hover,
-// signature help, semantic colouring, inlay hints and the outline; then going to definitions and
-// references, formatting, rename and code actions. Only what the server says it supports is registered,
-// for the model's own language, and only this editor's model is answered.
+// Monaco's language features answered by PHPantom through the bridge: diagnostics, completion, hover, signature help, semantic colouring, inlay hints and the outline; then going to definitions and references, formatting, rename and code actions.
+// Only what the server says it supports is registered, for the model's own language, and only this editor's model is answered.
 import type { AskOptions, LspBridge, RequestKind } from './bridge.ts';
 import type { EditorContext } from './editor.ts';
 import {
@@ -27,6 +25,7 @@ import {
   type LspCodeAction,
   type LspDiagnostic,
   type LspInlayHint,
+  type LspPosition,
   type LspTextEdit,
   type LspWorkspaceEdit,
   type MonacoRange,
@@ -44,8 +43,10 @@ import {
 } from './navigation.ts';
 import { clearNote, showNote } from './notes.ts';
 
-type Disposable = { dispose(): void };
-type Capabilities = Record<string, any>; // the server's own JSON
+interface Disposable {
+  dispose: () => void;
+}
+type Capabilities = Record<string, any>; // The server's own JSON
 type Model = monaco.editor.ITextModel;
 
 const MARKER_OWNER = 'phpantom';
@@ -54,7 +55,7 @@ const SERVER_NAME = 'PHPantom';
 const diagnosticsByModel = new WeakMap<Model, LspDiagnostic[]>();
 
 /** The diagnostics PHPantom last published for `model`, as it sent them; code actions send them back. */
-export function diagnosticsOf(model: Model): LspDiagnostic[] {
+function diagnosticsOf(model: Model): LspDiagnostic[] {
   return diagnosticsByModel.get(model) ?? [];
 }
 
@@ -62,13 +63,15 @@ export function diagnosticsOf(model: Model): LspDiagnostic[] {
  * Keeps PHPantom's diagnostics for this editor and shows them as markers. Call it before attaching:
  * PHPantom publishes while the open is still answering, before any provider is registered.
  */
-export function showDiagnostics(ctx: EditorContext, bridge: LspBridge): Disposable {
+function showDiagnostics(ctx: EditorContext, bridge: LspBridge): Disposable {
   const set = (diagnostics: LspDiagnostic[]): void => {
     diagnosticsByModel.set(ctx.model, diagnostics);
     ctx.monaco.editor.setModelMarkers(ctx.model, MARKER_OWNER, diagnostics.map(toMarker));
   };
   return disposeAll([
-    bridge.onDiagnostics((diagnostics) => set(diagnostics as LspDiagnostic[])),
+    bridge.onDiagnostics((diagnostics) => {
+      set(diagnostics as LspDiagnostic[]);
+    }),
     bridge.onStatus((status) => {
       if (status.state !== 'ready') set([]);
     }),
@@ -82,7 +85,9 @@ async function withSignal<T>(
 ): Promise<T> {
   const controller = new AbortController();
   if (token.isCancellationRequested) controller.abort();
-  const listener = token.onCancellationRequested(() => controller.abort());
+  const listener = token.onCancellationRequested(() => {
+    controller.abort();
+  });
   try {
     return await run(controller.signal);
   } finally {
@@ -105,7 +110,7 @@ function disposeAll(list: Disposable[]): Disposable {
   };
 }
 
-export function registerReadingProviders(
+function registerReadingProviders(
   ctx: EditorContext,
   bridge: LspBridge,
   capabilities: Record<string, unknown>
@@ -115,15 +120,17 @@ export function registerReadingProviders(
   const language = model.getLanguageId();
   const registered: Disposable[] = [];
   const ours = (candidate: Model): boolean => candidate === model;
-  const ask = (
+  const ask = async (
     method: string,
     params: Record<string, unknown>,
     token: monaco.CancellationToken,
     kind: RequestKind,
     silent = false
   ): Promise<any> =>
-    withSignal(token, (signal) => bridge.ask(method, params, signal, { kind, silent }));
-  const atCursor = (position: monaco.Position) => ({ position: toLspPosition(position) });
+    withSignal(token, async (signal) => bridge.ask(method, params, signal, { kind, silent }));
+  const atCursor = (position: monaco.Position): { position: LspPosition } => ({
+    position: toLspPosition(position),
+  });
   const edits = (list: LspTextEdit[]): monaco.languages.TextEdit[] => list.map(toMonacoEdit);
 
   // --- completion ---
@@ -132,7 +139,6 @@ export function registerReadingProviders(
     const serverItems = new WeakMap<object, Record<string, unknown>>();
     registered.push(
       monaco.languages.registerCompletionItemProvider(language, {
-        triggerCharacters: caps.completionProvider.triggerCharacters,
         async provideCompletionItems(m, position, context, token) {
           if (!ours(m)) return { suggestions: [] };
           const result = await ask(
@@ -167,25 +173,25 @@ export function registerReadingProviders(
                   : { insert: fromLspRange(edit.insert), replace: fromLspRange(edit.replace) }
                 : fallback;
               const suggestion: monaco.languages.CompletionItem = {
-                label: toCompletionLabel(item),
-                kind: monaco.languages.CompletionItemKind[
-                  completionKindName(item.kind) as keyof typeof monaco.languages.CompletionItemKind
-                ],
+                additionalTextEdits: item.additionalTextEdits
+                  ? edits(item.additionalTextEdits)
+                  : undefined,
+                commitCharacters: item.commitCharacters,
                 detail: item.detail,
                 documentation: markdownValue(item.documentation),
+                filterText: item.filterText,
                 insertText: edit?.newText ?? item.insertText ?? item.label,
                 insertTextRules:
                   item.insertTextFormat === 2
                     ? monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet
                     : undefined,
+                kind: monaco.languages.CompletionItemKind[
+                  completionKindName(item.kind) as keyof typeof monaco.languages.CompletionItemKind
+                ],
+                label: toCompletionLabel(item),
+                preselect: item.preselect,
                 range,
                 sortText: item.sortText,
-                filterText: item.filterText,
-                preselect: item.preselect,
-                commitCharacters: item.commitCharacters,
-                additionalTextEdits: item.additionalTextEdits
-                  ? edits(item.additionalTextEdits)
-                  : undefined,
                 tags:
                   item.deprecated || item.tags?.includes(1)
                     ? [monaco.languages.CompletionItemTag.Deprecated]
@@ -201,14 +207,15 @@ export function registerReadingProviders(
           ? async (suggestion, token) => {
               const raw = serverItems.get(suggestion);
               if (!raw) return suggestion;
-              // Why user, not passive: Monaco also resolves here when the item is accepted, and a dropped
-              // answer would lose the import. Silent: it resolves every item that gets focus, too.
+              // Why user, not passive: Monaco also resolves here when the item is accepted, and a dropped answer would lose the import.
+              // Silent: it resolves every item that gets focus, too.
               const resolved = await ask('completionItem/resolve', raw, token, 'user', true);
               // Monaco resolves an item once; one with no answer must say so to be resolved again later.
               if (resolved === null) throw canceled();
               return { ...suggestion, ...completionDetails(resolved) };
             }
           : undefined,
+        triggerCharacters: caps.completionProvider.triggerCharacters,
       })
     );
   }
@@ -221,7 +228,7 @@ export function registerReadingProviders(
           if (!ours(m)) return null;
           const result = await ask('textDocument/hover', atCursor(position), token, 'passive');
           const contents = toMarkdown(result?.contents).map((value) => ({ value }));
-          return contents.length
+          return contents.length > 0
             ? { contents, ...(result.range ? { range: fromLspRange(result.range) } : {}) }
             : null;
         },
@@ -231,8 +238,6 @@ export function registerReadingProviders(
   if (caps.signatureHelpProvider) {
     registered.push(
       monaco.languages.registerSignatureHelpProvider(language, {
-        signatureHelpTriggerCharacters: caps.signatureHelpProvider.triggerCharacters,
-        signatureHelpRetriggerCharacters: caps.signatureHelpProvider.retriggerCharacters,
         async provideSignatureHelp(m, position, token, context) {
           if (!ours(m)) return null;
           const result = await ask(
@@ -241,8 +246,8 @@ export function registerReadingProviders(
               ...atCursor(position),
               // Both number these trigger kinds the same way: 1 invoked, 2 character, 3 content change.
               context: {
-                triggerKind: context.triggerKind,
                 isRetrigger: context.isRetrigger,
+                triggerKind: context.triggerKind,
                 ...(context.triggerCharacter ? { triggerCharacter: context.triggerCharacter } : {}),
               },
             },
@@ -252,25 +257,27 @@ export function registerReadingProviders(
           );
           if (!result?.signatures?.length) return null;
           return {
+            dispose() {},
             value: {
-              activeSignature: result.activeSignature ?? 0,
               activeParameter: result.activeParameter ?? 0,
+              activeSignature: result.activeSignature ?? 0,
               signatures: result.signatures.map((signature: any) => ({
-                label: signature.label,
                 documentation: markdownValue(signature.documentation),
+                label: signature.label,
                 // A label is either the text or [start, end] offsets into the signature's label, in both.
                 parameters: (signature.parameters ?? []).map((parameter: any) => ({
-                  label: parameter.label,
                   documentation: markdownValue(parameter.documentation),
+                  label: parameter.label,
                 })),
                 ...(typeof signature.activeParameter === 'number'
                   ? { activeParameter: signature.activeParameter }
                   : {}),
               })),
             },
-            dispose() {},
           };
         },
+        signatureHelpRetriggerCharacters: caps.signatureHelpProvider.retriggerCharacters,
+        signatureHelpTriggerCharacters: caps.signatureHelpProvider.triggerCharacters,
       })
     );
   }
@@ -285,15 +292,15 @@ export function registerReadingProviders(
         if (kinds.includes('semanticTokens')) changed.fire();
       }),
       monaco.languages.registerDocumentSemanticTokensProvider(language, {
-        onDidChange: changed.event,
         getLegend: () => semantic.legend,
+        onDidChange: changed.event,
         async provideDocumentSemanticTokens(m, _lastResultId, token) {
           if (!ours(m)) return null;
           const tokens = toSemanticTokens(
             await ask('textDocument/semanticTokens/full', {}, token, 'background')
           );
-          // Why throw: Monaco wipes the colouring on an empty answer but keeps it on an error, and a
-          // message with "busy" in it is not reported. No answer means not now, not "no tokens".
+          // Why throw: Monaco wipes the colouring on an empty answer but keeps it on an error, and a message with "busy" in it is not reported.
+          // No answer means not now, not "no tokens".
           if (!tokens) throw new Error('PHPantom is busy');
           return tokens;
         },
@@ -322,7 +329,7 @@ export function registerReadingProviders(
             'background'
           );
           if (!Array.isArray(result)) return null;
-          return { hints: (result as LspInlayHint[]).map(toInlayHint), dispose() {} };
+          return { dispose() {}, hints: (result as LspInlayHint[]).map(toInlayHint) };
         },
       })
     );
@@ -352,13 +359,13 @@ const FORMAT_TIMEOUT_MS = 60_000;
 const EDIT_NOTE = 'phpantom-edit';
 const OTHER_FILES_FIX = "This fix also changes other files, which isn't supported yet.";
 const MOVED_FIX = 'The file changed after this fix was offered. Ask for it again.';
-export const renameReachesOtherFiles = (count: number): string =>
+const renameReachesOtherFiles = (count: number): string =>
   `Renaming here would also change ${count} other ${count === 1 ? 'file' : 'files'}. Cross-file rename isn't supported yet.`;
 
 /** Blade or PHP by the file name, as PHPantom tells them apart. */
 const languageOfUri = (uri: string): string => (/\.blade\.php$/i.test(uri) ? 'blade' : 'php');
 
-export function registerEditingProviders(
+function registerEditingProviders(
   ctx: EditorContext,
   bridge: LspBridge,
   capabilities: Record<string, unknown>
@@ -371,14 +378,18 @@ export function registerEditingProviders(
   const modelUri = model.uri.toString();
   // Read on each answer: a re-target to another worktree changes it, and providers are registered again then.
   const documentUri = (): string => (bridge.status?.state === 'ready' ? bridge.status.uri : '');
-  const ask = (
+  const ask = async (
     method: string,
     params: Record<string, unknown>,
     token: monaco.CancellationToken,
     options: AskOptions = {}
   ): Promise<any> =>
-    withSignal(token, (signal) => bridge.ask(method, params, signal, { kind: 'user', ...options }));
-  const atCursor = (position: monaco.Position) => ({ position: toLspPosition(position) });
+    withSignal(token, async (signal) =>
+      bridge.ask(method, params, signal, { kind: 'user', ...options })
+    );
+  const atCursor = (position: monaco.Position): { position: LspPosition } => ({
+    position: toLspPosition(position),
+  });
   const edits = (list: LspTextEdit[] | null | undefined): monaco.languages.TextEdit[] | null =>
     Array.isArray(list) ? list.map(toMonacoEdit) : null;
 
@@ -391,16 +402,14 @@ export function registerEditingProviders(
   });
   registered.push(
     peekModels,
-    // Peek models stand for files on disk that nothing here saves: an editor showing one (the peek's
-    // preview) is read-only, so nobody types into a copy that goes nowhere.
+    // Peek models stand for files on disk that nothing here saves: an editor showing one (the peek's preview) is read-only, so nobody types into a copy that goes nowhere.
     monaco.editor.onDidCreateEditor((created) => {
       if (created === ctx.editor) return;
       // Why not at once: the event fires inside the editor's constructor, before it has a model.
       created.onDidChangeModel(() => {
         const shown = created.getModel();
         const peek = Boolean(shown && peekModels.has(shown.uri.toString()));
-        // An embedded editor keeps what it is given over its parent's options: never make it writable
-        // when the editor it belongs to is read-only.
+        // An embedded editor keeps what it is given over its parent's options: never make it writable when the editor it belongs to is read-only.
         created.updateOptions({
           readOnly: peek || ctx.editor.getOption(monaco.editor.EditorOption.readOnly),
         });
@@ -416,14 +425,16 @@ export function registerEditingProviders(
     locations: { uri: string; range: MonacoRange }[],
     token: monaco.CancellationToken,
     keepUnread: boolean
-  ) => {
+  ): Promise<{ uri: string; range: MonacoRange }[]> => {
     const files = [...new Set(locations.map((location) => location.uri))].filter((uri) =>
       /^file:/i.test(uri)
     );
     peekModels.touch(files);
     const wanted = files.filter((uri) => !monaco.editor.getModel(monaco.Uri.parse(uri)));
     if (wanted.length === 0) return locations;
-    const answer = await withSignal(token, (signal) => bridge.peek(peekBatch(wanted), signal));
+    const answer = await withSignal(token, async (signal) =>
+      bridge.peek(peekBatch(wanted), signal)
+    );
     // No answer at all: keep every result, so going to one still works without its preview.
     if (!answer) return locations;
     peekModels.ensure(answer.files);
@@ -444,9 +455,9 @@ export function registerEditingProviders(
     token: monaco.CancellationToken,
     keepUnread: boolean,
     extra: Record<string, unknown> = {}
-  ) => {
+  ): Promise<monaco.languages.Location[] | null> => {
     if (!ours(m)) return null;
-    const answer = await withSignal(token, (signal) =>
+    const answer = await withSignal(token, async (signal) =>
       bridge.askDetailed(method, { ...atCursor(position), ...extra }, signal, { kind: 'user' })
     );
     const found = normalizeLocations(answer?.result);
@@ -462,15 +473,15 @@ export function registerEditingProviders(
       else clearNote(`${NAVIGATION_NOTE}-cut`);
     }
     return locations.map((location): monaco.languages.Location => ({
-      uri: location.uri === modelUri ? model.uri : monaco.Uri.parse(location.uri),
       range: location.range,
+      uri: location.uri === modelUri ? model.uri : monaco.Uri.parse(location.uri),
     }));
   };
 
   if (caps.definitionProvider) {
     registered.push(
       monaco.languages.registerDefinitionProvider(language, {
-        provideDefinition: (m, position, token) =>
+        provideDefinition: async (m, position, token) =>
           locate('textDocument/definition', m, position, token, true),
       })
     );
@@ -478,7 +489,7 @@ export function registerEditingProviders(
   if (caps.declarationProvider) {
     registered.push(
       monaco.languages.registerDeclarationProvider(language, {
-        provideDeclaration: (m, position, token) =>
+        provideDeclaration: async (m, position, token) =>
           locate('textDocument/declaration', m, position, token, true),
       })
     );
@@ -486,7 +497,7 @@ export function registerEditingProviders(
   if (caps.typeDefinitionProvider) {
     registered.push(
       monaco.languages.registerTypeDefinitionProvider(language, {
-        provideTypeDefinition: (m, position, token) =>
+        provideTypeDefinition: async (m, position, token) =>
           locate('textDocument/typeDefinition', m, position, token, true),
       })
     );
@@ -494,7 +505,7 @@ export function registerEditingProviders(
   if (caps.implementationProvider) {
     registered.push(
       monaco.languages.registerImplementationProvider(language, {
-        provideImplementation: (m, position, token) =>
+        provideImplementation: async (m, position, token) =>
           locate('textDocument/implementation', m, position, token, false),
       })
     );
@@ -502,7 +513,7 @@ export function registerEditingProviders(
   if (caps.referencesProvider) {
     registered.push(
       monaco.languages.registerReferenceProvider(language, {
-        provideReferences: (m, position, context, token) =>
+        provideReferences: async (m, position, context, token) =>
           locate('textDocument/references', m, position, token, false, {
             context: { includeDeclaration: context.includeDeclaration },
           }),
@@ -511,8 +522,10 @@ export function registerEditingProviders(
   }
 
   // --- formatting ---
-  const formatting = (options: monaco.languages.FormattingOptions) => ({
-    options: { tabSize: options.tabSize, insertSpaces: options.insertSpaces },
+  const formatting = (
+    options: monaco.languages.FormattingOptions
+  ): { options: { tabSize: number; insertSpaces: boolean } } => ({
+    options: { insertSpaces: options.insertSpaces, tabSize: options.tabSize },
   });
   if (caps.documentFormattingProvider) {
     registered.push(
@@ -554,31 +567,6 @@ export function registerEditingProviders(
       typeof caps.renameProvider === 'object' && Boolean(caps.renameProvider.prepareProvider);
     registered.push(
       monaco.languages.registerRenameProvider(language, {
-        resolveRenameLocation: prepares
-          ? async (m, position, token) => {
-              if (!ours(m)) return null;
-              const result = await ask('textDocument/prepareRename', atCursor(position), token);
-              if (token.isCancellationRequested) throw canceled();
-              // Why reject: with nothing returned Monaco would offer to rename the word under the cursor.
-              if (!result)
-                return {
-                  range: new monaco.Range(
-                    position.lineNumber,
-                    position.column,
-                    position.lineNumber,
-                    position.column
-                  ),
-                  text: '',
-                  rejectReason: "This can't be renamed.",
-                };
-              // The server either leaves the range to the client ...
-              if (result.defaultBehavior) return null;
-              // ... or sends a range, alone or with a placeholder. Why not show the placeholder: for a class
-              // PHPantom 1.1.0 sends the fully qualified name while the range and the new name are the short one.
-              const range = fromLspRange(result.range ?? result);
-              return { range, text: m.getValueInRange(range) };
-            }
-          : undefined,
         async provideRenameEdits(m, position, newName, token) {
           if (!ours(m)) return null;
           // The bridge drops an answer the text moved under; the stamp makes Monaco refuse it if it moves later.
@@ -600,14 +588,38 @@ export function registerEditingProviders(
             edits: split.own.map((textEdit) => ({ resource: model.uri, textEdit, versionId })),
           };
         },
+        resolveRenameLocation: prepares
+          ? async (m, position, token) => {
+              if (!ours(m)) return null;
+              const result = await ask('textDocument/prepareRename', atCursor(position), token);
+              if (token.isCancellationRequested) throw canceled();
+              // Why reject: with nothing returned Monaco would offer to rename the word under the cursor.
+              if (!result) {
+                return {
+                  range: new monaco.Range(
+                    position.lineNumber,
+                    position.column,
+                    position.lineNumber,
+                    position.column
+                  ),
+                  rejectReason: "This can't be renamed.",
+                  text: '',
+                };
+              }
+              // The server either leaves the range to the client ...
+              if (result.defaultBehavior) return null;
+              // ... or sends a range, alone or with a placeholder. Why not show the placeholder: for a class PHPantom 1.1.0 sends the fully qualified name while the range and the new name are the short one.
+              const range = fromLspRange(result.range ?? result);
+              return { range, text: m.getValueInRange(range) };
+            }
+          : undefined,
       })
     );
   }
 
   // --- code actions ---
   if (caps.codeActionProvider) {
-    // The server's own action for each one shown, and the model version it was computed against:
-    // resolving needs exactly what the server sent, and an edit applies only to that version's text.
+    // The server's own action for each one shown, and the model version it was computed against: resolving needs exactly what the server sent, and an edit applies only to that version's text.
     const serverActions = new WeakMap<object, { raw: LspCodeAction; versionId: number }>();
     const kinds =
       typeof caps.codeActionProvider === 'object'
@@ -634,7 +646,6 @@ export function registerEditingProviders(
             const result = await ask(
               'textDocument/codeAction',
               {
-                range: lspRange,
                 context: {
                   // As PHPantom sent them: a fix finds its diagnostic by what Monaco's markers drop.
                   diagnostics: diagnosticsTouching(diagnosticsOf(model), lspRange),
@@ -642,10 +653,10 @@ export function registerEditingProviders(
                   // Both number these the same way: 1 invoked, 2 automatic.
                   triggerKind: context.trigger,
                 },
+                range: lspRange,
               },
               token,
-              // The lightbulb asks on every cursor move; only an invoked one (1) is someone asking. Silent:
-              // hovering a diagnostic asks as invoked too.
+              // The lightbulb asks on every cursor move; only an invoked one (1) is someone asking. Silent: hovering a diagnostic asks as invoked too.
               context.trigger === 1 ? { kind: 'user', silent: true } : { kind: 'background' }
             );
             const actions: monaco.languages.CodeAction[] = [];
@@ -659,8 +670,7 @@ export function registerEditingProviders(
                 ...(converted.kind ? { kind: converted.kind } : {}),
                 ...(converted.isPreferred ? { isPreferred: true } : {}),
                 ...(converted.disabled ? { disabled: converted.disabled } : {}),
-                // Why not when it reaches other files: Monaco resolves an action that has no edit, and
-                // resolving is where that case says why nothing happens.
+                // Why not when it reaches other files: Monaco resolves an action that has no edit, and resolving is where that case says why nothing happens.
                 ...(converted.edit && converted.otherFiles === 0
                   ? { edit: toMonacoWorkspaceEdit(converted.edit) }
                   : {}),
@@ -675,19 +685,14 @@ export function registerEditingProviders(
             const offered = serverActions.get(action);
             if (!offered) return action;
             const { raw, versionId } = offered;
-            // The action's own ranges are against the text it was offered for; resolving it now would
-            // place its edit wrongly.
+            // The action's own ranges are against the text it was offered for; resolving it now would place its edit wrongly.
             if (model.getVersionId() !== versionId) {
               showNote('info', MOVED_FIX, EDIT_NOTE);
               return action;
             }
             const resolved = raw.edit
               ? raw
-              : ((await ask(
-                  'codeAction/resolve',
-                  raw as Record<string, unknown>,
-                  token
-                )) as LspCodeAction | null);
+              : ((await ask('codeAction/resolve', raw, token)) as LspCodeAction | null);
             if (!resolved) {
               if (token.isCancellationRequested) throw canceled();
               return action;
@@ -708,3 +713,11 @@ export function registerEditingProviders(
 
   return disposeAll(registered);
 }
+
+export {
+  diagnosticsOf,
+  showDiagnostics,
+  registerReadingProviders,
+  renameReachesOtherFiles,
+  registerEditingProviders,
+};

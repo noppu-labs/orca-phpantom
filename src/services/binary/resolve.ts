@@ -7,11 +7,11 @@ import { extractSingleFile } from './extract.ts';
 import { atLeast, findExecutable, readVersion, wellKnownDirs } from './find.ts';
 import { assetFor, downloadUrl, PHPANTOM_VERSION, type ReleaseAsset } from './release.ts';
 
-export type Resolution =
+type Resolution =
   | { ok: true; path: string; version: string; source: 'setting' | 'path' | 'cache' | 'download' }
   | { ok: false; message: string };
 
-export function cacheDir(env: NodeJS.ProcessEnv, platform: string, home: string): string {
+function cacheDir(env: NodeJS.ProcessEnv, platform: string, home: string): string {
   if (platform === 'win32') {
     return win32.join(
       env.LOCALAPPDATA ?? win32.join(home, 'AppData', 'Local'),
@@ -25,34 +25,34 @@ export function cacheDir(env: NodeJS.ProcessEnv, platform: string, home: string)
   return posix.join(env.XDG_CACHE_HOME || posix.join(home, '.cache'), 'noppu-labs.phpantom');
 }
 
-export type ResolveOptions = {
+interface ResolveOptions {
   settingPath: string;
   allowDownload: boolean;
   env: NodeJS.ProcessEnv;
   platform: string;
   arch: string;
   home: string;
-  onDownload?(): void;
-  log?(message: string): void;
+  onDownload?: () => void;
+  log?: (message: string) => void;
   fetchImpl?: typeof fetch;
   readVersionImpl?: typeof readVersion;
   /** Test seam: where the release assets come from. */
   assets?: (platform: string, arch: string) => ReleaseAsset | null;
-};
+}
 
 const inFlight = new Map<string, Promise<Resolution>>();
 
-export async function resolveBinary(options: ResolveOptions): Promise<Resolution> {
+async function resolveBinary(options: ResolveOptions): Promise<Resolution> {
   const read = options.readVersionImpl ?? readVersion;
   const flavour = options.platform === 'win32' ? win32 : posix;
 
   if (options.settingPath) {
     const version = existsSync(options.settingPath) ? await read(options.settingPath) : null;
     return version
-      ? { ok: true, path: options.settingPath, version, source: 'setting' }
+      ? { ok: true, path: options.settingPath, source: 'setting', version }
       : {
-          ok: false,
           message: `phpantomPath is set to ${options.settingPath}, which is not a working phpantom_lsp.`,
+          ok: false,
         };
   }
 
@@ -72,13 +72,13 @@ export async function resolveBinary(options: ResolveOptions): Promise<Resolution
     }
     const version = await read(candidate);
     if (version && atLeast(version, PHPANTOM_VERSION)) {
-      return { ok: true, path: candidate, version, source: 'path' };
+      return { ok: true, path: candidate, source: 'path', version };
     }
   }
 
   const asset = (options.assets ?? assetFor)(options.platform, options.arch);
   if (!asset) {
-    return { ok: false, message: `PHPantom has no build for ${options.platform}-${options.arch}.` };
+    return { message: `PHPantom has no build for ${options.platform}-${options.arch}.`, ok: false };
   }
   const directory = flavour.join(
     cacheDir(options.env, options.platform, options.home),
@@ -90,15 +90,15 @@ export async function resolveBinary(options: ResolveOptions): Promise<Resolution
   if (existsSync(target) && existsSync(marker)) {
     const version = await read(target);
     if (version) {
-      return { ok: true, path: target, version, source: 'cache' };
+      return { ok: true, path: target, source: 'cache', version };
     }
   }
 
   if (!options.allowDownload) {
     return {
-      ok: false,
       message:
         'PHPantom 1.1.0 or newer was not found. Install it (brew install phpantom-lsp) or turn on "Download PHPantom when missing".',
+      ok: false,
     };
   }
   let pending = inFlight.get(target);
@@ -131,15 +131,18 @@ async function download(
     writeFileSync(marker, PHPANTOM_VERSION);
     const version = await read(target);
     if (!version) {
-      return { ok: false, message: `The downloaded ${asset.member} did not run.` };
+      return { message: `The downloaded ${asset.member} did not run.`, ok: false };
     }
     // Why only here: a PHPantom the user installed may serve other editors, so its config stays theirs.
     writeFullColourDefault(options.env, options.platform, options.home, options.log ?? (() => {}));
-    return { ok: true, path: target, version, source: 'download' };
+    return { ok: true, path: target, source: 'download', version };
   } catch (error) {
     return {
-      ok: false,
       message: `Could not download PHPantom: ${error instanceof Error ? error.message : String(error)}`,
+      ok: false,
     };
   }
 }
+
+export { cacheDir, resolveBinary };
+export type { Resolution, ResolveOptions };

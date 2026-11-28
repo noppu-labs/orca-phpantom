@@ -1,10 +1,16 @@
 // The editor <-> worker contract, declared once. Types only: the editor imports this file as
 // `../../src/protocol.ts` and the worker reads the same declarations.
-export type LspPosition = { line: number; character: number };
-export type LspRange = { start: LspPosition; end: LspPosition };
-export type LspContentChange = { range: LspRange; text: string } | { text: string };
-export type Language = 'php' | 'blade';
-export type AttachStatus =
+interface LspPosition {
+  line: number;
+  character: number;
+}
+interface LspRange {
+  start: LspPosition;
+  end: LspPosition;
+}
+type LspContentChange = { range: LspRange; text: string } | { text: string };
+type Language = 'php' | 'blade';
+type AttachStatus =
   | {
       state: 'ready';
       session: string;
@@ -13,7 +19,7 @@ export type AttachStatus =
       approximate?: true;
       reveal?: LspRange;
     }
-  | { state: 'pending' } // more chunks expected
+  | { state: 'pending' } // More chunks expected
   | { state: 'single-file'; reason: 'no-file' | 'ambiguous' }
   | { state: 'remote'; host: string }
   | { state: 'error'; message: string };
@@ -75,3 +81,5 @@ declare module 'orca' {
     'phpantom.reveal': { docId: string; range: LspRange };
   }
 }
+
+export type { LspPosition, LspRange, LspContentChange, Language, AttachStatus };

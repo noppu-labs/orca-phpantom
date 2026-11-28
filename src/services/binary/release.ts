@@ -1,23 +1,23 @@
-export const PHPANTOM_VERSION = '1.1.0';
+const PHPANTOM_VERSION = '1.1.0';
 
-export type ReleaseAsset = {
+interface ReleaseAsset {
   asset: string;
   sha256: string;
   member: 'phpantom_lsp' | 'phpantom_lsp.exe';
   kind: 'tar.gz' | 'zip';
-};
+}
 
 const tar = (asset: string, sha256: string): ReleaseAsset => ({
   asset,
-  sha256,
-  member: 'phpantom_lsp',
   kind: 'tar.gz',
+  member: 'phpantom_lsp',
+  sha256,
 });
 const zip = (asset: string, sha256: string): ReleaseAsset => ({
   asset,
-  sha256,
-  member: 'phpantom_lsp.exe',
   kind: 'zip',
+  member: 'phpantom_lsp.exe',
+  sha256,
 });
 
 const ASSETS: Record<string, ReleaseAsset> = {
@@ -48,10 +48,13 @@ const ASSETS: Record<string, ReleaseAsset> = {
 };
 
 /** The pinned release asset for a `process.platform` and `process.arch`, or null when there is no build. */
-export function assetFor(platform: string, arch: string): ReleaseAsset | null {
-  return Object.hasOwn(ASSETS, `${platform}-${arch}`) ? ASSETS[`${platform}-${arch}`]! : null;
+function assetFor(platform: string, arch: string): ReleaseAsset | null {
+  return Object.hasOwn(ASSETS, `${platform}-${arch}`) ? ASSETS[`${platform}-${arch}`] : null;
 }
 
-export function downloadUrl(asset: ReleaseAsset): string {
+function downloadUrl(asset: ReleaseAsset): string {
   return `https://github.com/PHPantom-dev/phpantom_lsp/releases/download/${PHPANTOM_VERSION}/${asset.asset}`;
 }
+
+export { PHPANTOM_VERSION, assetFor, downloadUrl };
+export type { ReleaseAsset };

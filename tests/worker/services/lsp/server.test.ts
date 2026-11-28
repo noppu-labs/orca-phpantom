@@ -13,13 +13,13 @@ import type { ServerState } from '../../../../src/services/status.ts';
 
 const FAKE = fileURLToPath(new URL('../../../fixtures/fake-server.mjs', import.meta.url));
 
-type Recorded = {
+interface Recorded {
   diagnostics: { uri: string; diagnostics: unknown[] }[];
   progress: ServerState[];
   refresh: RefreshKind[];
   logs: string[];
   exits: string[];
-};
+}
 
 function fakeServer(env: Record<string, string> = {}) {
   const events: Recorded = { diagnostics: [], progress: [], refresh: [], logs: [], exits: [] };

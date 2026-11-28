@@ -1,16 +1,16 @@
 // Adapted from actus7/orca-autocomplete src/lsp/locate.ts @ da5a680 (MIT). See THIRD_PARTY_NOTICES.md.
-// A custom editor never learns its file's path, but a language server needs one. The open document
-// equals the file on disk, so find it: look through the workspaces for a file of the right type
-// whose content is exactly this text. If several files are identical there is no safe answer.
+// A custom editor never learns its file's path, but a language server needs one.
+// The open document equals the file on disk, so find it: look through the workspaces for a file of the right type whose content is exactly this text.
+// If several files are identical there is no safe answer.
 //
-// A document with unsaved edits equals no file. Then the file it was opened from is the one that still
-// shares most of its lines, as long as one file is clearly ahead of the rest.
+// A document with unsaved edits equals no file.
+// Then the file it was opened from is the one that still shares most of its lines, as long as one file is clearly ahead of the rest.
 import { readFile, readdir, stat } from 'node:fs/promises';
 import { join, sep } from 'node:path';
 
 import type { Language } from '../../protocol.ts';
 
-export type Located =
+type Located =
   | { status: 'found'; path: string; root: string; approximate?: true }
   | { status: 'none' }
   | { status: 'ambiguous' };
@@ -49,10 +49,14 @@ const ALIKE_BUDGET_MS = 1500;
 /** A file this many times bigger or smaller than the document cannot share enough lines with it. */
 const ALIKE_SIZE_RATIO = 3;
 
-type Options = { maxFiles?: number; budgetMs?: number; alikeBudgetMs?: number };
+interface Options {
+  maxFiles?: number;
+  budgetMs?: number;
+  alikeBudgetMs?: number;
+}
 
 /** The extensions a php document can have: .php and the ones Drupal uses for PHP. */
-export const PHP_EXTENSIONS: readonly string[] = [
+const PHP_EXTENSIONS: readonly string[] = [
   '.php',
   '.module',
   '.install',
@@ -86,7 +90,7 @@ function meaningfulLines(text: string): string[] {
  * How much two texts share, by whole lines: 1 for the same lines, 0 for none in common. A line that
  * appears twice counts twice, so a file of repeated braces does not look like every other file.
  */
-export function sharedLines(a: string, b: string): number {
+function sharedLines(a: string, b: string): number {
   const linesA = meaningfulLines(a);
   const linesB = meaningfulLines(b);
   if (linesA.length < ALIKE_MIN_LINES || linesB.length < ALIKE_MIN_LINES) {
@@ -107,7 +111,11 @@ export function sharedLines(a: string, b: string): number {
   return shared / Math.max(linesA.length, linesB.length);
 }
 
-type Candidate = { path: string; root: string; size: number };
+interface Candidate {
+  path: string;
+  root: string;
+  size: number;
+}
 
 /** The one file that is clearly the document with a few edits on top, if there is such a file. */
 async function locateAlike(
@@ -154,24 +162,24 @@ async function locateAlike(
   if (best.score - second < ALIKE_LEAD) {
     return { status: 'ambiguous' };
   }
-  return { status: 'found', path: best.file.path, root: best.file.root, approximate: true };
+  return { approximate: true, path: best.file.path, root: best.file.root, status: 'found' };
 }
 
-export type LocateInput = {
+interface LocateInput {
   tiers: string[][];
   candidates: string[];
   /** Files located before (open now or not long ago), which the walk may not reach: Composer's vendor folder. */
   known?: string[];
   language: Language;
   content: string;
-};
+}
 
 /** The workspace path among the tiers that holds the file, the longest when they nest; empty when none does. */
 function rootOf(path: string, tiers: readonly (readonly string[])[]): string {
   let best = '';
   for (const root of tiers.flat()) {
     const prefix = root.endsWith(sep) || root.endsWith('/') ? root : root + sep;
-    if ((path.startsWith(prefix) || path.startsWith(root + '/')) && root.length > best.length) {
+    if ((path.startsWith(prefix) || path.startsWith(`${root}/`)) && root.length > best.length) {
       best = root;
     }
   }
@@ -200,7 +208,7 @@ async function locateCandidates(input: LocateInput, options: Options): Promise<L
     }
   }
   if (matches.length === 1) {
-    return { status: 'found', path: matches[0], root: rootOf(matches[0], input.tiers) };
+    return { path: matches[0], root: rootOf(matches[0], input.tiers), status: 'found' };
   }
   if (matches.length > 1) {
     return { status: 'ambiguous' };
@@ -208,7 +216,7 @@ async function locateCandidates(input: LocateInput, options: Options): Promise<L
   return locateAlike(others, input.content, size, options.alikeBudgetMs ?? ALIKE_BUDGET_MS);
 }
 
-export async function locateFile(input: LocateInput, options: Options = {}): Promise<Located> {
+async function locateFile(input: LocateInput, options: Options = {}): Promise<Located> {
   const fromCandidates = await locateCandidates(input, options);
   if (fromCandidates.status !== 'none') {
     return fromCandidates;
@@ -290,9 +298,8 @@ async function locateInRoots(
   const matches: { path: string; root: string }[] = [...known];
   const others: Candidate[] = [];
 
-  // Why breadth-first: the file being edited is nearly always close to the workspace root, so a huge
-  // tree (a home folder used as a workspace) must not use up the time before the shallow files are seen.
-  const queue = roots.map((root) => ({ root, directory: root }));
+  // Why breadth-first: the file being edited is nearly always close to the workspace root, so a huge tree (a home folder used as a workspace) must not use up the time before the shallow files are seen.
+  const queue = roots.map((root) => ({ directory: root, root }));
   for (let next = 0; next < queue.length; next += 1) {
     // Why here: a deadline or cap checked only inside the entry loop would still read every queued directory.
     if (Date.now() > deadline || visited >= (options.maxFiles ?? MAX_FILES_VISITED)) {
@@ -319,7 +326,7 @@ async function locateInRoots(
           !entry.name.startsWith('.') &&
           !(hasComposer && COMPOSER_SIBLING_SKIPPED.has(entry.name))
         ) {
-          queue.push({ root, directory: path });
+          queue.push({ directory: path, root });
         }
       } else if (entry.isFile() && nameMatches(entry.name, language)) {
         visited += 1;
@@ -351,3 +358,6 @@ async function locateInRoots(
   }
   return locateAlike(others, content, size, options.alikeBudgetMs ?? ALIKE_BUDGET_MS);
 }
+
+export { PHP_EXTENSIONS, sharedLines, locateFile };
+export type { Located, LocateInput };

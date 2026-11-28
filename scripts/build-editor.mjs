@@ -3,9 +3,8 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 // Adapted from actus7/orca-autocomplete editor/build.mjs @ da5a680 (MIT). See THIRD_PARTY_NOTICES.md.
-// Builds the editor into editor/dist: Orca installs a plugin as files and runs it with no network
-// and no node_modules, so Monaco and our code ship prebuilt. Run `npm run build` after
-// changing editor/src and commit the result; CI rebuilds and fails when editor/dist differs.
+// Builds the editor into editor/dist: Orca installs a plugin as files and runs it with no network and no node_modules, so Monaco and our code ship prebuilt.
+// Run `npm run build` after changing editor/src and commit the result; CI rebuilds and fails when editor/dist differs.
 import { build } from 'esbuild';
 
 const MAX_FILE_BYTES = 10 * 1024 * 1024;
@@ -15,22 +14,22 @@ const MAX_FILES = 200;
 const pluginDir = fileURLToPath(new URL('..', import.meta.url));
 const dist = join(pluginDir, 'editor/dist');
 
-rmSync(dist, { recursive: true, force: true });
+rmSync(dist, { force: true, recursive: true });
 const shared = {
   absWorkingDir: pluginDir,
-  outdir: 'editor/dist',
   bundle: true,
   format: 'esm',
-  target: 'es2022',
   loader: { '.ttf': 'dataurl' },
-  minify: true,
   logLevel: 'warning',
+  minify: true,
+  outdir: 'editor/dist',
+  target: 'es2022',
 };
 await build({
   ...shared,
+  chunkNames: 'chunks/[name]-[hash]',
   entryPoints: { main: 'editor/src/main.ts' },
   splitting: true,
-  chunkNames: 'chunks/[name]-[hash]',
 });
 // Why a second build: the worker is loaded on its own and must not depend on the page's chunks.
 await build({ ...shared, entryPoints: { 'editor.worker': 'editor/src/editor.worker.ts' } });
@@ -40,7 +39,7 @@ function files(dir) {
     const full = join(dir, entry);
     return statSync(full).isDirectory()
       ? files(full)
-      : [{ path: full.slice(dist.length + 1), bytes: statSync(full).size }];
+      : [{ bytes: statSync(full).size, path: full.slice(dist.length + 1) }];
   });
 }
 

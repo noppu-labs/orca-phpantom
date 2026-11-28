@@ -1,20 +1,19 @@
-// How big Orca thinks a value is. Orca does not measure a payload as JSON: it walks the value and counts
-// 8 bytes per number, 1 per null, undefined or boolean, each string's UTF-8 bytes, and for an array 8 plus
-// 4 per element, for an object 4 per key plus the key's UTF-8 bytes (nothing is added for the object itself).
-// It refuses a value with more than 10,000 arrays and objects, or nested deeper than 100, whatever its size
-// (`structuredCloneMessageBytes` in plugin-panel-message-budget.js, and `MW` in the main bundle, which
-// measures `plugin.request` answers (1 MiB), worker posts (256 KiB, payload only) and panel requests
-// (64 KiB, the whole `{ sessionToken, action, params }` message)). A list of locations is mostly small
-// objects and numbers, so it hits these limits long before its JSON would. Depth is not tracked here:
-// nothing the plugin sends nests anywhere near 100.
+// How big Orca thinks a value is.
+// Orca does not measure a payload as JSON: it walks the value and counts 8 bytes per number, 1 per null, undefined or boolean, each string's UTF-8 bytes, and for an array 8 plus 4 per element, for an object 4 per key plus the key's UTF-8 bytes (nothing is added for the object itself).
+// It refuses a value with more than 10,000 arrays and objects, or nested deeper than 100, whatever its size (`structuredCloneMessageBytes` in plugin-panel-message-budget.js, and `MW` in the main bundle, which measures `plugin.request` answers (1 MiB), worker posts (256 KiB, payload only) and panel requests (64 KiB, the whole `{ sessionToken, action, params }` message)).
+// A list of locations is mostly small objects and numbers, so it hits these limits long before its JSON would.
+// Depth is not tracked here: nothing the plugin sends nests anywhere near 100.
 
-export type Size = { bytes: number; objects: number };
+interface Size {
+  bytes: number;
+  objects: number;
+}
 
-export const ORCA_MAX_OBJECTS = 10_000;
+const ORCA_MAX_OBJECTS = 10_000;
 
 const encoder = new TextEncoder();
 
-export function orcaSize(value: unknown): Size {
+function orcaSize(value: unknown): Size {
   const size: Size = { bytes: 0, objects: 0 };
   const walk = (item: unknown): void => {
     if (item === null || item === undefined || typeof item === 'boolean') {
@@ -50,13 +49,13 @@ export function orcaSize(value: unknown): Size {
   return size;
 }
 
-export const fitsIn = (size: Size, limit: Size): boolean =>
+const fitsIn = (size: Size, limit: Size): boolean =>
   size.bytes <= limit.bytes && size.objects <= limit.objects;
 
 /** The leading `items` that fit in `limit` beside `envelope`, the answer measured with an empty list. */
-export function leadingThatFit<T>(items: T[], envelope: Size, limit: Size): T[] {
-  let bytes = envelope.bytes;
-  let objects = envelope.objects;
+function leadingThatFit<T>(items: T[], envelope: Size, limit: Size): T[] {
+  let { bytes } = envelope;
+  let { objects } = envelope;
   const kept: T[] = [];
   for (const item of items) {
     const size = orcaSize(item);
@@ -69,3 +68,6 @@ export function leadingThatFit<T>(items: T[], envelope: Size, limit: Size): T[] 
   }
   return kept;
 }
+
+export { ORCA_MAX_OBJECTS, orcaSize, fitsIn, leadingThatFit };
+export type { Size };

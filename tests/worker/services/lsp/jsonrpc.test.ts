@@ -33,7 +33,7 @@ test('an error response rejects with its message', async () => {
   const { connection } = connect();
   const answer = connection.request('x', {});
   connection.feed(
-    frame({ jsonrpc: '2.0', id: 1, error: { code: -32601, message: 'no such method' } })
+    frame({ jsonrpc: '2.0', id: 1, error: { code: -32_601, message: 'no such method' } })
   );
   await assert.rejects(answer, /no such method/);
 });
@@ -132,4 +132,28 @@ test('a notification handler that throws is reported, and the next message in th
   assert.deepEqual(seen, ['good']);
   assert.equal(errors.length, 1);
   assert.match(errors[0], /bad.*cannot read bad/);
+});
+
+test('frames keep the envelope key order on the wire', async () => {
+  const sent: string[] = [];
+  const connection = new RpcConnection((out) => sent.push(out), {
+    onRequest: (method) => {
+      if (method === 'fail') throw new Error('nope');
+      return { ok: true };
+    },
+    onNotification: () => undefined,
+  });
+  const body = (index: number): string => sent[index].slice(sent[index].indexOf('\r\n\r\n') + 4);
+
+  void connection.request('m', { a: 1 });
+  connection.notify('n', null);
+  connection.feed(frame({ jsonrpc: '2.0', id: 7, method: 'ask', params: {} }));
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  connection.feed(frame({ jsonrpc: '2.0', id: 8, method: 'fail', params: {} }));
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  assert.equal(body(0), '{"jsonrpc":"2.0","id":1,"method":"m","params":{"a":1}}');
+  assert.equal(body(1), '{"jsonrpc":"2.0","method":"n","params":null}');
+  assert.equal(body(2), '{"jsonrpc":"2.0","id":7,"result":{"ok":true}}');
+  assert.equal(body(3), '{"jsonrpc":"2.0","id":8,"error":{"code":-32603,"message":"nope"}}');
 });

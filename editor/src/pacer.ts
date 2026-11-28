@@ -1,8 +1,8 @@
-// Orca refuses frame calls past 120 in 10 s, counted per plugin across all its tabs and windows, with
-// `rate_limited` ("too many panel requests"; Orca 1.4.278 sends no retryAfterMs with it). This keeps
-// one editor's share of that budget and holds its calls back after a refusal. No Monaco here.
+// Orca refuses frame calls past 120 in 10 s, counted per plugin across all its tabs and windows, with `rate_limited` ("too many panel requests"; Orca 1.4.278 sends no retryAfterMs with it).
+// This keeps one editor's share of that budget and holds its calls back after a refusal.
+// No Monaco here.
 
-export type PacerOptions = {
+interface PacerOptions {
   windowMs?: number;
   /** Most passive calls (hover, completion, colouring...) this editor makes in a window. */
   passiveCap?: number;
@@ -10,16 +10,16 @@ export type PacerOptions = {
   firstBackoffMs?: number;
   maxBackoffMs?: number;
   now?: () => number;
-};
+}
 
 const MIN_HOLD_MS = 250;
 
-export const isRateLimited = (error: unknown): boolean =>
+const isRateLimited = (error: unknown): boolean =>
   typeof error === 'object' &&
   error !== null &&
   (error as { code?: unknown }).code === 'rate_limited';
 
-export class Pacer {
+class Pacer {
   private readonly windowMs: number;
   private readonly passiveCap: number;
   private readonly firstBackoffMs: number;
@@ -30,7 +30,7 @@ export class Pacer {
   private blockedUntil = 0;
   private backoff = 0;
 
-  constructor(options: PacerOptions = {}) {
+  public constructor(options: PacerOptions = {}) {
     this.windowMs = options.windowMs ?? 10_000;
     this.passiveCap = options.passiveCap ?? 50;
     this.firstBackoffMs = options.firstBackoffMs ?? 1000;
@@ -39,12 +39,12 @@ export class Pacer {
   }
 
   /** Milliseconds until Orca should take calls again. */
-  wait(): number {
+  public wait(): number {
     return Math.max(0, this.blockedUntil - this.now());
   }
 
   /** Whether a passive call may go out now; a yes counts it, so calls asked at once cannot overshoot the cap. */
-  takePassive(): boolean {
+  public takePassive(): boolean {
     this.prune();
     if (this.wait() > 0 || this.sent.length >= this.passiveCap) return false;
     this.sent.push(this.now());
@@ -52,7 +52,7 @@ export class Pacer {
   }
 
   /** Orca refused a call: holds calls back and answers for how long. */
-  refused(error: unknown): number {
+  public refused(error: unknown): number {
     const now = this.now();
     // Why not escalate during a hold: calls already in flight when it began come back refused too.
     if (now < this.blockedUntil) return this.blockedUntil - now;
@@ -70,7 +70,7 @@ export class Pacer {
     return hold;
   }
 
-  succeeded(): void {
+  public succeeded(): void {
     this.backoff = 0;
   }
 
@@ -79,3 +79,6 @@ export class Pacer {
     while (this.sent.length > 0 && this.sent[0] <= oldest) this.sent.shift();
   }
 }
+
+export { isRateLimited, Pacer };
+export type { PacerOptions };

@@ -1,22 +1,22 @@
 import { smallestEdit, type Splice } from './edits.ts';
 import { mergeText } from './merge.ts';
 
-export type TextView = {
-  getValue(): string;
-  applyOutside(splice: Splice): void;
-  onUserChange(listener: () => void): { dispose(): void };
-};
+interface TextView {
+  getValue: () => string;
+  applyOutside: (splice: Splice) => void;
+  onUserChange: (listener: () => void) => { dispose: () => void };
+}
 
 /** Keeps `view` and the Orca document in sync; resolves once the first document is in. */
-export async function bindDocument(
+async function bindDocument(
   view: TextView,
-  options: { onConflicts?(count: number): void } = {}
-): Promise<{ readOnly: boolean; initial: string; flush(): void; dispose(): void }> {
+  options: { onConflicts?: (count: number) => void } = {}
+): Promise<{ readOnly: boolean; initial: string; flush: () => void; dispose: () => void }> {
   const api = globalThis.orca.document;
   if (!api) {
     throw new Error('orca.document is only available in custom editors');
   }
-  const session = await api.session<string>({
+  const session = await api.session({
     merge: (base, outside, mine) => {
       const merged = mergeText(base, outside, mine);
       if (merged.conflicts > 0) {
@@ -44,21 +44,21 @@ export async function bindDocument(
     }
   });
   return {
-    readOnly: session.readOnly,
-    initial: session.value,
-    /** Sends a pending edit now instead of after Orca's debounce. Fire and forget: it never throws or waits. */
-    flush() {
-      try {
-        session.flush().catch(() => undefined);
-      } catch {
-        // A session already gone has nothing to send.
-      }
-    },
     dispose() {
       changes.dispose();
       replaced.dispose();
       session.dispose();
     },
+    /** Sends a pending edit now instead of after Orca's debounce. Fire and forget: it never throws or waits. */
+    flush() {
+      try {
+        session.flush().catch(() => {});
+      } catch {
+        // A session already gone has nothing to send.
+      }
+    },
+    initial: session.value,
+    readOnly: session.readOnly,
   };
 }
 
@@ -68,11 +68,11 @@ type VisibilityTarget = EventTarget & { readonly visibilityState: DocumentVisibi
  * Calls `flush` when the page hides or goes away. Why: Orca may tear the frame down on a tab switch, and an
  * edit still inside the session's debounce (250 ms) would never reach Orca.
  */
-export function flushWhenHidden(
+function flushWhenHidden(
   flush: () => void,
   win: EventTarget,
   page: VisibilityTarget
-): { dispose(): void } {
+): { dispose: () => void } {
   const run = (): void => {
     try {
       flush();
@@ -92,3 +92,6 @@ export function flushWhenHidden(
     },
   };
 }
+
+export { bindDocument, flushWhenHidden };
+export type { TextView };

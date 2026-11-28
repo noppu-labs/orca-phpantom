@@ -32,7 +32,11 @@ const ctx = (workspaceId: string): WorkspaceContext => ({
   displayName: workspaceId,
 });
 
-type Call = { name: string; input: any; options?: { timeoutMs?: number; signal?: AbortSignal } };
+interface Call {
+  name: string;
+  input: any;
+  options?: { timeoutMs?: number; signal?: AbortSignal };
+}
 type OpenHandler = (input: any, host: FakeHost) => AttachStatus | Promise<AttachStatus>;
 type Answer = unknown | Promise<unknown>;
 
@@ -42,7 +46,7 @@ function readyOn(_when: 'last'): OpenHandler {
 }
 
 type FakeHost = BridgeHost & {
-  calls(name: string): Call[];
+  calls: (name: string) => Call[];
   /** What the router would do with each request; replace to script answers. */
   handlers: {
     open: OpenHandler;
@@ -60,14 +64,14 @@ type FakeHost = BridgeHost & {
   maxInFlight: Record<string, number>;
   /** Orca's admission: an error returned here is thrown before the worker sees the call. */
   refuse: (name: string, input: any) => Error | undefined;
-  ready(): AttachStatus;
-  restart(session: string): void;
-  post(event: string, payload: unknown): void;
-  workspaceChanged(context: WorkspaceContext | null): void;
-  firstInput(): void;
-  visible(): void;
-  saved(): void;
-  settingsChanged(): void;
+  ready: () => AttachStatus;
+  restart: (session: string) => void;
+  post: (event: string, payload: unknown) => void;
+  workspaceChanged: (context: WorkspaceContext | null) => void;
+  firstInput: () => void;
+  visible: () => void;
+  saved: () => void;
+  settingsChanged: () => void;
 };
 
 function fakeHost(
@@ -559,6 +563,34 @@ test('a request flushes the edits typed before it', async () => {
   bridge.dispose();
 });
 
+test('a request waiting on its flush still goes out when an attach queues behind that flush', async () => {
+  const host = fakeHost();
+  const doc = source('<?php\necho 1;\n');
+  const bridge = new LspBridge(host, doc, { ...FAST, syncDelayMs: 10_000 });
+  await bridge.attach();
+  let release: () => void = () => {};
+  const gate = new Promise<void>((resolve) => (release = resolve));
+  const accept = host.handlers.change;
+  host.handlers.change = async (input, self) => {
+    await gate;
+    return accept(input, self);
+  };
+  host.handlers.request = async () => {
+    await wait(15);
+    return { result: 'answer' };
+  };
+  doc.edit(11, 12, '2');
+  const asked = bridge.ask('textDocument/hover', { position: { line: 1, character: 5 } });
+  await until(() => host.calls('phpantom.change').length === 1, 'the flush to reach Orca');
+  const again = bridge.attach();
+  release();
+  const got = await asked;
+  assert.equal(got, 'answer');
+  assert.equal(host.calls('phpantom.request').length, 1);
+  await again;
+  bridge.dispose();
+});
+
 test('an aborted request answers null', async () => {
   const host = fakeHost();
   const bridge = new LspBridge(host, source('<?php\n'), FAST);
@@ -675,11 +707,11 @@ test('a save retries a single-file attach, even with the typing budget spent', a
   let saved = false;
   const host = fakeHost({
     open: (input, self) =>
-      !input.last
-        ? { state: 'pending' }
-        : saved
+      input.last
+        ? saved
           ? self.ready()
-          : { state: 'single-file', reason: 'no-file' },
+          : { state: 'single-file', reason: 'no-file' }
+        : { state: 'pending' },
   });
   const doc = source('<?php\n');
   const bridge = new LspBridge(host, doc, { ...FAST, retryGapMs: 1, maxRetries: 1 });
@@ -704,11 +736,11 @@ test('an error answer retries when the settings change', async () => {
   let fixed = false;
   const host = fakeHost({
     open: (input, self) =>
-      !input.last
-        ? { state: 'pending' }
-        : fixed
+      input.last
+        ? fixed
           ? self.ready()
-          : { state: 'error', message: 'PHPantom is not installed' },
+          : { state: 'error', message: 'PHPantom is not installed' }
+        : { state: 'pending' },
   });
   const bridge = new LspBridge(host, source('<?php\n'), FAST);
   const statuses: string[] = [];
@@ -728,11 +760,11 @@ test('an error answer retries when the tab shows', async () => {
   let answers = 0;
   const host = fakeHost({
     open: (input, self) =>
-      !input.last
-        ? { state: 'pending' }
-        : ++answers === 1
+      input.last
+        ? ++answers === 1
           ? { state: 'error', message: 'boom' }
-          : self.ready(),
+          : self.ready()
+        : { state: 'pending' },
   });
   const bridge = new LspBridge(host, source('<?php\n'), FAST);
   await bridge.attach();
@@ -914,7 +946,7 @@ test('a ping carries a timeout no longer than the ping interval', async () => {
   const host = fakeHost();
   const bridge = new LspBridge(host, source('<?php\n'), { ...FAST, pingMs: 15 });
   await bridge.attach();
-  await until(() => host.calls('phpantom.ping').length >= 1, 'a ping');
+  await until(() => host.calls('phpantom.ping').length > 0, 'a ping');
   assert.deepEqual(host.calls('phpantom.ping')[0].options, { timeoutMs: 15 });
   bridge.dispose();
 });
@@ -925,7 +957,7 @@ test('a ping that never answers does not stop the pings of the next attach', asy
   await bridge.attach();
   const answers = host.handlers.ping;
   host.handlers.ping = () => new Promise(() => undefined);
-  await until(() => host.calls('phpantom.ping').length >= 1, 'a hung ping');
+  await until(() => host.calls('phpantom.ping').length > 0, 'a hung ping');
   host.handlers.ping = answers;
   // The worker restarts: the bridge opens the document again and must ping under the new session.
   host.restart('s2');
@@ -1140,8 +1172,9 @@ test("passive requests past this editor's share answer null without asking", asy
     await until(() => host.mirror?.text === doc.text, 'the change');
   }
   const answers = [];
-  for (let i = 0; i < 5; i++)
+  for (let i = 0; i < 5; i++) {
     answers.push(await bridge.ask('textDocument/hover', {}, undefined, { kind: 'passive' }));
+  }
   assert.equal(answers.filter((answer) => answer !== null).length, 3);
   assert.equal(host.calls('phpantom.request').length, 3);
   // A user request still goes out.

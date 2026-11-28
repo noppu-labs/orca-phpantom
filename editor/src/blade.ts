@@ -1,11 +1,12 @@
-// Blade for Monaco: a copy of Monaco's HTML grammar with Blade's comments, echoes, directives and
-// components layered on top. No Monaco import, so Node can test it.
+// Blade for Monaco: a copy of Monaco's HTML grammar with Blade's comments, echoes, directives and components layered on top.
+// No Monaco import, so Node can test it.
 //
-// Monarch quirks the rules below depend on: a rule only matches at the current position (no
-// lookbehind past it), `@name` in a regex expands a grammar attribute so a literal `@` is written
+// Monarch quirks the rules below depend on: a rule only matches at the current position (no lookbehind past it), `@name` in a regex expands a grammar attribute so a literal `@` is written
 // `@@`, and the first matching rule of a state wins.
 
-export type MonarchLanguage = { tokenizer: { [state: string]: unknown[] } };
+interface MonarchLanguage {
+  tokenizer: Record<string, unknown[]>;
+}
 type Rule = unknown;
 
 const PHP_KEYWORDS = [
@@ -53,7 +54,7 @@ function bladeRules(text: string): Rule[] {
     [/@@verbatim\b/, 'keyword.blade', '@bladeVerbatim'],
     [
       /(@@[a-zA-Z_]\w*)(\s*)(\()/,
-      ['keyword.blade', '', { token: 'delimiter.parenthesis', next: '@bladeArguments' }],
+      ['keyword.blade', '', { next: '@bladeArguments', token: 'delimiter.parenthesis' }],
     ],
     [/@@php\b/, 'keyword.blade', '@bladePhp'],
     [/@@[a-zA-Z_]\w*/, 'keyword.blade'],
@@ -92,8 +93,7 @@ const componentAttributes: Rule[] = [
   [/[ \t\r\n]+/, ''],
 ];
 
-// States that are not tags or text: HTML comments, the doctype, and script and style bodies, which
-// belong to the embedded JavaScript and CSS grammars.
+// States that are not tags or text: HTML comments, the doctype, and script and style bodies, which belong to the embedded JavaScript and CSS grammars.
 const NOT_BLADE = /comment|doctype|embedded/i;
 
 /** HTML's one-regex quoted values (`/"([^"]*)"/`), which would swallow `{{ }}` inside a value. */
@@ -111,12 +111,12 @@ function quotedValue(rule: Rule): '"' | "'" | null {
   return null;
 }
 
-export function bladeGrammar<C extends object, L extends MonarchLanguage>(html: {
+function bladeGrammar<C extends object, L extends MonarchLanguage>(html: {
   conf: C;
   language: L;
 }): { conf: C; language: L } {
   const language = structuredClone(html.language);
-  const tokenizer = language.tokenizer;
+  const { tokenizer } = language;
   for (const [state, rules] of Object.entries(tokenizer)) {
     if (state === 'root' || NOT_BLADE.test(state)) {
       continue;
@@ -135,53 +135,55 @@ export function bladeGrammar<C extends object, L extends MonarchLanguage>(html: 
   }
   tokenizer.root = [
     ...bladeRules(''),
-    [/(<\/?)(x-[\w\-.:]+)/, ['delimiter', { token: 'tag.blade', next: '@bladeComponent' }]],
+    [/(<\/?)(x-[\w\-.:]+)/, ['delimiter', { next: '@bladeComponent', token: 'tag.blade' }]],
     ...textRules('', '<'),
     ...tokenizer.root,
   ];
   Object.assign(tokenizer, {
-    bladeEcho: [[/\}\}/, 'delimiter.blade', '@pop'], { include: '@bladeExpression' }],
-    bladeRaw: [[/!!\}/, 'delimiter.blade', '@pop'], { include: '@bladeExpression' }],
-    bladeComment: [
-      [/--\}\}/, 'comment.blade', '@pop'],
-      [/[^-]+/, 'comment.blade'],
-      [/./, 'comment.blade'],
-    ],
     // Balanced parentheses, so `@if(count($a) > 1)` ends at the right one, across lines too.
     bladeArguments: [
       [/\(/, 'delimiter.parenthesis', '@push'],
       [/\)/, 'delimiter.parenthesis', '@pop'],
       { include: '@bladeExpression' },
     ],
+    bladeAttributeValueDouble: attributeValue('"'),
+    bladeAttributeValueSingle: attributeValue("'"),
+    bladeBoundDouble: [[/"/, 'delimiter', '@pop'], { include: '@bladeExpression' }],
+    bladeBoundSingle: [[/'/, 'delimiter', '@pop'], { include: '@bladeExpression' }],
+    bladeComment: [
+      [/--\}\}/, 'comment.blade', '@pop'],
+      [/[^-]+/, 'comment.blade'],
+      [/./, 'comment.blade'],
+    ],
+    bladeComponent: [
+      ...bladeRules(''),
+      // Monarch matches every rule at the current position anyway; the `^` inside the group says so, so an unanchored search cannot restart inside a run of `:`s.
+      // A `^` as the very first character would instead make Monarch try the rule only at the start of a line.
+      [
+        /(^:[\w\-.:]+)(\s*)(=)(\s*)(")/,
+        ['attribute.name', '', 'delimiter', '', { next: '@bladeBoundDouble', token: 'delimiter' }],
+      ],
+      [
+        /(^:[\w\-.:]+)(\s*)(=)(\s*)(')/,
+        ['attribute.name', '', 'delimiter', '', { next: '@bladeBoundSingle', token: 'delimiter' }],
+      ],
+      ...componentAttributes,
+    ],
+    bladeEcho: [[/\}\}/, 'delimiter.blade', '@pop'], { include: '@bladeExpression' }],
+    bladeExpression,
     bladePhp: [[/@@endphp\b/, 'keyword.blade', '@pop'], { include: '@bladeExpression' }],
+    bladeRaw: [[/!!\}/, 'delimiter.blade', '@pop'], { include: '@bladeExpression' }],
     bladeVerbatim: [
       [/@@endverbatim\b/, 'keyword.blade', '@pop'],
       [/[^@@]+/, ''],
       [/@@/, ''],
     ],
-    bladeComponent: [
-      ...bladeRules(''),
-      // Monarch matches every rule at the current position anyway; the `^` inside the group says so,
-      // so an unanchored search cannot restart inside a run of `:`s. A `^` as the very first character
-      // would instead make Monarch try the rule only at the start of a line.
-      [
-        /(^:[\w\-.:]+)(\s*)(=)(\s*)(")/,
-        ['attribute.name', '', 'delimiter', '', { token: 'delimiter', next: '@bladeBoundDouble' }],
-      ],
-      [
-        /(^:[\w\-.:]+)(\s*)(=)(\s*)(')/,
-        ['attribute.name', '', 'delimiter', '', { token: 'delimiter', next: '@bladeBoundSingle' }],
-      ],
-      ...componentAttributes,
-    ],
-    bladeBoundDouble: [[/"/, 'delimiter', '@pop'], { include: '@bladeExpression' }],
-    bladeBoundSingle: [[/'/, 'delimiter', '@pop'], { include: '@bladeExpression' }],
-    bladeAttributeValueDouble: attributeValue('"'),
-    bladeAttributeValueSingle: attributeValue("'"),
-    bladeExpression,
   });
   return {
     conf: { ...html.conf, comments: { blockComment: ['{{--', '--}}'] } },
     language,
   };
 }
+
+export { bladeGrammar };
+export type { MonarchLanguage };

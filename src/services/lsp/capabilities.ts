@@ -1,7 +1,7 @@
 // What this client tells PHPantom it can do. Pull diagnostics are deliberately absent: with
 // `textDocument.diagnostic` missing the server pushes `textDocument/publishDiagnostics` instead.
 
-export const SEMANTIC_TOKEN_TYPES = [
+const SEMANTIC_TOKEN_TYPES = [
   'namespace',
   'class',
   'interface',
@@ -19,7 +19,7 @@ export const SEMANTIC_TOKEN_TYPES = [
   'comment',
 ];
 
-export const SEMANTIC_TOKEN_MODIFIERS = [
+const SEMANTIC_TOKEN_MODIFIERS = [
   'declaration',
   'static',
   'readonly',
@@ -29,61 +29,63 @@ export const SEMANTIC_TOKEN_MODIFIERS = [
   'defaultLibrary',
 ];
 
-export const CLIENT_CAPABILITIES = {
+const CLIENT_CAPABILITIES = {
   general: { positionEncodings: ['utf-16'] },
-  window: { workDoneProgress: true },
-  workspace: {
-    workspaceFolders: true,
-    configuration: true,
-    applyEdit: false,
-    workspaceEdit: { documentChanges: true },
-    semanticTokens: { refreshSupport: true },
-    inlayHint: { refreshSupport: true },
-  },
   textDocument: {
-    synchronization: { didSave: false, willSave: false },
+    codeAction: {
+      codeActionLiteralSupport: {
+        codeActionKind: { valueSet: ['quickfix', 'refactor', 'source'] },
+      },
+      dataSupport: true,
+      isPreferredSupport: true,
+      resolveSupport: { properties: ['edit'] },
+    },
     completion: {
       completionItem: {
-        snippetSupport: true,
-        documentationFormat: ['markdown', 'plaintext'],
         deprecatedSupport: true,
+        documentationFormat: ['markdown', 'plaintext'],
         resolveSupport: { properties: ['documentation', 'detail', 'additionalTextEdits'] },
+        snippetSupport: true,
       },
       contextSupport: true,
     },
+    definition: { linkSupport: false },
+    documentHighlight: {},
+    documentSymbol: { hierarchicalDocumentSymbolSupport: true },
+    formatting: {},
     hover: { contentFormat: ['markdown', 'plaintext'] },
+    inlayHint: { resolveSupport: { properties: ['tooltip'] } },
+    publishDiagnostics: {
+      relatedInformation: false,
+      tagSupport: { valueSet: [1, 2] },
+      versionSupport: false,
+    },
+    rangeFormatting: {},
+    references: {},
+    rename: { prepareSupport: true },
+    semanticTokens: {
+      formats: ['relative'],
+      requests: { full: true },
+      tokenModifiers: SEMANTIC_TOKEN_MODIFIERS,
+      tokenTypes: SEMANTIC_TOKEN_TYPES,
+    },
     signatureHelp: {
       signatureInformation: {
         documentationFormat: ['markdown', 'plaintext'],
         parameterInformation: { labelOffsetSupport: true },
       },
     },
-    definition: { linkSupport: false },
-    references: {},
-    documentHighlight: {},
-    documentSymbol: { hierarchicalDocumentSymbolSupport: true },
-    formatting: {},
-    rangeFormatting: {},
-    rename: { prepareSupport: true },
-    codeAction: {
-      codeActionLiteralSupport: {
-        codeActionKind: { valueSet: ['quickfix', 'refactor', 'source'] },
-      },
-      isPreferredSupport: true,
-      dataSupport: true,
-      resolveSupport: { properties: ['edit'] },
-    },
-    semanticTokens: {
-      requests: { full: true },
-      formats: ['relative'],
-      tokenTypes: SEMANTIC_TOKEN_TYPES,
-      tokenModifiers: SEMANTIC_TOKEN_MODIFIERS,
-    },
-    inlayHint: { resolveSupport: { properties: ['tooltip'] } },
-    publishDiagnostics: {
-      relatedInformation: false,
-      versionSupport: false,
-      tagSupport: { valueSet: [1, 2] },
-    },
+    synchronization: { didSave: false, willSave: false },
+  },
+  window: { workDoneProgress: true },
+  workspace: {
+    applyEdit: false,
+    configuration: true,
+    inlayHint: { refreshSupport: true },
+    semanticTokens: { refreshSupport: true },
+    workspaceEdit: { documentChanges: true },
+    workspaceFolders: true,
   },
 };
+
+export { SEMANTIC_TOKEN_TYPES, SEMANTIC_TOKEN_MODIFIERS, CLIENT_CAPABILITIES };

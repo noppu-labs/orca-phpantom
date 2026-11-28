@@ -1,5 +1,4 @@
-// One `phpantom_lsp --stdio` child for one composer root: starts it, answers the requests it makes
-// of the client, turns its notifications into typed events, and reports when it goes away.
+// One `phpantom_lsp --stdio` child for one composer root: starts it, answers the requests it makes of the client, turns its notifications into typed events, and reports when it goes away.
 import { spawn, type ChildProcess } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 
@@ -7,23 +6,23 @@ import type { ServerState } from '../status.ts';
 import { CLIENT_CAPABILITIES } from './capabilities.ts';
 import { RpcConnection } from './jsonrpc.ts';
 
-export type RefreshKind = 'semanticTokens' | 'inlayHints' | 'codeLens' | 'diagnostics';
+type RefreshKind = 'semanticTokens' | 'inlayHints' | 'codeLens' | 'diagnostics';
 
-export type ServerEvents = {
-  diagnostics(uri: string, diagnostics: unknown[]): void;
-  progress(state: ServerState): void;
-  refresh(kind: RefreshKind): void;
-  log(message: string): void;
-  exit(reason: string): void;
-};
+interface ServerEvents {
+  diagnostics: (uri: string, diagnostics: unknown[]) => void;
+  progress: (state: ServerState) => void;
+  refresh: (kind: RefreshKind) => void;
+  log: (message: string) => void;
+  exit: (reason: string) => void;
+}
 
-export type PhpantomServerOptions = {
+interface PhpantomServerOptions {
   executable: string;
   root: string;
   events: ServerEvents;
   spawnImpl?: typeof spawn;
   initializeTimeoutMs?: number;
-};
+}
 
 // Why 60 s: the first index of a large project can take that long before `initialize` is answered.
 const INITIALIZE_TIMEOUT_MS = 60_000;
@@ -33,20 +32,27 @@ const KILL_WAIT_MS = 2000;
 const CLOSE_WAIT_MS = 1000;
 
 const REFRESH_KINDS: Record<string, RefreshKind> = {
-  'workspace/semanticTokens/refresh': 'semanticTokens',
-  'workspace/inlayHint/refresh': 'inlayHints',
   'workspace/codeLens/refresh': 'codeLens',
   'workspace/diagnostic/refresh': 'diagnostics',
+  'workspace/inlayHint/refresh': 'inlayHints',
+  'workspace/semanticTokens/refresh': 'semanticTokens',
 };
 
-type ProgressValue = { kind?: string; percentage?: number };
-
-function delay(ms: number): Promise<'timeout'> {
-  return new Promise((resolve) => setTimeout(() => resolve('timeout'), ms).unref());
+interface ProgressValue {
+  kind?: string;
+  percentage?: number;
 }
 
-export class PhpantomServer {
-  capabilities: Record<string, unknown> = {};
+async function delay(ms: number): Promise<'timeout'> {
+  return new Promise((resolve) =>
+    setTimeout(() => {
+      resolve('timeout');
+    }, ms).unref()
+  );
+}
+
+class PhpantomServer {
+  public capabilities: Record<string, unknown> = {};
   private readonly options: PhpantomServerOptions;
   private readonly stderrTail: string[] = [];
   private readonly openTokens = new Set<string>();
@@ -56,50 +62,58 @@ export class PhpantomServer {
   private finished = false;
   private stopping = false;
   private exitInfo = 'stopped (code unknown)';
-  private resolveExited: () => void = () => undefined;
+  private resolveExited: () => void = () => {};
   private exited: Promise<void> = Promise.resolve();
 
-  constructor(options: PhpantomServerOptions) {
+  public constructor(options: PhpantomServerOptions) {
     this.options = options;
   }
 
-  get alive(): boolean {
+  public get alive(): boolean {
     return this.started && !this.finished;
   }
 
-  async start(): Promise<void> {
+  public async start(): Promise<void> {
     const { executable, root, events } = this.options;
     const launch = this.options.spawnImpl ?? spawn;
     const child = launch(executable, ['--stdio'], {
       cwd: root,
-      windowsHide: true,
       stdio: ['pipe', 'pipe', 'pipe'],
+      windowsHide: true,
     });
     this.child = child;
-    const stdin = child.stdin;
-    const stdout = child.stdout;
-    const stderr = child.stderr;
+    const { stdin } = child;
+    const { stdout } = child;
+    const { stderr } = child;
     if (!stdin || !stdout || !stderr) {
       child.kill();
       throw new Error('could not open the language server pipes');
     }
     const rpc = new RpcConnection((frame) => void stdin.write(frame), {
+      onError: (message) => {
+        events.log(`PHPantom sent something unexpected: ${message}`);
+      },
+      onNotification: (method, params) => {
+        this.onNotification(method, params);
+      },
       onRequest: (method, params) => this.onRequest(method, params),
-      onNotification: (method, params) => this.onNotification(method, params),
-      onError: (message) => events.log(`PHPantom sent something unexpected: ${message}`),
     });
     this.rpc = rpc;
-    stdout.on('data', (chunk: Buffer) => rpc.feed(chunk));
+    stdout.on('data', (chunk: Buffer) => {
+      rpc.feed(chunk);
+    });
     stderr.on('data', (chunk: Buffer) => {
       this.stderrTail.push(...chunk.toString('utf8').split(/\r?\n/).filter(Boolean));
       this.stderrTail.splice(0, Math.max(0, this.stderrTail.length - STDERR_LINES_KEPT));
     });
     // Why: writing to a child that just died raises EPIPE here; that is the exit, not a second failure.
-    stdin.on('error', () => undefined);
+    stdin.on('error', () => {});
     this.exited = new Promise((resolve) => {
       this.resolveExited = resolve;
     });
-    child.on('error', (error) => this.finish(`could not start: ${error.message}`));
+    child.on('error', (error) => {
+      this.finish(`could not start: ${error.message}`);
+    });
     // Why 'close' and not 'exit': at 'exit' the pipes may still hold unread output, so the stderr tail could be empty or cut.
     child.on('exit', (code, signal) => {
       this.exitInfo = `stopped (${signal ? `signal ${signal}` : `code ${code ?? 'unknown'}`})`;
@@ -109,27 +123,28 @@ export class PhpantomServer {
         this.finish(this.exitInfo);
       }, CLOSE_WAIT_MS).unref();
     });
-    child.on('close', () => this.finish(this.exitInfo));
+    child.on('close', () => {
+      this.finish(this.exitInfo);
+    });
 
     let timer: ReturnType<typeof setTimeout> | undefined;
     try {
       const rootUri = pathToFileURL(root).href;
       const timeout = new Promise<never>((_resolve, reject) => {
-        timer = setTimeout(
-          () => reject(new Error('did not answer initialize in time')),
-          this.options.initializeTimeoutMs ?? INITIALIZE_TIMEOUT_MS
-        );
+        timer = setTimeout(() => {
+          reject(new Error('did not answer initialize in time'));
+        }, this.options.initializeTimeoutMs ?? INITIALIZE_TIMEOUT_MS);
         timer.unref();
       });
       const result = (await Promise.race([
         rpc.request('initialize', {
-          processId: process.pid,
+          capabilities: CLIENT_CAPABILITIES,
           clientInfo: { name: 'orca-phpantom', version: '0.2.1' },
+          processId: process.pid,
           rootUri,
           workspaceFolders: [
-            { uri: rootUri, name: root.split(/[\\/]/).filter(Boolean).pop() ?? 'workspace' },
+            { name: root.split(/[\\/]/).filter(Boolean).pop() ?? 'workspace', uri: rootUri },
           ],
-          capabilities: CLIENT_CAPABILITIES,
         }),
         timeout,
       ])) as { capabilities?: Record<string, unknown> } | null;
@@ -152,31 +167,28 @@ export class PhpantomServer {
     }
   }
 
-  notify(method: string, params: unknown): void {
+  public notify(method: string, params: unknown): void {
     if (this.alive) {
       this.rpc?.notify(method, params);
     }
   }
 
-  request(method: string, params: unknown, signal?: AbortSignal): Promise<unknown> {
+  public async request(method: string, params: unknown, signal?: AbortSignal): Promise<unknown> {
     if (!this.alive || !this.rpc) {
-      return Promise.reject(new Error('the language server is not running'));
+      throw new Error('the language server is not running');
     }
     return this.rpc.request(method, params, signal);
   }
 
   /** `shutdown` (2 s cap), `exit`, close stdin, kill if it is still there 2 s later. Does not report an exit event. */
-  async stop(): Promise<void> {
+  public async stop(): Promise<void> {
     const { child, rpc } = this;
     if (!child || !rpc) {
       return;
     }
     this.stopping = true;
     if (this.alive) {
-      await Promise.race([
-        rpc.request('shutdown', null).catch(() => undefined),
-        delay(SHUTDOWN_WAIT_MS),
-      ]);
+      await Promise.race([rpc.request('shutdown', null).catch(() => {}), delay(SHUTDOWN_WAIT_MS)]);
       rpc.notify('exit', null);
     }
     await this.terminate();
@@ -185,7 +197,7 @@ export class PhpantomServer {
 
   /** Close stdin, give the child 2 s to leave, then SIGKILL; if even that is not seen, drop the pipes and give up on it. */
   private async terminate(): Promise<void> {
-    const child = this.child;
+    const { child } = this;
     if (!child) {
       return;
     }
@@ -224,8 +236,9 @@ export class PhpantomServer {
         const items = (params as { items?: unknown[] } | null)?.items;
         return Array.isArray(items) ? items.map(() => null) : [];
       }
-      case 'workspace/applyEdit':
+      case 'workspace/applyEdit': {
         return { applied: false };
+      }
       default: {
         const kind = REFRESH_KINDS[method];
         if (kind) {
@@ -259,7 +272,7 @@ export class PhpantomServer {
       events.progress(
         value.percentage === undefined
           ? { phase: 'indexing' }
-          : { phase: 'indexing', percent: value.percentage }
+          : { percent: value.percentage, phase: 'indexing' }
       );
     } else if (value?.kind === 'end') {
       this.openTokens.delete(token);
@@ -269,3 +282,6 @@ export class PhpantomServer {
     }
   }
 }
+
+export { PhpantomServer };
+export type { RefreshKind, ServerEvents, PhpantomServerOptions };

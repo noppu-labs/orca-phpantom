@@ -104,21 +104,21 @@ test('generated archives carry real gzip and zip framing', () => {
   const gz = oneTarGz();
   assert.equal(gz[0], 0x1f);
   assert.equal(gz[1], 0x8b);
-  assert.equal(oneZip().readUInt32LE(0), 0x04034b50);
-  assert.equal(oneZip().readUInt32LE(oneZip().length - 22), 0x06054b50);
+  assert.equal(oneZip().readUInt32LE(0), 0x04_03_4b_50);
+  assert.equal(oneZip().readUInt32LE(oneZip().length - 22), 0x06_05_4b_50);
 });
 test('generated tar has valid ustar headers and an end marker', () => {
   const archive = tar({ a: 'x', b: 'y'.repeat(600) });
   for (const offset of [0, 1024]) {
     const header = archive.subarray(offset, offset + 512);
     assert.equal(header.subarray(257, 262).toString(), 'ustar');
-    assert.equal(parseInt(header.subarray(148, 154).toString(), 8), tarChecksum(header));
+    assert.equal(Number.parseInt(header.subarray(148, 154).toString(), 8), tarChecksum(header));
   }
   assert.equal(archive.length, 512 + 512 + 512 + 1024 + 1024);
   assert.ok(archive.subarray(-1024).every((byte) => byte === 0));
 });
 test('round-trips content through every archive shape', () => {
-  const body = Buffer.from('z'.repeat(2000) + 'tail');
+  const body = Buffer.from(`${'z'.repeat(2000)}tail`);
   const files = { 'other.txt': 'skip me', 'phpantom_lsp': body };
   assert.equal(extractSingleFile(tarGz(files), 'tar.gz', 'phpantom_lsp').equals(body), true);
   assert.equal(
@@ -143,23 +143,30 @@ test('finds executables and well-known folders', () => {
     '/b/x'
   );
   assert.equal(
-    findExecutable('x', { PATH: 'C:\\a', PATHEXT: '.EXE' }, 'win32', (p) => p === 'C:\\a\\x.exe'),
-    'C:\\a\\x.exe'
+    findExecutable(
+      'x',
+      { PATH: String.raw`C:\a`, PATHEXT: '.EXE' },
+      'win32',
+      (p) => p === String.raw`C:\a\x.exe`
+    ),
+    String.raw`C:\a\x.exe`
   );
   assert.deepEqual(wellKnownDirs({ HOME: '/h' }, 'darwin'), [
     '/opt/homebrew/bin',
     '/usr/local/bin',
     '/h/.cargo/bin',
   ]);
-  assert.deepEqual(wellKnownDirs({ USERPROFILE: 'C:\\u' }, 'win32'), ['C:\\u\\.cargo\\bin']);
+  assert.deepEqual(wellKnownDirs({ USERPROFILE: String.raw`C:\u` }, 'win32'), [
+    String.raw`C:\u\.cargo\bin`,
+  ]);
 });
 test('places the cache per platform', () => {
   assert.equal(cacheDir({}, 'darwin', '/h'), '/h/Library/Caches/noppu-labs.phpantom');
   assert.equal(cacheDir({}, 'linux', '/h'), '/h/.cache/noppu-labs.phpantom');
   assert.equal(cacheDir({ XDG_CACHE_HOME: '/x' }, 'linux', '/h'), '/x/noppu-labs.phpantom');
   assert.equal(
-    cacheDir({ LOCALAPPDATA: 'C:\\L' }, 'win32', 'C:\\u'),
-    'C:\\L\\noppu-labs.phpantom\\cache'
+    cacheDir({ LOCALAPPDATA: String.raw`C:\L` }, 'win32', String.raw`C:\u`),
+    String.raw`C:\L\noppu-labs.phpantom\cache`
   );
 });
 test('readVersion runs the binary and returns null for a missing one', async () => {
@@ -265,9 +272,9 @@ test('skips an old PATH binary, downloads when allowed, then uses the cache', as
     }
     const second = await resolveBinary({
       ...options,
-      fetchImpl: (async () => {
+      fetchImpl: async () => {
         throw new Error('no network');
-      }) as unknown as typeof fetch,
+      },
     });
     assert.equal(second.ok && second.source, 'cache');
   } finally {
@@ -285,10 +292,10 @@ test('shares one download between concurrent resolves', async () => {
       allowDownload: true,
       readVersionImpl: inHome(home),
       assets: () => asset,
-      fetchImpl: (async () => {
+      fetchImpl: async () => {
         fetched++;
         return new Response(new Uint8Array(body));
-      }) as unknown as typeof fetch,
+      },
     };
     const [a, b] = await Promise.all([resolveBinary(options), resolveBinary(options)]);
     assert.ok(a.ok && b.ok);
@@ -344,7 +351,7 @@ test('a failed checksum leaves nothing in the cache', async () => {
       allowDownload: true,
       readVersionImpl: inHome(home),
       assets: () => ({ ...asset, sha256: '0'.repeat(64) }),
-      fetchImpl: (async () => new Response('tampered')) as unknown as typeof fetch,
+      fetchImpl: async () => new Response('tampered'),
     });
     assert.equal(r.ok, false);
     assert.ok(!existsSync(join(cacheDir({}, 'linux', home), '1.1.0')));

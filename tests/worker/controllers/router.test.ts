@@ -17,16 +17,24 @@ import { ORCA_MAX_OBJECTS, orcaSize } from '../../../src/utils/size.ts';
 const FAKE = fileURLToPath(new URL('../../fixtures/fake-server.mjs', import.meta.url));
 
 class RecordingServer extends PhpantomServer {
-  readonly notified: { method: string; params: any }[] = [];
+  public readonly notified: { method: string; params: any }[] = [];
 
-  override notify(method: string, params: unknown): void {
+  public override notify(method: string, params: unknown): void {
     this.notified.push({ method, params });
     super.notify(method, params);
   }
 }
 
-type Post = { event: string; payload: any; panel: string };
-type Started = { root: string; server: RecordingServer; events: ServerEvents };
+interface Post {
+  event: string;
+  payload: any;
+  panel: string;
+}
+interface Started {
+  root: string;
+  server: RecordingServer;
+  events: ServerEvents;
+}
 
 const cleanups: (() => Promise<void> | void)[] = [];
 afterEach(async () => {
@@ -98,28 +106,38 @@ async function setup(
     ...(options.sweepMs === undefined ? {} : { sweepMs: options.sweepMs }),
     ...(options.now === undefined ? {} : { now: options.now }),
   });
-  cleanups.push(() => rmSync(dir, { recursive: true, force: true }));
-  cleanups.push(() => router.dispose());
+  cleanups.push(
+    () => rmSync(dir, { recursive: true, force: true }),
+    () => router.dispose()
+  );
 
   const worker = {
     request(name: string, input: any, panel = 'panel-1'): Promise<any> {
       switch (name) {
-        case 'phpantom.open':
+        case 'phpantom.open': {
           return router.open(input, { panel });
-        case 'phpantom.change':
+        }
+        case 'phpantom.change': {
           return router.change(input);
-        case 'phpantom.request':
+        }
+        case 'phpantom.request': {
           return router.request(input, new AbortController().signal);
-        case 'phpantom.close':
+        }
+        case 'phpantom.close': {
           return router.close(input);
-        case 'phpantom.navigate':
+        }
+        case 'phpantom.navigate': {
           return router.navigate(input);
-        case 'phpantom.peek':
+        }
+        case 'phpantom.peek': {
           return router.peek(input);
-        case 'phpantom.ping':
+        }
+        case 'phpantom.ping': {
           return router.ping(input);
-        default:
+        }
+        default: {
           throw new Error(`unknown request ${name}`);
+        }
       }
     },
   };
@@ -390,7 +408,7 @@ async function twoHolders(text = '<?php // ok\n') {
 
 test('two documents on one file share it: one didOpen, no didClose while one remains', async () => {
   const { worker, started, posts, one, two, change, text } = await twoHolders();
-  const server = started[0].server;
+  const { server } = started[0];
   const sent = () => server.notified.filter((n) => n.method.startsWith('textDocument/'));
   // The second holder brings the same text, so PHPantom is told nothing new.
   assert.deepEqual(
@@ -441,10 +459,10 @@ test('shared file (b): tabs that drift apart leave PHPantom on the last sender',
   const { change, text } = await twoHolders();
   await change('d1', 2, [insert(5, 'X')], 13);
   await change('d2', 2, [insert(5, 'X')], 13);
-  // d2: '<?phpX // ok\n' minus 6 characters.
+  // `d2`: '<?phpX // ok\n' minus 6 characters.
   assert.deepEqual(await change('d2', 3, [remove(5, 11)], 7), { ok: true });
   assert.equal(await text(), '<?phpk\n');
-  // d1 never saw that delete; its own edit must not land on d2's text.
+  // `d1` never saw that delete; its own edit must not land on d2's text.
   assert.deepEqual(await change('d1', 3, [insert(0, 'Y')], 14), { ok: true });
   assert.equal(await text(), 'Y<?phpX // ok\n');
   assert.deepEqual(await change('d2', 4, [insert(0, 'Z')], 8), { ok: true });
@@ -900,7 +918,7 @@ test('cuts oversized semantic tokens at a whole token, keeping the leading colou
   const size = orcaSize(answer);
   assert.ok(size.objects <= ORCA_MAX_OBJECTS && size.bytes <= 1024 * 1024, JSON.stringify(size));
   assert.equal(answer.result.resultId, 'r1');
-  const length = answer.result.data.length;
+  const { length } = answer.result.data;
   assert.ok(length > 50_000 && length < 200_000);
   assert.equal(length % 5, 0);
   assert.deepEqual(answer.result.data.slice(0, 7), [0, 1, 2, 3, 4, 0, 1]);
@@ -946,7 +964,7 @@ test('reports the status bar at most once a second, ending on the latest state',
     text: '<?php // ok\n',
   });
   await sleep(1200);
-  assert.ok(statuses.length >= 1 && statuses.length <= 3, `saw ${statuses.length} updates`);
+  assert.ok(statuses.length > 0 && statuses.length <= 3, `saw ${statuses.length} updates`);
   assert.equal(statuses.at(-1)?.icon, 'check');
   assert.match(statuses.at(-1)!.tooltip, /1\.1\.0/);
 });
@@ -1060,7 +1078,7 @@ test('a document that stops pinging is released after the lease', async () => {
     await worker.request('phpantom.ping', { docId: 'd1', session: status.session }),
     { ok: true }
   );
-  const server = started[0].server;
+  const { server } = started[0];
   await until(() => server.notified.some((n) => n.method === 'textDocument/didClose'));
   assert.equal(
     server.notified.find((n) => n.method === 'textDocument/didClose')!.params.textDocument.uri,
@@ -1073,7 +1091,7 @@ test('a document that stops pinging is released after the lease', async () => {
     { detached: true }
   );
   assert.ok(
-    logs.some((line) => /Released/.test(line)),
+    logs.some((line) => line.includes('Released')),
     logs.join('\n')
   );
 });
@@ -1158,7 +1176,7 @@ test('two holders on one file: the one that expires leaves the file open for the
   });
   assert.equal(one.uri, two.uri);
   assert.match(router.describe(), /2 open document\(s\)/);
-  // d2 edits, so PHPantom holds d2's text when d1 leaves.
+  // `d2` edits, so PHPantom holds d2's text when d1 leaves.
   assert.deepEqual(
     await worker.request('phpantom.change', {
       docId: 'd2',
@@ -1171,7 +1189,7 @@ test('two holders on one file: the one that expires leaves the file open for the
   );
   // Only d2 renews its lease.
   const deadline = Date.now() + 4000;
-  while (!/1 open document\(s\)/.test(router.describe())) {
+  while (!router.describe().includes('1 open document(s)')) {
     assert.ok(Date.now() < deadline, 'd1 was never released');
     await sleep(30);
     assert.deepEqual(await worker.request('phpantom.ping', { docId: 'd2', session: two.session }), {
@@ -1210,7 +1228,7 @@ test('a ping under a stale session or for an unknown document answers detached',
 
 test("a request first gives PHPantom the asking document's text", async () => {
   const { worker, one, change, text } = await twoHolders();
-  // d2 edits last, so PHPantom holds d2's text; d1 still has the saved one.
+  // `d2` edits last, so PHPantom holds d2's text; d1 still has the saved one.
   assert.deepEqual(await change('d2', 2, [insert(0, 'Z')], 13), { ok: true });
   assert.equal(await text(), 'Z<?php // ok\n');
   assert.deepEqual(
@@ -1280,7 +1298,7 @@ test("three holders: the first expiring hands PHPantom the most recently seen te
     docId: 'f3',
     language: 'php',
     workspaceId: 'ws-a',
-    text: 'X' + saved,
+    text: `X${saved}`,
     panel: 'panel-3',
   });
   assert.deepEqual(
@@ -1293,12 +1311,12 @@ test("three holders: the first expiring hands PHPantom the most recently seen te
     }),
     { ok: true }
   );
-  assert.equal(await serverText(started), 'YX' + saved);
-  // f1 last seen 61 s ago, f2 51 s, f3 31 s: only f1 is past its lease.
+  assert.equal(await serverText(started), `YX${saved}`);
+  // `f1` last seen 61 s ago, f2 51 s, f3 31 s: only f1 is past its lease.
   clock += 31_000;
   await router.sweep();
   assert.match(router.describe(), /2 open document\(s\)/);
-  assert.equal(await serverText(started), 'YX' + saved);
+  assert.equal(await serverText(started), `YX${saved}`);
 });
 
 test('a departing holder skips a holder waiting for its resync', async () => {
@@ -1340,10 +1358,10 @@ test('a departing holder skips a holder waiting for its resync', async () => {
     docId: 'f3',
     language: 'php',
     workspaceId: 'ws-a',
-    text: 'X' + saved,
+    text: `X${saved}`,
     panel: 'panel-3',
   });
-  // f3's copy breaks (a wrong length) just before f1 leaves: its mirror is not the editor's text.
+  // `f3`'s copy breaks (a wrong length) just before f1 leaves: its mirror is not the editor's text.
   assert.deepEqual(
     await worker.request('phpantom.change', {
       docId: 'f3',
@@ -1357,7 +1375,7 @@ test('a departing holder skips a holder waiting for its resync', async () => {
   clock += 31_000;
   await router.sweep();
   assert.match(router.describe(), /2 open document\(s\)/);
-  assert.equal(await serverText(started), 'X' + saved);
+  assert.equal(await serverText(started), `X${saved}`);
 });
 
 test('a vendor file opened by navigation is found again after its document was released', async () => {
@@ -1425,7 +1443,7 @@ test('a failed binary lookup is kept for two minutes, and forgotten when the set
   clock += 119_000;
   assert.equal((await open()).state, 'error');
   assert.equal(lookups, 1);
-  clock += 2_000;
+  clock += 2000;
   assert.equal((await open()).state, 'error');
   assert.equal(lookups, 2);
   router.forgetBinary();

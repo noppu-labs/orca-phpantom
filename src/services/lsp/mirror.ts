@@ -5,23 +5,23 @@ import type { LspContentChange, LspPosition } from '../../protocol.ts';
  * apply() costs one scan of the text up to the change (no cached line index) plus one string splice, so a change
  * is O(document length) with a very small constant (~1 ms at 1 MB).
  */
-export class DocumentMirror {
+class DocumentMirror {
   private content: string;
-  version = 0;
+  public version = 0;
 
-  constructor(text: string) {
+  public constructor(text: string) {
     this.content = text;
   }
 
-  get text(): string {
+  public get text(): string {
     return this.content;
   }
 
-  get length(): number {
+  public get length(): number {
     return this.content.length;
   }
 
-  apply(changes: LspContentChange[]): void {
+  public apply(changes: LspContentChange[]): void {
     for (const change of changes) {
       if (!('range' in change)) {
         this.content = change.text;
@@ -39,7 +39,7 @@ export class DocumentMirror {
     let line = 0;
     let i = 0;
     if (fromPos && fromPos.line <= pos.line) {
-      line = fromPos.line;
+      ({ line } = fromPos);
       i = this.lineStart(from);
     }
     while (line < pos.line) {
@@ -78,3 +78,5 @@ export class DocumentMirror {
     return -1;
   }
 }
+
+export { DocumentMirror };

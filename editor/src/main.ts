@@ -23,6 +23,6 @@ startEditor().then(
     const detail = document.createElement('span');
     detail.textContent = error instanceof Error ? error.message : String(error);
     failure.append(title, detail);
-    document.getElementById('root')?.replaceChildren(failure);
+    document.querySelector('#root')?.replaceChildren(failure);
   }
 );

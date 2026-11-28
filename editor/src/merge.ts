@@ -30,7 +30,7 @@ function longestIncreasing(values: number[]): number[] {
     tails[low] = i;
   }
   const run: number[] = [];
-  for (let at = tails.length > 0 ? tails[tails.length - 1] : -1; at !== -1; at = previous[at]) {
+  for (let at = tails.length > 0 ? tails.at(-1)! : -1; at !== -1; at = previous[at]) {
     run.push(at);
   }
   return run.reverse();
@@ -67,16 +67,16 @@ function anchors(mine: string[], base: string[], outside: string[]): [number, nu
  * Three-way line merge. Changes that do not overlap are both kept; an overlap is written out with
  * both sides between conflict markers so nothing is dropped.
  */
-export function mergeText(
+function mergeText(
   base: string,
   outside: string,
   mine: string
 ): { text: string; conflicts: number } {
   if (mine === base || mine === outside) {
-    return { text: outside, conflicts: 0 };
+    return { conflicts: 0, text: outside };
   }
   if (outside === base) {
-    return { text: mine, conflicts: 0 };
+    return { conflicts: 0, text: mine };
   }
   const mineLines = lines(mine);
   const baseLines = lines(base);
@@ -99,8 +99,7 @@ export function mergeText(
       text += m.join('');
       return;
     }
-    // Why: diff3's LCS grows roughly cubically on repeated lines and runs on the editor's thread,
-    // so a stretch with no anchors that is too big to diff within budget keeps both sides whole.
+    // Why: diff3's LCS grows roughly cubically on repeated lines and runs on the editor's thread, so a stretch with no anchors that is too big to diff within budget keeps both sides whole.
     if (Math.max(m.length, b.length, o.length) > MAX_DIFF_LINES) {
       conflict(m, o);
       return;
@@ -128,5 +127,7 @@ export function mergeText(
     baseLines.slice(fromBase),
     outsideLines.slice(fromOutside)
   );
-  return { text, conflicts };
+  return { conflicts, text };
 }
+
+export { mergeText };

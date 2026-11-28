@@ -18,7 +18,7 @@ function fakeMonacoModel() {
   const changed = (): void => listeners.forEach((l) => l());
   const kind = (s: string): 'none' | Eol | 'invalid' => {
     const lf = /(?<!\r)\n/.test(s);
-    const crlf = /\r\n/.test(s);
+    const crlf = s.includes('\r\n');
     const cr = /\r(?!\n)/.test(s);
     if (cr || (lf && crlf)) return 'invalid';
     return lf ? '\n' : crlf ? '\r\n' : 'none';
@@ -33,7 +33,7 @@ function fakeMonacoModel() {
       const lf = (body.match(/(?<!\r)\n/g) ?? []).length;
       const total = crlf + cr + lf;
       eol = total === 0 ? '\n' : cr + crlf > total / 2 ? '\r\n' : '\n';
-      text = body.replace(/\r\n|\r|\n/g, eol);
+      text = body.replaceAll(/\r\n|\r|\n/g, eol);
       calls.push('setText');
       changed();
     },
@@ -41,14 +41,14 @@ function fakeMonacoModel() {
       calls.push(`setEol:${JSON.stringify(next)}`);
       if (next !== eol) {
         eol = next;
-        text = text.replace(/\r\n|\r|\n/g, eol);
+        text = text.replaceAll(/\r\n|\r|\n/g, eol);
         changed();
       }
     },
     replace(start, end, inserted) {
       calls.push('replace');
       const k = kind(inserted);
-      const valid = k === 'none' || k === eol ? inserted : inserted.replace(/\r\n|\r|\n/g, eol);
+      const valid = k === 'none' || k === eol ? inserted : inserted.replaceAll(/\r\n|\r|\n/g, eol);
       text = text.slice(0, start) + valid + text.slice(end);
       changed();
     },
@@ -97,16 +97,15 @@ test('an outside write is its own undo step', () => {
   const { fake } = outsideWrite('a\nb\n', 'a\nB\n');
   const after = fake.calls.slice(fake.calls.indexOf('setText') + 1);
   assert.equal(after[0], 'stack');
-  assert.equal(after[after.length - 1], 'stack');
+  assert.equal(after.at(-1), 'stack');
   assert.ok(after.includes('replace'));
 });
 test('a line-ending switch is an undo step of its own, before the text edit', () => {
-  // Monaco records an edit's offsets against the buffer after the switch, but redo replays them on
-  // the buffer before it (textModel.js _applyRedo), so the two must not share an undo step.
+  // Monaco records an edit's offsets against the buffer after the switch, but redo replays them on the buffer before it (textModel.js _applyRedo), so the two must not share an undo step.
   const { fake } = outsideWrite('a\nb\nc', 'a\r\nb\r\nX');
   assert.deepEqual(fake.calls.slice(fake.calls.indexOf('setText') + 1), [
     'stack',
-    'setEol:"\\r\\n"',
+    String.raw`setEol:"\r\n"`,
     'stack',
     'replace',
     'stack',

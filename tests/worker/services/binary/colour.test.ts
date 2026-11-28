@@ -49,7 +49,7 @@ function downloading(home: string, logs: string[]): ResolveOptions {
     home,
     readVersionImpl: inHome(home),
     assets: () => asset,
-    fetchImpl: (async () => new Response(new Uint8Array(body))) as unknown as typeof fetch,
+    fetchImpl: async () => new Response(new Uint8Array(body)),
     log: (message) => logs.push(message),
   };
 }
@@ -81,16 +81,16 @@ test('finds the global config where PHPantom looks for it', () => {
     '/h/.config/phpantom_lsp/.phpantom.toml'
   );
   assert.equal(
-    globalConfigPath({ APPDATA: 'C:\\A' }, 'win32', 'C:\\u'),
-    'C:\\A\\phpantom_lsp\\.phpantom.toml'
+    globalConfigPath({ APPDATA: String.raw`C:\A` }, 'win32', String.raw`C:\u`),
+    String.raw`C:\A\phpantom_lsp\.phpantom.toml`
   );
   assert.equal(
-    globalConfigPath({ APPDATA: '' }, 'win32', 'C:\\u'),
-    'C:\\u\\AppData\\Roaming\\phpantom_lsp\\.phpantom.toml'
+    globalConfigPath({ APPDATA: '' }, 'win32', String.raw`C:\u`),
+    String.raw`C:\u\AppData\Roaming\phpantom_lsp\.phpantom.toml`
   );
   assert.equal(
-    globalConfigPath({ XDG_CONFIG_HOME: 'C:\\x' }, 'win32', 'C:\\u'),
-    'C:\\u\\AppData\\Roaming\\phpantom_lsp\\.phpantom.toml'
+    globalConfigPath({ XDG_CONFIG_HOME: String.raw`C:\x` }, 'win32', String.raw`C:\u`),
+    String.raw`C:\u\AppData\Roaming\phpantom_lsp\.phpantom.toml`
   );
 });
 
@@ -104,7 +104,7 @@ test('a download writes the full-colour global config when there is none', async
     assert.equal(readFileSync(config, 'utf8'), '[semantic-tokens]\nmode = "full"\n');
     assert.equal(FULL_COLOUR_CONFIG, '[semantic-tokens]\nmode = "full"\n');
     assert.equal(logs.length, 1);
-    assert.ok(logs[0]!.includes(config), logs[0]);
+    assert.ok(logs[0].includes(config), logs[0]);
   } finally {
     rmSync(home, { recursive: true, force: true });
   }
@@ -154,7 +154,7 @@ test('a config that cannot be written logs a warning and still starts PHPantom',
     const r = await resolveBinary(downloading(home, logs));
     assert.equal(r.ok && r.source, 'download');
     assert.equal(logs.length, 1);
-    assert.match(logs[0]!, /^Warning: /);
+    assert.match(logs[0], /^Warning: /);
   } finally {
     rmSync(home, { recursive: true, force: true });
   }
