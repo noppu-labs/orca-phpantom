@@ -1,3 +1,4 @@
+import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import {
   chmodSync,
@@ -11,6 +12,7 @@ import {
 import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { gzipSync } from 'node:zlib';
 
 import { assert, test } from 'orca/testing';
 
@@ -97,6 +99,60 @@ test('a pax header named like the member is skipped for the file entry', () => {
   ]);
   assert.equal(extractSingleFile(archive, 'tar.gz', 'phpantom_lsp').toString(), 'real-bytes');
 });
+/** A gzipped tar of one `other` entry whose size field reads `field`. */
+function tarWithSize(field: string): Buffer {
+  const raw = tar({ other: 'x' });
+  raw.fill(0, 124, 136);
+  raw.write(field, 124, 'ascii');
+  return gzipSync(raw);
+}
+
+for (const field of ['9', 'zz', '-1', '77777777777']) {
+  test(`a tar size of ${field} is a corrupt header`, () => {
+    assert.throws(
+      () => extractSingleFile(tarWithSize(field), 'tar.gz', 'phpantom_lsp'),
+      /corrupt tar header/u
+    );
+  });
+}
+
+// Runs in a child with a timeout, so a header that stops the walk from advancing fails the test instead of hanging it.
+test('a negative tar size is a corrupt header, not an endless loop', () => {
+  const extract = new URL('../../../../src/services/binary/extract.ts', import.meta.url).href;
+  const child = spawnSync(
+    process.execPath,
+    [
+      '--input-type=module',
+      '-e',
+      `const { extractSingleFile } = await import(process.argv[1]);
+       try { extractSingleFile(Buffer.from(process.argv[2], 'base64'), 'tar.gz', 'phpantom_lsp'); console.log('returned'); }
+       catch (error) { console.log(error.message); }`,
+      extract,
+      tarWithSize('-1000').toString('base64'),
+    ],
+    { encoding: 'utf8', timeout: 5000 }
+  );
+  assert.equal(child.signal, null, 'the extraction did not finish within 5 s');
+  assert.equal(child.stdout.trim(), 'corrupt tar header', child.stderr);
+});
+
+/** `archive` with its local data cut to `keep` bytes, the central directory and end record kept and pointed at. */
+function zipWithLocalCut(archive: Buffer, keep: number): Buffer {
+  const directoryAt = archive.readUInt32LE(archive.length - 22 + 16);
+  const cut = Buffer.concat([archive.subarray(0, keep), archive.subarray(directoryAt)]);
+  cut.writeUInt32LE(keep, cut.length - 22 + 16);
+  return cut;
+}
+
+for (const keep of [4, 46, 53]) {
+  test(`a zip whose local data is cut to ${keep} bytes is a corrupt entry`, () => {
+    assert.throws(
+      () => extractSingleFile(zipWithLocalCut(oneZip(), keep), 'zip', 'phpantom_lsp.exe'),
+      /corrupt zip entry/u
+    );
+  });
+}
+
 test('the generated tar refuses a name over 100 bytes', () => {
   assert.throws(() => tar({ ['n'.repeat(101)]: 'x' }), /over 100 bytes/u);
 });

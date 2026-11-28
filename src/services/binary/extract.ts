@@ -53,6 +53,8 @@ function fromTar(tar: Buffer, member: string): Buffer | null {
     );
     const type = String.fromCodePoint(header[TAR_TYPE_AT] || TAR_FILE_TYPE);
     const start = offset + TAR_BLOCK;
+    // Why: a negative or unreadable size would stop the walk from advancing, and a size past the end reads a short file.
+    if (!(size >= 0) || start + size > tar.length) throw new Error('corrupt tar header');
     const base = name.replace(/^\.\//u, '');
     if (type === '0' && base === member) {
       return Buffer.from(tar.subarray(start, start + size));
@@ -106,6 +108,8 @@ function fromZip(zip: Buffer, member: string): Buffer | null {
         ZIP_LOCAL_NAME_AT +
         zip.readUInt16LE(localOffset + ZIP_LOCAL_NAME_LENGTH_AT) +
         zip.readUInt16LE(localOffset + ZIP_LOCAL_EXTRA_LENGTH_AT);
+      // Why: an entry's data ends before the central directory, so data reaching this record is a cut or corrupt archive.
+      if (dataStart + compressedSize > at) throw new Error('corrupt zip entry');
       const data = zip.subarray(dataStart, dataStart + compressedSize);
       if (method === 0) {
         return Buffer.from(data);

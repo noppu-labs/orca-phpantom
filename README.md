@@ -1,5 +1,10 @@
 # PHP, Laravel, Symfony and WordPress for Orca
 
+[![ci](https://github.com/noppu-labs/orca-phpantom/actions/workflows/ci.yml/badge.svg)](https://github.com/noppu-labs/orca-phpantom/actions/workflows/ci.yml)
+[![license](https://img.shields.io/github/license/noppu-labs/orca-phpantom)](LICENSE)
+[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/noppu-labs/orca-phpantom/badge)](https://scorecard.dev/viewer/?uri=github.com/noppu-labs/orca-phpantom)
+<!-- OpenSSF Best Practices and Baseline badges go here once the project is registered -->
+
 This plugin opens PHP files, Blade templates and Drupal's PHP files (`.module`, `.theme` and the
 rest) in [Orca](https://github.com/stablyai/orca) with an editor backed by the
 [PHPantom](https://github.com/PHPantom-dev/phpantom_lsp) language server. PHPantom understands
@@ -226,6 +231,17 @@ To switch a file to PHPantom, use the view toggle at the top right of the editor
 
 The test runs behind this README, with checklists for what needs a person at the keyboard, are in
 [docs/smoke/v1-smoke.md](docs/smoke/v1-smoke.md) and [docs/smoke/frameworks-smoke.md](docs/smoke/frameworks-smoke.md).
+
+## Contributing
+
+Report bugs and request features in the
+[issue tracker](https://github.com/noppu-labs/orca-phpantom/issues). Report security problems
+privately, as [SECURITY.md](SECURITY.md) describes. Changes come in as pull requests.
+
+See [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md) for the local setup, the checks CI runs and how
+releases are cut. [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) describes how the plugin works and
+its interfaces, [docs/SECURITY_ASSESSMENT.md](docs/SECURITY_ASSESSMENT.md) the risks it guards
+against, and [docs/GOVERNANCE.md](docs/GOVERNANCE.md) who maintains it.
 
 ## Credits
 

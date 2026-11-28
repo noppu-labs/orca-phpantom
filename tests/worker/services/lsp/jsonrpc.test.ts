@@ -14,13 +14,17 @@ const frame = (message: object): Buffer => {
 function connect() {
   const sent: string[] = [];
   const notifications: { method: string; params: unknown }[] = [];
+  const errors: string[] = [];
   const connection = new RpcConnection((out) => sent.push(out), {
     onRequest: (method) => (method === 'workspace/configuration' ? [null] : undefined),
     onNotification: (method, params) => {
       notifications.push({ method, params });
     },
+    onError: (message) => {
+      errors.push(message);
+    },
   });
-  return { connection, sent, notifications };
+  return { connection, sent, notifications, errors };
 }
 
 test('a request resolves with the matching response', async () => {
@@ -169,8 +173,8 @@ test('a notification handler that throws is reported, and the next message in th
   assert.match(errors[0], /bad.*cannot read bad/u);
 });
 
-test('a batch or a bare value is skipped, and the next message still arrives', () => {
-  const { connection, notifications } = connect();
+test('a batch or a bare value is skipped and logged, and the next message still arrives', () => {
+  const { connection, notifications, errors } = connect();
   connection.feed(
     Buffer.concat([
       bare('[{"jsonrpc":"2.0","method":"batched"}]'),
@@ -182,13 +186,28 @@ test('a batch or a bare value is skipped, and the next message still arrives', (
     notifications.map((notification) => notification.method),
     ['good']
   );
+  assert.equal(errors.length, 2);
 });
 
-// Pins today's behaviour: a null body throws out of feed(). Making it skip is a separate fix.
-test('a null body throws out of feed', () => {
-  const { connection } = connect();
-  assert.throws(() => connection.feed(bare('null')), /body is null/u);
-});
+for (const [body, kind] of [
+  ['null', 'null'],
+  ['[]', 'an array'],
+  ['1', 'a number'],
+  ['"x"', 'a string'],
+  ['true', 'a boolean'],
+]) {
+  test(`a ${body} body is skipped and logged once, and the next message still arrives`, () => {
+    const { connection, notifications, errors } = connect();
+    connection.feed(
+      Buffer.concat([bare(body), frame({ jsonrpc: '2.0', method: 'after', params: {} })])
+    );
+    assert.deepEqual(
+      notifications.map((notification) => notification.method),
+      ['after']
+    );
+    assert.deepEqual(errors, [`skipped a message that is not a JSON object: ${kind}`]);
+  });
+}
 
 test('frames keep the envelope key order on the wire', async () => {
   const sent: string[] = [];
