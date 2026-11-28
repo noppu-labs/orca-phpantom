@@ -59,7 +59,7 @@ because plugin code cannot import npm packages. The diff function derives from P
 
 ## Monaco Editor
 
-`editor/dist` bundles [Monaco Editor](https://github.com/microsoft/monaco-editor) 0.57.0, released under
+`editor/dist` bundles [Monaco Editor](https://github.com/microsoft/monaco-editor) 0.58.0, released under
 the MIT License:
 
     The MIT License (MIT)
@@ -86,7 +86,7 @@ the MIT License:
 
 Monaco Editor in turn includes the components below in the code bundled here. The entries are copied
 from its `ThirdPartyNotices.txt` (the Node.js path library) or from the components' own license files
-(marked and DOMPurify, which Monaco's notices file does not cover in full). Components Monaco's notices
+(marked, DOMPurify and @vscode/diff, which Monaco's notices file does not cover in full). Components Monaco's notices
 list that are not in this bundle (TypeScript, JS Beautifier, the HTML 5.1 draft, Ionic documentation,
 vscode-swift) are left out.
 
@@ -170,7 +170,7 @@ Monaco's `vs/base/common/marked/marked.js` is marked 14.0.0. Its `LICENSE.md`:
 
 ### DOMPurify
 
-Monaco's `vs/base/browser/dompurify/dompurify.js` is DOMPurify 3.4.15, (c) Cure53 and other
+Monaco's `vs/base/browser/dompurify/dompurify.js` is DOMPurify 3.4.17, (c) Cure53 and other
 contributors, dual licensed under the Apache License 2.0 and the Mozilla Public License 2.0. This
 plugin uses it under the Apache License 2.0:
 
@@ -376,3 +376,30 @@ plugin uses it under the Apache License 2.0:
        WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
        See the License for the specific language governing permissions and
        limitations under the License.
+
+### @vscode/diff
+
+Monaco's `external/@vscode/diff` is @vscode/diff 0.0.2-145, (c) Microsoft Corporation, released under
+the MIT License. The editor worker bundles it for the advanced diff algorithm. Its `LICENSE`:
+
+    MIT License
+
+    Copyright (c) Microsoft Corporation.
+
+    Permission is hereby granted, free of charge, to any person obtaining a copy
+    of this software and associated documentation files (the "Software"), to deal
+    in the Software without restriction, including without limitation the rights
+    to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+    copies of the Software, and to permit persons to whom the Software is
+    furnished to do so, subject to the following conditions:
+
+    The above copyright notice and this permission notice shall be included in all
+    copies or substantial portions of the Software.
+
+    THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+    IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+    FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+    AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+    LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+    OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+    SOFTWARE
