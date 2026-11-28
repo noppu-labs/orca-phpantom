@@ -41,6 +41,26 @@ test('the plugin folder stays inside Orca install limits', () => {
   assert.ok(total <= 50 * MiB, `${total} bytes tracked, limit ${50 * MiB}`);
 });
 
+// Our own budget, below Orca's limits: Orca's directory holds a plugin for review in its size category, and the threshold is unpublished.
+// Raise a budget on purpose, in the change that needs the room, not to make a build pass.
+const TRACKED_BUDGET_BYTES = 6 * MiB;
+const EDITOR_DIST_BUDGET_BYTES = 5 * MiB;
+
+test('the plugin stays inside its size budget', () => {
+  const total = paths.reduce((sum, path) => sum + sizeOf(path), 0);
+  assert.ok(
+    total <= TRACKED_BUDGET_BYTES,
+    `${total} bytes tracked, budget ${TRACKED_BUDGET_BYTES}`
+  );
+  const dist = paths
+    .filter((path) => path.startsWith('editor/dist/'))
+    .reduce((sum, path) => sum + sizeOf(path), 0);
+  assert.ok(
+    dist <= EDITOR_DIST_BUDGET_BYTES,
+    `editor/dist is ${dist} bytes, budget ${EDITOR_DIST_BUDGET_BYTES}`
+  );
+});
+
 const BANNED_EXTENSIONS = new Set(
   (
     '.zip .tar .gz .tgz .bz2 .xz .zst .7z .rar .jar .war .apk .deb .rpm .dmg .iso ' +
