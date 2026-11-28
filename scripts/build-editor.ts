@@ -1,4 +1,4 @@
-import { readdirSync, rmSync, statSync } from 'node:fs';
+import { readdirSync, readFileSync, rmSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -38,6 +38,24 @@ await build({
 // Why a second build: the worker is loaded on its own and must not depend on the page's chunks.
 await build({ ...shared, entryPoints: { 'editor.worker': 'editor/src/editor.worker.ts' } });
 
+// Why: esbuild also writes the CSS of a split chunk to chunks/*.css, but no page loads those files.
+// One that only repeats main.css is deleted. One with rules of its own fails the build, because its styles would never apply.
+const fragments = (path: string): string[] =>
+  readFileSync(path, 'utf8')
+    .split('}')
+    .map((fragment) => fragment.trim())
+    .filter(Boolean);
+const pageRules = new Set(fragments(join(dist, 'main.css')));
+const strayCss: string[] = [];
+for (const entry of readdirSync(join(dist, 'chunks')).filter((name) => name.endsWith('.css'))) {
+  const path = join(dist, 'chunks', entry);
+  if (fragments(path).every((fragment) => pageRules.has(fragment))) {
+    rmSync(path);
+  } else {
+    strayCss.push(`chunks/${entry} has rules main.css lacks, and no page loads it`);
+  }
+}
+
 function files(dir: string): { bytes: number; path: string }[] {
   return readdirSync(dir).flatMap((entry) => {
     const full = join(dir, entry);
@@ -52,6 +70,7 @@ const total = built.reduce((sum, file) => sum + file.bytes, 0);
 // oxlint-disable-next-line eslint/no-console -- the build script reports the bundle size to the terminal that ran it
 console.log(`editor/dist: ${(total / BYTES_PER_MIB).toFixed(2)} MiB in ${built.length} files`);
 const problems = [
+  ...strayCss,
   ...built
     .filter((file) => file.bytes > MAX_FILE_BYTES)
     .map((file) => `${file.path} is over 10 MiB (${file.bytes} bytes)`),

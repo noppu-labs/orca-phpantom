@@ -103,7 +103,7 @@ Where things go:
 
 ## The editor build
 
-Orca installs a plugin as the files in its repository and runs no build step, and an editor frame loads only the plugin's own files, with no `node_modules`. So `scripts/build-editor.ts` bundles Monaco and `editor/src` into `editor/dist` with esbuild, and that output is committed. The build checks Orca's limits: no file over 10 MiB, at most 200 files. CI rebuilds it on every pull request and fails on any difference.
+Orca installs a plugin as the files in its repository and runs no build step, and an editor frame loads only the plugin's own files, with no `node_modules`. So `scripts/build-editor.ts` bundles Monaco and `editor/src` into `editor/dist` with esbuild, and that output is committed. The build deletes the CSS esbuild writes beside a split chunk, which no page loads, and fails if that CSS holds a rule `main.css` lacks. It checks Orca's limits: no file over 10 MiB, at most 200 files. `tests/ship-set.test.ts` keeps a size budget below those limits, 6 MiB for the tracked tree and 5 MiB for `editor/dist`. CI rebuilds it on every pull request and fails on any difference.
 
 ## Releases
 

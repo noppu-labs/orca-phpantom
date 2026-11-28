@@ -89,7 +89,7 @@ editor/
 │   ├── env.d.ts               # the __PHPANTOM_LANGUAGE__ global the pages set
 │   └── monaco-modules.d.ts    # types for Monaco's HTML language definition
 └── dist/                      # build output, committed
-scripts/build-editor.ts        # esbuild bundle into editor/dist, checks Orca's 10 MiB and 200-file limits
+scripts/build-editor.ts        # esbuild bundle into editor/dist, drops chunk CSS no page loads, checks Orca's 10 MiB and 200-file limits
 tests/
 ├── worker/                    # mirrors src/ (tests/worker/services/lsp/server.test.ts tests src/services/lsp/server.ts)
 ├── editor/                    # mirrors editor/src/
