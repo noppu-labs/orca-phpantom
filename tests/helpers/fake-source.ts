@@ -22,6 +22,7 @@ function source(initial: string, language: Language = 'php'): FakeSource {
   };
   const emit = (changes: SourceChange[], isFlush: boolean) => {
     version += 1;
+    // oxlint-disable-next-line unicorn/no-useless-spread -- a snapshot, so a listener that unsubscribes or subscribes while it runs does not change who hears this event
     for (const listener of [...listeners]) listener(changes, isFlush);
   };
   return {
@@ -34,7 +35,11 @@ function source(initial: string, language: Language = 'php'): FakeSource {
     getVersion: () => version,
     onChanges(listener) {
       listeners.add(listener);
-      return { dispose: () => void listeners.delete(listener) };
+      return {
+        dispose: () => {
+          listeners.delete(listener);
+        },
+      };
     },
     edit(start, end, insert) {
       const range = { start: positionAt(value, start), end: positionAt(value, end) };
@@ -44,7 +49,8 @@ function source(initial: string, language: Language = 'php'): FakeSource {
     editMany(edits) {
       const before = value;
       // As Monaco reports them: from the end of the document to the start, each against the old text.
-      const sorted = [...edits].sort((a, b) => b[0] - a[0]);
+      const sorted = [...edits];
+      sorted.sort((a, b) => b[0] - a[0]);
       const changes = sorted.map(([start, end, text]) => ({
         range: { start: positionAt(before, start), end: positionAt(before, end) },
         rangeLength: end - start,

@@ -33,19 +33,21 @@ const SOURCE_WORDS: Record<NonNullable<StatusState['source']>, string> = {
 /** Folds every running server into one state: the most urgent phase wins. */
 function aggregate(states: ServerState[]): StatusState {
   for (const phase of URGENCY) {
-    const matching = states.filter((s) => s.phase === phase);
+    const matching = states.filter((server) => server.phase === phase);
     if (matching.length === 0) {
       continue;
     }
     const state: StatusState = { phase };
     if (phase === 'indexing') {
-      const percents = matching.flatMap((s) => (s.percent === undefined ? [] : [s.percent]));
+      const percents = matching.flatMap((server) =>
+        server.percent === undefined ? [] : [server.percent]
+      );
       if (percents.length > 0) {
         state.percent = Math.min(...percents);
       }
     }
     if (phase === 'error') {
-      const message = matching.find((s) => s.message !== undefined)?.message;
+      const message = matching.find((server) => server.message !== undefined)?.message;
       if (message !== undefined) {
         state.message = message;
       }
@@ -113,6 +115,11 @@ function renderStatus(state: StatusState): StatusBarUpdate {
         tone: 'neutral',
         tooltip: `PHPantom${version}${source}, ready`,
       };
+    }
+    default: {
+      // Unreachable: aggregate() only gives these phases, and TypeScript checks every one has its case.
+      const unhandled: never = state.phase;
+      throw new TypeError(`no status for the phase ${String(unhandled)}`);
     }
   }
 }

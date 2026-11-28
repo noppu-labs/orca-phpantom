@@ -1,20 +1,23 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { posix, win32 } from 'node:path';
 
+import { isRecord } from '../../utils/json.ts';
+
 const FULL_COLOUR_CONFIG = '[semantic-tokens]\nmode = "full"\n';
 
 /** Where PHPantom reads its global `.phpantom.toml`, by the same rules as its `etcetera` base strategy. */
 function globalConfigPath(env: NodeJS.ProcessEnv, platform: string, home: string): string {
   if (platform === 'win32') {
+    const { APPDATA: appData } = env;
     return win32.join(
-      env.APPDATA || win32.join(home, 'AppData', 'Roaming'),
+      appData === undefined || appData === '' ? win32.join(home, 'AppData', 'Roaming') : appData,
       'phpantom_lsp',
       '.phpantom.toml'
     );
   }
   const xdg = env.XDG_CONFIG_HOME;
   return posix.join(
-    xdg && posix.isAbsolute(xdg) ? xdg : posix.join(home, '.config'),
+    xdg !== undefined && xdg !== '' && posix.isAbsolute(xdg) ? xdg : posix.join(home, '.config'),
     'phpantom_lsp',
     '.phpantom.toml'
   );
@@ -36,7 +39,7 @@ function writeFullColourDefault(
       `Wrote ${path} to turn on full colouring, because the plugin downloaded PHPantom and there was no global PHPantom config`
     );
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'EEXIST') {
+    if (isRecord(error) && error.code === 'EEXIST') {
       return;
     }
     log(

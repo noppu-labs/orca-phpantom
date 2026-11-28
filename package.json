@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "node scripts/build-editor.mjs",
+    "build": "node scripts/build-editor.ts",
     "test": "orca plugin test .",
     "typecheck": "tsc -p .",
     "lint": "oxlint",
@@ -20,5 +20,8 @@
     "oxlint": "^1.95.0",
     "oxlint-tsgolint": "^7.0.2009",
     "typescript": "^7.0.2"
+  },
+  "engines": {
+    "node": ">=22.18"
   }
 }

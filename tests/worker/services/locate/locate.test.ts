@@ -4,7 +4,7 @@ import { dirname, join } from 'node:path';
 
 import { assert, test } from 'orca/testing';
 
-import { PHP_EXTENSIONS, locateFile } from '../../../../src/services/locate/locate.ts';
+import { PHP_EXTENSIONS, locateFile, sharedLines } from '../../../../src/services/locate/locate.ts';
 
 const made: string[] = [];
 
@@ -334,6 +334,58 @@ test("a path remembered in a sibling worktree still attaches to the focused work
   }
 });
 
+test('a byte order mark does not stop a pending reveal path or a remembered path from matching', async () => {
+  const root = await tree({
+    'composer.json': '{}',
+    'vendor/x/Bom.php': `\uFEFF${SRC}`,
+    'vendor/x/Plain.php': SRC,
+  });
+  try {
+    for (const name of ['Bom.php', 'Plain.php']) {
+      const path = join(root, 'vendor/x', name);
+      assert.deepEqual(
+        await locateFile({ tiers: [[root]], candidates: [path], language: 'php', content: SRC }),
+        { status: 'found', path, root }
+      );
+      assert.deepEqual(
+        await locateFile({
+          tiers: [[root]],
+          candidates: [],
+          known: [path],
+          language: 'php',
+          content: SRC,
+        }),
+        { status: 'found', path, root }
+      );
+    }
+  } finally {
+    await cleanup();
+  }
+});
+
+test('a remembered path is placed under a workspace written with a trailing separator', async () => {
+  const root = await tree({ 'composer.json': '{}', 'vendor/x/Y.php': SRC });
+  try {
+    assert.deepEqual(
+      await locateFile({
+        tiers: [[`${root}/`]],
+        candidates: [],
+        known: [join(root, 'vendor/x/Y.php')],
+        language: 'php',
+        content: SRC,
+      }),
+      { status: 'found', path: join(root, 'vendor/x/Y.php'), root: `${root}/` }
+    );
+  } finally {
+    await cleanup();
+  }
+});
+
+test('likeness reads CRLF and LF lines alike', () => {
+  assert.equal(sharedLines('a\r\nb\r\nc\r\n', 'a\nb\nc\n'), 1);
+  assert.equal(sharedLines('a b c', 'a b c'), 0);
+});
+
 test('a remembered file with an identical copy beside it is still ambiguous', async () => {
   // Say the person duplicated an open file and opened the copy: it must not attach as the original.
   const root = await tree({ 'app/X.php': SRC, 'app/Y.php': SRC });
@@ -429,9 +481,59 @@ test("the manifest's php editor opens exactly the extensions the locator accepts
     await readFile(new URL('../../../../orca-plugin.json', import.meta.url), 'utf8')
   );
   const editors = manifest.contributes.customEditors as { id: string; extensions: string[] }[];
-  assert.deepEqual(
-    [...editors.find((editor) => editor.id === 'php')!.extensions].sort(),
-    [...PHP_EXTENSIONS].sort()
-  );
+  const opened = [...editors.find((editor) => editor.id === 'php')!.extensions];
+  const accepted = [...PHP_EXTENSIONS];
+  opened.sort();
+  accepted.sort();
+  assert.deepEqual(opened, accepted);
   assert.deepEqual(editors.find((editor) => editor.id === 'blade')!.extensions, ['.blade.php']);
+});
+
+test('a candidate that is missing or a folder is skipped, and the walk still finds the file', async () => {
+  const a = await tree({ 'app/Example.php': SRC, 'Folder.php/keep.txt': '' });
+  try {
+    assert.deepEqual(
+      await locateFile({
+        tiers: [[a]],
+        candidates: [join(a, 'Missing.php'), join(a, 'Folder.php')],
+        language: 'php',
+        content: SRC,
+      }),
+      { status: 'found', path: join(a, 'app/Example.php'), root: a }
+    );
+  } finally {
+    await cleanup();
+  }
+});
+
+test('hidden and skipped folders are never walked, and vendor is walked with no composer.json beside it', async () => {
+  const skipped = await tree({ '.hidden/x.php': SRC, 'node_modules/p/x.php': SRC });
+  const plain = await tree({ 'vendor/v/y.php': SRC });
+  try {
+    assert.deepEqual(
+      await locateFile({ tiers: [[skipped]], candidates: [], language: 'php', content: SRC }),
+      { status: 'none' }
+    );
+    assert.deepEqual(
+      await locateFile({ tiers: [[plain]], candidates: [], language: 'php', content: SRC }),
+      { status: 'found', path: join(plain, 'vendor/v/y.php'), root: plain }
+    );
+  } finally {
+    await cleanup();
+  }
+});
+
+test('a file of the same size with other text is found by likeness', async () => {
+  const lines = Array.from({ length: 20 }, (_, i) => `$line${i} = ${i};`);
+  const original = `${['<?php', ...lines].join('\n')}\n`;
+  const edited = original.replace('$line3 = 3;', '$line3 = 4;');
+  const a = await tree({ 'a.php': original });
+  try {
+    assert.deepEqual(
+      await locateFile({ tiers: [[a]], candidates: [], language: 'php', content: edited }),
+      { status: 'found', path: join(a, 'a.php'), root: a, approximate: true }
+    );
+  } finally {
+    await cleanup();
+  }
 });

@@ -15,25 +15,28 @@ function fakeMonacoModel() {
   let eol: Eol = '\n';
   const listeners = new Set<() => void>();
   const calls: string[] = [];
-  const changed = (): void => listeners.forEach((l) => l());
+  const changed = (): void => {
+    for (const listener of listeners) listener();
+  };
   const kind = (s: string): 'none' | Eol | 'invalid' => {
-    const lf = /(?<!\r)\n/.test(s);
+    const lf = /(?<!\r)\n/u.test(s);
     const crlf = s.includes('\r\n');
-    const cr = /\r(?!\n)/.test(s);
+    const cr = /\r(?!\n)/u.test(s);
     if (cr || (lf && crlf)) return 'invalid';
-    return lf ? '\n' : crlf ? '\r\n' : 'none';
+    if (lf) return '\n';
+    return crlf ? '\r\n' : 'none';
   };
   const port: ModelPort = {
     getText: () => text,
     getEol: () => eol,
     setText(value) {
       const body = value.startsWith('﻿') ? value.slice(1) : value;
-      const crlf = (body.match(/\r\n/g) ?? []).length;
-      const cr = (body.match(/\r(?!\n)/g) ?? []).length;
-      const lf = (body.match(/(?<!\r)\n/g) ?? []).length;
+      const crlf = (body.match(/\r\n/gu) ?? []).length;
+      const cr = (body.match(/\r(?!\n)/gu) ?? []).length;
+      const lf = (body.match(/(?<!\r)\n/gu) ?? []).length;
       const total = crlf + cr + lf;
-      eol = total === 0 ? '\n' : cr + crlf > total / 2 ? '\r\n' : '\n';
-      text = body.replaceAll(/\r\n|\r|\n/g, eol);
+      eol = total > 0 && cr + crlf > total / 2 ? '\r\n' : '\n';
+      text = body.replaceAll(/\r\n|\r|\n/gu, eol);
       calls.push('setText');
       changed();
     },
@@ -41,14 +44,14 @@ function fakeMonacoModel() {
       calls.push(`setEol:${JSON.stringify(next)}`);
       if (next !== eol) {
         eol = next;
-        text = text.replaceAll(/\r\n|\r|\n/g, eol);
+        text = text.replaceAll(/\r\n|\r|\n/gu, eol);
         changed();
       }
     },
     replace(start, end, inserted) {
       calls.push('replace');
       const k = kind(inserted);
-      const valid = k === 'none' || k === eol ? inserted : inserted.replaceAll(/\r\n|\r|\n/g, eol);
+      const valid = k === 'none' || k === eol ? inserted : inserted.replaceAll(/\r\n|\r|\n/gu, eol);
       text = text.slice(0, start) + valid + text.slice(end);
       changed();
     },
@@ -92,6 +95,13 @@ test('an outside write that switches LF to CRLF lands exactly', () => {
 test('mixed line endings unify the way Monaco would and never add lines', () => {
   const { view } = outsideWrite('a\nb\nc', 'a\r\nb\nc\r\nd\re');
   assert.equal(view.getValue(), 'a\r\nb\r\nc\r\nd\r\ne');
+});
+test('emoji beside the line ends do not change which line ending wins', () => {
+  assert.equal(
+    outsideWrite('😀\n😀', '😀\r\n😀\r\n😀\n😀').view.getValue(),
+    '😀\r\n😀\r\n😀\r\n😀'
+  );
+  assert.equal(outsideWrite('😀\r\n😀', '😀\n😀\n😀\r\n😀').view.getValue(), '😀\n😀\n😀\n😀');
 });
 test('an outside write is its own undo step', () => {
   const { fake } = outsideWrite('a\nb\n', 'a\nB\n');

@@ -6,11 +6,9 @@ import { frameHost } from './frame-host.ts';
 import { fromLspRange, toLspContentChange } from './lsp-convert.ts';
 import { installOpener } from './navigation.ts';
 import { clearNote, showNote } from './notes.ts';
-import {
-  registerEditingProviders,
-  registerReadingProviders,
-  showDiagnostics,
-} from './providers.ts';
+import { showDiagnostics } from './providers/diagnostics.ts';
+import { registerEditingProviders } from './providers/editing.ts';
+import { registerReadingProviders } from './providers/reading.ts';
 
 const NOTE = 'phpantom-attach';
 const BUSY_NOTE = 'phpantom-busy';
@@ -44,7 +42,7 @@ function showStatus(status: AttachStatus): void {
   switch (status.state) {
     case 'ready': {
       clearNote(NOTE);
-      return;
+      break;
     }
     case 'single-file': {
       showNote(
@@ -52,7 +50,7 @@ function showStatus(status: AttachStatus): void {
         "PHPantom couldn't tell which file this is, so only highlighting is on. It will try again after you save.",
         NOTE
       );
-      return;
+      break;
     }
     case 'remote': {
       showNote(
@@ -60,14 +58,17 @@ function showStatus(status: AttachStatus): void {
         `This file is on ${status.host}. PHPantom runs on this computer only, so only highlighting is on.`,
         NOTE
       );
-      return;
+      break;
     }
     case 'error': {
       showNote('warning', status.message, NOTE);
-      return;
+      break;
+    }
+    case 'pending': {
+      break;
     }
     default: {
-      return;
+      break;
     }
   }
 }
@@ -81,16 +82,17 @@ function attachLanguageServer(ctx: EditorContext): LspBridge {
   const unregister = (): void => {
     for (const registered of providers.splice(0)) registered.dispose();
   };
+  // Each on its own: a failure in one set leaves the others working.
+  const register = (what: string, run: () => { dispose: () => void }): void => {
+    try {
+      providers.push(run());
+    } catch (error) {
+      // oxlint-disable-next-line eslint/no-console -- last resort for a provider that failed to register: Orca copies a frame's console errors into orca plugin logs
+      console.error(`PHPantom ${what} failed to register`, error);
+    }
+  };
   bridge.onReady((status) => {
     unregister();
-    // Each on its own: a failure in one set leaves the others working.
-    const register = (what: string, run: () => { dispose: () => void }): void => {
-      try {
-        providers.push(run());
-      } catch (error) {
-        console.error(`PHPantom ${what} failed to register`, error);
-      }
-    };
     register('language features', () => registerReadingProviders(ctx, bridge, status.capabilities));
     register('navigation and edits', () =>
       registerEditingProviders(ctx, bridge, status.capabilities)
@@ -124,6 +126,7 @@ function attachLanguageServer(ctx: EditorContext): LspBridge {
     { once: true }
   );
   bridge.attach().catch((error: unknown) => {
+    // oxlint-disable-next-line eslint/no-console -- last resort for a failed attach: Orca copies a frame's console errors into orca plugin logs
     console.error('PHPantom attach failed', error);
   });
   return bridge;

@@ -154,7 +154,7 @@ test('a config that cannot be written logs a warning and still starts PHPantom',
     const r = await resolveBinary(downloading(home, logs));
     assert.equal(r.ok && r.source, 'download');
     assert.equal(logs.length, 1);
-    assert.match(logs[0], /^Warning: /);
+    assert.match(logs[0], /^Warning: /u);
   } finally {
     rmSync(home, { recursive: true, force: true });
   }
@@ -203,4 +203,15 @@ test('a copy downloaded earlier does not write the config again', async () => {
   } finally {
     rmSync(home, { recursive: true, force: true });
   }
+});
+
+test('a missing APPDATA or XDG_CONFIG_HOME falls back as an empty one does', () => {
+  assert.equal(
+    globalConfigPath({}, 'win32', String.raw`C:\u`),
+    String.raw`C:\u\AppData\Roaming\phpantom_lsp\.phpantom.toml`
+  );
+  assert.equal(
+    globalConfigPath({ XDG_CONFIG_HOME: undefined }, 'linux', '/h'),
+    '/h/.config/phpantom_lsp/.phpantom.toml'
+  );
 });

@@ -14,22 +14,26 @@ function fakeHtml() {
       ignoreCase: true,
       tokenizer: {
         root: [
-          [/(<)((?:[\w\-]+:)?[\w\-]+)/, ['delimiter', { token: 'tag', next: '@tag' }]],
-          [/(<\/)((?:[\w\-]+:)?[\w\-]+)/, ['delimiter', { token: 'tag', next: '@tag' }]],
-          [/</, 'delimiter'],
-          [/[^<]+/],
+          [/(?<open><)(?<tag>(?:[\w-]+:)?[\w-]+)/u, ['delimiter', { token: 'tag', next: '@tag' }]],
+          [
+            /(?<open><\/)(?<tag>(?:[\w-]+:)?[\w-]+)/u,
+            ['delimiter', { token: 'tag', next: '@tag' }],
+          ],
+          [/</u, 'delimiter'],
+          [/[^<]+/u],
         ],
         tag: [
-          [/\/?>/, 'delimiter', '@pop'],
-          [/"/, 'attribute.value', '@attributeValue'],
-          [/'([^']*)'/, 'attribute.value'],
-          [/[\w\-]+/, 'attribute.name'],
-          [/=/, 'delimiter'],
-          [/[ \t\r\n]+/],
+          [/\/?>/u, 'delimiter', '@pop'],
+          [/"/u, 'attribute.value', '@attributeValue'],
+          // oxlint-disable-next-line eslint/prefer-named-capture-group -- bladeGrammar finds this rule by its source, as Monaco's HTML grammar writes it
+          [/'([^']*)'/u, 'attribute.value'],
+          [/[\w-]+/u, 'attribute.name'],
+          [/[=]/u, 'delimiter'],
+          [/[ \t\r\n]+/u],
         ],
         attributeValue: [
-          [/"/, 'attribute.value', '@pop'],
-          [/[^"]+/, 'attribute.value'],
+          [/"/u, 'attribute.value', '@pop'],
+          [/[^"]+/u, 'attribute.value'],
         ],
       },
     },
@@ -177,4 +181,21 @@ test('the walker compiles `@@` to a literal `@`', () => {
   assert.equal(endphp.source, String.raw`^(?:@endphp\b)`);
   assert.match('@endphp', endphp);
   assert.ok(!endphp.test('@@endphp'));
+});
+test('leaves comments, the doctype and embedded script and style states without Blade rules', () => {
+  const html = fakeHtml();
+  const comment = [[/-->/u, 'comment', '@pop']];
+  const doctype = [[/>/u, 'metatag', '@pop']];
+  const scriptEmbedded = [[/<\/script/u, { token: '@rematch', next: '@pop' }]];
+  const tokenizer: Record<string, unknown[]> = {
+    ...html.language.tokenizer,
+    comment,
+    doctype,
+    scriptEmbedded,
+  };
+  const g = bladeGrammar({ ...html, language: { ...html.language, tokenizer } });
+  assert.deepEqual(g.language.tokenizer.comment, comment);
+  assert.deepEqual(g.language.tokenizer.doctype, doctype);
+  assert.deepEqual(g.language.tokenizer.scriptEmbedded, scriptEmbedded);
+  assert.match('{{ $x }}', firstRuleRegex(g, 'tag'));
 });

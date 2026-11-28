@@ -1,8 +1,14 @@
 // Keeps one editor's document attached to PHPantom through the worker: opens it in chunks, streams incremental changes, forwards LSP requests, and opens it again when the worker or its server restarts or the frame turns out to belong to another workspace.
 // No Monaco here, so Node can test it with fakes.
-import type { PluginRequestInput, PluginRequestOutput, PluginRequests } from 'orca';
+import type {
+  PluginPanelEvents,
+  PluginRequestInput,
+  PluginRequestOutput,
+  PluginRequests,
+} from 'orca';
 
 import type { AttachStatus, Language, LspContentChange, LspRange } from '../../src/protocol.ts';
+import { isTruthy } from '../../src/utils/json.ts';
 import { isRateLimited, Pacer } from './pacer.ts';
 import { chunkText, splitChanges } from './split.ts';
 
@@ -18,13 +24,16 @@ interface WorkspaceContext {
 }
 
 interface BridgeHost {
-  request: <K extends keyof PluginRequests>(
-    name: K,
-    input: PluginRequestInput<K>,
+  request: <Key extends keyof PluginRequests>(
+    name: Key,
+    input: PluginRequestInput<Key>,
     options?: { timeoutMs?: number; signal?: AbortSignal }
-  ) => Promise<PluginRequestOutput<K>>;
+  ) => Promise<PluginRequestOutput<Key>>;
   /** What the worker posts to this editor's panel; every frame of the editor hears every post. */
-  on: (event: string, handler: (payload: any) => void) => Disposable;
+  on: <Key extends keyof PluginPanelEvents>(
+    event: Key,
+    handler: (payload: PluginPanelEvents[Key]) => void
+  ) => Disposable;
   /** The focused workspace, which is not always this frame's: see the R2 notes on LspBridge. */
   readContext: () => Promise<WorkspaceContext | null>;
   /** Orca's `workspace.changed`, the current context first. Background frames hear it too. */
@@ -113,6 +122,21 @@ const VERSION_GUARDED = new Set([
 ]);
 // The last chunk waits for PHPantom to start, which can mean a cold index or a download.
 const LAST_CHUNK_TIMEOUT_MS = 120_000;
+// The timings an editor uses unless told otherwise (tests shorten them); BridgeOptions says what each is.
+const DEFAULT_SYNC_DELAY_MS = 400;
+const DEFAULT_RETRY_GAP_MS = 8000;
+const DEFAULT_MAX_RETRIES = 20;
+const DEFAULT_QUIET_MS = 2000;
+const DEFAULT_SAVE_DELAY_MS = 1000;
+const DEFAULT_REATTACH_GAP_MS = 5000;
+const DEFAULT_MOUNT_WINDOW_MS = 1500;
+const DEFAULT_SETTLE_MS = 1500;
+const DEFAULT_PING_MS = 20_000;
+const DEFAULT_BACKGROUND_QUIET_MS = 500;
+const DEFAULT_BACKGROUND_MIN_WAIT_MS = 250;
+const DEFAULT_USER_MAX_WAIT_MS = 3000;
+// The soonest a refresh is asked for after a background request was dropped.
+const REFRESH_MIN_DELAY_MS = 1000;
 
 interface Events {
   ready: Ready;
@@ -138,16 +162,22 @@ const messageOf = (error: unknown): string =>
 const isEmpty = (range: LspRange): boolean =>
   range.start.line === range.end.line && range.start.character === range.end.character;
 
+/**
+ * Whether `signal` has aborted; no signal never aborts.
+ * A function, so TypeScript does not keep `signal.aborted` narrowed to false across an await.
+ */
+const aborted = (signal: AbortSignal | undefined): boolean => signal?.aborted === true;
+
 /** Resolves after `ms`, or as soon as `signal` aborts. */
 async function sleep(ms: number, signal?: AbortSignal): Promise<void> {
   return new Promise((resolve) => {
-    const done = (): void => {
+    const timer = setTimeout(done, ms);
+    signal?.addEventListener('abort', done, { once: true });
+    function done(): void {
       clearTimeout(timer);
       signal?.removeEventListener('abort', done);
       resolve();
-    };
-    const timer = setTimeout(done, ms);
-    signal?.addEventListener('abort', done, { once: true });
+    }
   });
 }
 
@@ -167,9 +197,9 @@ function groupsOf(event: QueuedEvent): { groups: Group[]; lengthBefore: number }
   );
   const out: Group[] = [];
   let length = event.lengthAfter;
-  for (let i = groups.length - 1; i >= 0; i--) {
-    out[i] = { changes: groups[i], length };
-    for (const change of groups[i]) {
+  for (let index = groups.length - 1; index >= 0; index--) {
+    out[index] = { changes: groups[index], length };
+    for (const change of groups[index]) {
       if (!('range' in change)) {
         return null;
       }
@@ -205,7 +235,7 @@ class LspBridge {
   private readonly userMaxWaitMs: number;
   private readonly pacer: Pacer;
   private readonly subscriptions: Disposable[] = [];
-  private readonly listeners: { [K in keyof Events]: Set<(value: Events[K]) => void> } = {
+  private readonly listeners: { [Kind in keyof Events]: Set<(value: Events[Kind]) => void> } = {
     busy: new Set(),
     diagnostics: new Set(),
     ready: new Set(),
@@ -264,18 +294,18 @@ class LspBridge {
     this.host = host;
     this.source = source;
     this.docId = options.docId ?? crypto.randomUUID();
-    this.syncDelayMs = options.syncDelayMs ?? 400;
-    this.retryGapMs = options.retryGapMs ?? 8000;
-    this.maxRetries = options.maxRetries ?? 20;
-    this.quietMs = options.quietMs ?? 2000;
-    this.saveDelayMs = options.saveDelayMs ?? 1000;
-    this.reattachGapMs = options.reattachGapMs ?? 5000;
-    this.mountWindowMs = options.mountWindowMs ?? 1500;
-    this.settleMs = options.settleMs ?? 1500;
-    this.pingMs = options.pingMs ?? 20_000;
-    this.backgroundQuietMs = options.backgroundQuietMs ?? 500;
-    this.backgroundMinWaitMs = options.backgroundMinWaitMs ?? 250;
-    this.userMaxWaitMs = options.userMaxWaitMs ?? 3000;
+    this.syncDelayMs = options.syncDelayMs ?? DEFAULT_SYNC_DELAY_MS;
+    this.retryGapMs = options.retryGapMs ?? DEFAULT_RETRY_GAP_MS;
+    this.maxRetries = options.maxRetries ?? DEFAULT_MAX_RETRIES;
+    this.quietMs = options.quietMs ?? DEFAULT_QUIET_MS;
+    this.saveDelayMs = options.saveDelayMs ?? DEFAULT_SAVE_DELAY_MS;
+    this.reattachGapMs = options.reattachGapMs ?? DEFAULT_REATTACH_GAP_MS;
+    this.mountWindowMs = options.mountWindowMs ?? DEFAULT_MOUNT_WINDOW_MS;
+    this.settleMs = options.settleMs ?? DEFAULT_SETTLE_MS;
+    this.pingMs = options.pingMs ?? DEFAULT_PING_MS;
+    this.backgroundQuietMs = options.backgroundQuietMs ?? DEFAULT_BACKGROUND_QUIET_MS;
+    this.backgroundMinWaitMs = options.backgroundMinWaitMs ?? DEFAULT_BACKGROUND_MIN_WAIT_MS;
+    this.userMaxWaitMs = options.userMaxWaitMs ?? DEFAULT_USER_MAX_WAIT_MS;
     this.pacer = new Pacer({
       firstBackoffMs: options.firstBackoffMs,
       maxBackoffMs: options.maxBackoffMs,
@@ -349,30 +379,37 @@ class LspBridge {
   /** Sends `method` once queued changes are in; null when aborted, failed, held back, or (for edits) outdated. */
   public async ask(
     method: string,
-    params: Record<string, unknown>,
+    params: object,
     signal?: AbortSignal,
     options: AskOptions = {}
-  ): Promise<unknown | null> {
-    return (await this.askDetailed(method, params, signal, options))?.result ?? null;
+  ): Promise<unknown> {
+    const answer = await this.askDetailed(method, params, signal, options);
+    return answer?.result ?? null;
   }
 
   /** As `ask`, with how many items the worker cut from a list too large for Orca to carry. */
+  // oxlint-disable-next-line eslint/complexity -- one retry loop whose blocks return early or use more than two of the bridge's fields, so none moves out without redesigning the bridge
   public async askDetailed(
     method: string,
-    params: Record<string, unknown>,
+    params: object,
     signal?: AbortSignal,
     options: AskOptions = {}
   ): Promise<{ result: unknown; truncated: number } | null> {
     const kind = options.kind ?? 'user';
     const busy = (): void => {
       // oxlint-disable-next-line unicorn/no-useless-undefined -- emit() takes the payload as a required argument
-      if (!options.silent) this.emit('busy', undefined);
+      if (options.silent !== true) this.emit('busy', undefined);
     };
+    // A timeout of 0 or NaN is left out, so Orca's default applies.
+    const timeoutMs =
+      options.timeoutMs === undefined || options.timeoutMs === 0 || Number.isNaN(options.timeoutMs)
+        ? undefined
+        : options.timeoutMs;
     const requestOptions =
-      signal || options.timeoutMs
+      signal !== undefined || timeoutMs !== undefined
         ? {
             ...(signal ? { signal } : {}),
-            ...(options.timeoutMs ? { timeoutMs: options.timeoutMs } : {}),
+            ...(timeoutMs === undefined ? {} : { timeoutMs }),
           }
         : undefined;
     // Why: Monaco shifts a background answer by every edit made after it asked; one that holds them already would move twice.
@@ -381,7 +418,7 @@ class LspBridge {
     let reattached = false;
     let refused = false;
     for (;;) {
-      if (signal?.aborted || !this.attachedTo) return null;
+      if (aborted(signal) || this.attachedTo === null) return null;
       if (
         kind === 'user'
           ? !(await this.holdPassed(signal, options.silent))
@@ -392,8 +429,10 @@ class LspBridge {
       }
       await this.flush(true);
       const attachment = this.attachedTo;
-      const session = attachment?.session;
-      if (!attachment || !session || signal?.aborted) return null;
+      // Why compare with null: TypeScript still narrows `attachedTo` from before the flush, which can clear it.
+      // Why isTruthy: the session comes from the worker's JSON, where a null one is no session either.
+      if (attachment === null || !isTruthy(attachment.session) || aborted(signal)) return null;
+      const { session } = attachment;
       // Why: changes Orca refused are not in the worker's copy yet, so an answer would be about older text.
       if (this.unsent.length > 0) {
         if (kind === 'user') busy();
@@ -410,7 +449,7 @@ class LspBridge {
           requestOptions
         );
       } catch (error) {
-        if (signal?.aborted) return null;
+        if (aborted(signal)) return null;
         if (isRateLimited(error)) {
           if (kind === 'background') this.refreshLater();
           if (kind !== 'user') return null;
@@ -424,7 +463,7 @@ class LspBridge {
         if (codeOf(error) !== 'unavailable') return null;
         answer = { detached: true };
       }
-      if (signal?.aborted) return null;
+      if (aborted(signal)) return null;
       if ('detached' in answer) {
         if (reattached) return null;
         reattached = true;
@@ -450,7 +489,7 @@ class LspBridge {
     range: LspRange
   ): Promise<PluginRequestOutput<'phpantom.navigate'> | null> {
     const session = this.attachedTo?.session;
-    if (!session) return null;
+    if (session === undefined || !isTruthy(session)) return null;
     return this.userCall(async () =>
       this.send('phpantom.navigate', { docId: this.docId, range, session, uri })
     );
@@ -462,7 +501,7 @@ class LspBridge {
     signal?: AbortSignal
   ): Promise<PluginRequestOutput<'phpantom.peek'> | null> {
     const session = this.attachedTo?.session;
-    if (!session || signal?.aborted) return null;
+    if (session === undefined || !isTruthy(session) || aborted(signal)) return null;
     return this.userCall(
       async () =>
         this.send(
@@ -531,14 +570,16 @@ class LspBridge {
 
   /** The answer of `run`, or of whatever attempt superseded it. */
   private async settled(run: Promise<AttachStatus | null>): Promise<AttachStatus> {
-    let status = await run;
-    while (status === null && !this.disposed && this.latest && this.latest !== run) {
-      run = this.latest;
-      status = await run;
+    let attempt = run;
+    let status = await attempt;
+    while (status === null && !this.disposed && this.latest !== null && this.latest !== attempt) {
+      attempt = this.latest;
+      status = await attempt;
     }
     return status ?? this.current ?? { message: 'PHPantom: the editor closed', state: 'error' };
   }
 
+  // oxlint-disable-next-line eslint/complexity -- the chunk loop returns null from open() itself and the ready branch sets six fields, so no block moves out without redesigning the bridge
   private async open(generation: number, resync: boolean): Promise<AttachStatus | null> {
     if (generation !== this.generation || this.disposed) return null;
     const { context } = this;
@@ -579,10 +620,12 @@ class LspBridge {
             break;
           } catch (error) {
             // Orca refused the chunk before the worker saw it: the same chunk goes again after the hold.
+            // oxlint-disable-next-line eslint/max-depth -- the rate-limit check sits in try, for, for and catch, and its throw must reach open()'s outer catch
             if (!isRateLimited(error) || generation !== this.generation || this.disposed) {
               throw error;
             }
             await sleep(Math.max(this.pacer.wait(), 1));
+            // oxlint-disable-next-line eslint/max-depth -- the chunk retry sits in try, for, for and catch, and its return null leaves open() itself, so it stays inline
             if (generation !== this.generation || this.disposed) return null;
           }
         }
@@ -711,10 +754,12 @@ class LspBridge {
   // Why: Orca remounts an editor frame (with a new docId) each time its tab shows, and the old frame's pagehide close may never reach the worker, so the worker releases what it stops hearing from.
   private startPinging(): void {
     if (this.pingTimer !== undefined || this.disposed) return;
-    const timer: { unref?: () => void } | number = setInterval(() => void this.ping(), this.pingMs);
+    const timer = setInterval(() => {
+      void this.ping();
+    }, this.pingMs);
     // Why: under Node (the tests) a bridge never disposed must not keep the process alive; a browser timer is a number.
     if (typeof timer === 'object') timer.unref?.();
-    this.pingTimer = timer as ReturnType<typeof setInterval>;
+    this.pingTimer = timer;
   }
 
   private stopPinging(): void {
@@ -781,7 +826,9 @@ class LspBridge {
     for (;;) {
       const due = Math.max(this.mountedAt, this.lastSwitchAt) + this.settleMs - Date.now();
       if (due <= 0) break;
-      await new Promise((resolve) => setTimeout(resolve, due));
+      await new Promise((resolve) => {
+        setTimeout(resolve, due);
+      });
       if (this.disposed) return;
     }
     const context = await this.host.readContext().catch(() => null);
@@ -850,12 +897,13 @@ class LspBridge {
         groups = this.unsent;
         this.unsent = [];
       } else {
-        if (this.queue.length === 0) return;
         // Every queued event in one go: their changes apply one after another, as LSP applies a list.
         const events = this.queue.splice(0);
+        const last = events.at(-1);
+        if (last === undefined) return;
         const split = groupsOf({
           changes: events.flatMap((event) => event.changes),
-          lengthAfter: events.at(-1)!.lengthAfter,
+          lengthAfter: last.lengthAfter,
         });
         // Why check the start: a length that does not chain on from the last one means the queue missed something.
         if (!split || split.lengthBefore !== this.sentLength) {
@@ -881,21 +929,10 @@ class LspBridge {
             version: this.version + 1,
           });
         } catch (error) {
-          if (generation !== this.generation) return;
-          // Refused before the worker saw it, so it did not land: send the same groups after the hold.
-          if (isRateLimited(error)) {
-            this.holdBack(groups.slice(index));
-            return;
-          }
-          if (codeOf(error) === 'unavailable') {
-            this.lost();
-            return;
-          }
-          // Whether it landed is unknown, so send the whole text.
-          this.resyncNext();
+          if (this.changeFailed(error, generation, groups, index) === 'stop') return;
           break;
         }
-        if (generation !== this.generation || !this.attachedTo) return;
+        if (generation !== this.generation || this.attachedTo === null) return;
         if ('detached' in answer) {
           this.lost();
           return;
@@ -909,6 +946,28 @@ class LspBridge {
       }
       if (!drain && !held && !this.needsResync) return;
     }
+  }
+
+  /** After a change that threw: `stop` ends the sync, `resync` leaves the groups to send the whole text. */
+  private changeFailed(
+    error: unknown,
+    generation: number,
+    groups: Group[],
+    index: number
+  ): 'resync' | 'stop' {
+    if (generation !== this.generation) return 'stop';
+    // Refused before the worker saw it, so it did not land: send the same groups after the hold.
+    if (isRateLimited(error)) {
+      this.holdBack(groups.slice(index));
+      return 'stop';
+    }
+    if (codeOf(error) === 'unavailable') {
+      this.lost();
+      return 'stop';
+    }
+    // Whether it landed is unknown, so send the whole text.
+    this.resyncNext();
+    return 'resync';
   }
 
   private holdBack(groups: Group[]): void {
@@ -925,11 +984,11 @@ class LspBridge {
   // --- pacing ---
 
   /** Every call to the worker goes through here, so the pacer sees each one and every refusal. */
-  private async send<K extends keyof PluginRequests>(
-    name: K,
-    input: PluginRequestInput<K>,
+  private async send<Key extends keyof PluginRequests>(
+    name: Key,
+    input: PluginRequestInput<Key>,
     options?: { timeoutMs?: number; signal?: AbortSignal }
-  ): Promise<PluginRequestOutput<K>> {
+  ): Promise<PluginRequestOutput<Key>> {
     try {
       const output = await this.host.request(name, input, options);
       this.pacer.succeeded();
@@ -950,7 +1009,7 @@ class LspBridge {
           this.emit('refresh', ['semanticTokens', 'inlayHints']);
         }
       },
-      Math.max(this.pacer.wait(), 1000)
+      Math.max(this.pacer.wait(), REFRESH_MIN_DELAY_MS)
     );
   }
 
@@ -964,17 +1023,20 @@ class LspBridge {
       return false;
     }
     await sleep(hold, signal);
-    return !signal?.aborted && !this.disposed;
+    return !aborted(signal) && !this.disposed;
   }
 
   /** A user call: after the hold, and once more if Orca refuses it; null when it fails. */
-  private async userCall<T>(run: () => Promise<T>, signal?: AbortSignal): Promise<T | null> {
+  private async userCall<Result>(
+    run: () => Promise<Result>,
+    signal?: AbortSignal
+  ): Promise<Result | null> {
     for (let refused = false; ; refused = true) {
       if (!(await this.holdPassed(signal))) return null;
       try {
         return await run();
       } catch (error) {
-        if (!isRateLimited(error) || signal?.aborted) return null;
+        if (!isRateLimited(error) || aborted(signal)) return null;
         if (refused) {
           // oxlint-disable-next-line unicorn/no-useless-undefined -- emit() takes the payload as a required argument
           this.emit('busy', undefined);
@@ -991,7 +1053,9 @@ class LspBridge {
   private async typingPaused(version: number, signal?: AbortSignal): Promise<boolean> {
     const started = Date.now();
     for (;;) {
-      if (signal?.aborted || this.disposed || this.source.getVersion() !== version) return false;
+      if (aborted(signal) || this.disposed || this.source.getVersion() !== version) {
+        return false;
+      }
       const settledIn =
         Math.max(this.lastChangeAt + this.backgroundQuietMs, started + this.backgroundMinWaitMs) -
         Date.now();
@@ -1003,7 +1067,7 @@ class LspBridge {
   // --- plumbing ---
 
   // oxlint-disable-next-line typescript/promise-function-async -- returns the lane promise itself; an async wrapper lets the next lane job run before the caller resumes
-  private inLane<T>(job: () => Promise<T>): Promise<T> {
+  private inLane<Result>(job: () => Promise<Result>): Promise<Result> {
     const run = this.lane.then(job, job);
     this.lane = run.catch(() => {});
     return run;
@@ -1014,20 +1078,26 @@ class LspBridge {
     this.emit('status', status);
   }
 
-  private listen<K extends keyof Events>(
-    kind: K,
-    listener: (value: Events[K]) => void
+  private listen<Kind extends keyof Events>(
+    kind: Kind,
+    listener: (value: Events[Kind]) => void
   ): Disposable {
     const set = this.listeners[kind];
     set.add(listener);
-    return { dispose: () => void set.delete(listener) };
+    return {
+      dispose: () => {
+        set.delete(listener);
+      },
+    };
   }
 
-  private emit<K extends keyof Events>(kind: K, value: Events[K]): void {
+  private emit<Kind extends keyof Events>(kind: Kind, value: Events[Kind]): void {
+    // oxlint-disable-next-line unicorn/no-useless-spread -- a snapshot, so a listener that unsubscribes or subscribes while it runs does not change who hears this event
     for (const listener of [...this.listeners[kind]]) {
       try {
         listener(value);
       } catch (error) {
+        // oxlint-disable-next-line eslint/no-console -- last resort for a listener that threw: Orca copies a frame's console errors into orca plugin logs
         console.error(`PHPantom ${kind} listener failed`, error);
       }
     }

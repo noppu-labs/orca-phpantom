@@ -10,7 +10,8 @@ interface WorkspaceRow {
   hostId: string | null;
 }
 
-const WSL_PATH = /^(\\\\|\/\/)wsl(\.localhost|\$)[\\/]/i;
+// Why the cases are spelled out: with `i`, unicode mode would also fold U+017F (ſ) to `s`.
+const WSL_PATH = /^(?:\\\\|\/\/)[Ww][Ss][Ll](?:\.[Ll][Oo][Cc][Aa][Ll][Hh][Oo][Ss][Tt]|\$)[\\/]/u;
 
 /** A workspace on this machine: host `local` or none recorded, and not a WSL share. */
 function isLocal(row: WorkspaceRow): boolean {
@@ -72,13 +73,17 @@ function composerRoot(
     directory = parent;
   }
   // Why outermost first: the project's own vendor folder is the one nearest the workspace.
-  for (let i = chain.length - 1; i >= 0; i--) {
-    const parent = dirname(chain[i]);
-    if (basename(chain[i]) === 'vendor' && contains(workspacePath, parent) && hasComposer(parent)) {
+  for (let index = chain.length - 1; index >= 0; index--) {
+    const parent = dirname(chain[index]);
+    if (
+      basename(chain[index]) === 'vendor' &&
+      contains(workspacePath, parent) &&
+      hasComposer(parent)
+    ) {
       return parent;
     }
   }
-  return chain.find(hasComposer) ?? workspacePath;
+  return chain.find((folder) => hasComposer(folder)) ?? workspacePath;
 }
 
 /** The local row with the longest path that contains the file. */

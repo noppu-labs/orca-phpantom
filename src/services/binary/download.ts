@@ -12,7 +12,7 @@ async function downloadVerified(
   }
   const hash = createHash('sha256');
   const chunks: Buffer[] = [];
-  for await (const chunk of response.body as unknown as AsyncIterable<Uint8Array>) {
+  for await (const chunk of response.body) {
     hash.update(chunk);
     chunks.push(Buffer.from(chunk));
   }

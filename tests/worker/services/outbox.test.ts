@@ -165,6 +165,25 @@ test('a status message too long for a post is shortened', async () => {
   outbox.dispose();
 });
 
+test('an oversized diagnostics post without a list is skipped, and the others still go out', async () => {
+  const posts: Sent[] = [];
+  const outbox = new Outbox(
+    (event, payload, options) => posts.push({ event, payload, panel: options.panel, at: 0 }),
+    { delayMs: 0, maxBytes: 1024 }
+  );
+  outbox.send('panel-1', 'diag:d1', 'phpantom.diagnostics', {
+    docId: 'd1',
+    note: 'x'.repeat(4096),
+  });
+  outbox.send('panel-1', 'status:d1', 'phpantom.status', { docId: 'd1', state: 'stopped' });
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  assert.deepEqual(
+    posts.map((post) => post.event),
+    ['phpantom.status']
+  );
+  outbox.dispose();
+});
+
 test('a later send with the same key replaces the queued payload', async () => {
   const posts: Sent[] = [];
   const outbox = new Outbox(

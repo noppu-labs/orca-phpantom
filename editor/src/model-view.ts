@@ -3,6 +3,7 @@
 // Monaco keeps one line ending per model and rewrites any inserted text whose line endings are of another kind (pieceTreeTextBuffer.js), and it keeps a UTF-8 BOM out of `getValue()`.
 // A raw splice of Orca's text can therefore cut a `\r\n` pair and leave an extra line.
 // So an outside write is applied as Orca's whole new text: switch the model to the line ending Monaco would pick for it, then apply the smallest edit between texts that use that one line ending.
+import { CARRIAGE_RETURN, LINE_FEED } from '../../src/constants/characters.ts';
 import { smallestEdit, type Splice } from './edits.ts';
 import type { TextView } from './sync.ts';
 
@@ -33,13 +34,13 @@ type ModelView = TextView & {
 function monacoEol(text: string, fallback: Eol): Eol {
   let breaks = 0;
   let withCr = 0;
-  for (let i = 0; i < text.length; i++) {
-    const code = text.charCodeAt(i);
-    if (code === 13) {
+  for (let index = 0; index < text.length; index++) {
+    const code = text.codePointAt(index);
+    if (code === CARRIAGE_RETURN) {
       breaks += 1;
       withCr += 1;
-      if (text.charCodeAt(i + 1) === 10) i += 1;
-    } else if (code === 10) {
+      if (text.codePointAt(index + 1) === LINE_FEED) index += 1;
+    } else if (code === LINE_FEED) {
       breaks += 1;
     }
   }
@@ -47,7 +48,7 @@ function monacoEol(text: string, fallback: Eol): Eol {
   return withCr > breaks / 2 ? '\r\n' : '\n';
 }
 
-const normalizeEol = (text: string, eol: Eol): string => text.replaceAll(/\r\n|\r|\n/g, eol);
+const normalizeEol = (text: string, eol: Eol): string => text.replaceAll(/\r\n|\r|\n/gu, eol);
 
 function modelView(port: ModelPort): ModelView {
   let bom = '';
@@ -109,5 +110,5 @@ function modelView(port: ModelPort): ModelView {
   return view;
 }
 
-export { monacoEol, normalizeEol, modelView };
+export { modelView };
 export type { Eol, ModelPort, ModelView };

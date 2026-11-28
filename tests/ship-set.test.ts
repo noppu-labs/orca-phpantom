@@ -101,7 +101,7 @@ function refusal({ mode, path }: Tracked): string | undefined {
 test('no tracked file is one the Orca plugin indexer refuses', () => {
   const refused = tracked.flatMap((file) => {
     const reason = refusal(file);
-    return reason ? [`${file.path}: ${reason}`] : [];
+    return reason === undefined || reason === '' ? [] : [`${file.path}: ${reason}`];
   });
   assert.deepEqual(refused, [], `refused by the indexer:\n${refused.join('\n')}`);
 });
@@ -123,7 +123,7 @@ test('editor entries and the files they load stay under 10 MiB, transpiled sourc
   for (const path of under(['editor/pages/', 'editor/dist/'])) {
     assert.ok(sizeOf(path) <= 10 * MiB, `${path} is over 10 MiB`);
   }
-  for (const path of under(['src/', 'editor/src/']).filter((p) => /\.m?ts$/.test(p))) {
+  for (const path of under(['src/', 'editor/src/']).filter((p) => /\.m?ts$/u.test(p))) {
     assert.ok(sizeOf(path) <= MiB, `${path} is over 1 MiB`);
   }
 });
@@ -131,5 +131,5 @@ test('editor entries and the files they load stay under 10 MiB, transpiled sourc
 test('orca-plugin.json and package.json carry the same version', () => {
   const { version } = json('orca-plugin.json');
   assert.equal(version, json('package.json').version);
-  assert.match(version, /^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$/);
+  assert.match(version, /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/u);
 });

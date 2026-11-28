@@ -10,7 +10,7 @@ import {
   PeekModels,
   peekBatch,
 } from '../../editor/src/navigation.ts';
-import { renameReachesOtherFiles } from '../../editor/src/providers.ts';
+import { renameReachesOtherFiles } from '../../editor/src/providers/editing.ts';
 
 const r = (
   startLineNumber: number,
@@ -52,7 +52,11 @@ function recorder(limit?: number) {
   const disposed: string[] = [];
   const peek = new PeekModels((uri) => {
     made.push(uri);
-    return { dispose: () => void disposed.push(uri) };
+    return {
+      dispose: () => {
+        disposed.push(uri);
+      },
+    };
   }, limit);
   return { made, disposed, peek };
 }
@@ -81,7 +85,8 @@ test('disposing drops every peek model', () => {
   const { disposed, peek } = recorder();
   peek.ensure([file('a'), file('b')]);
   peek.dispose();
-  assert.deepEqual(disposed.sort(), ['file:///w/a.php', 'file:///w/b.php']);
+  disposed.sort();
+  assert.deepEqual(disposed, ['file:///w/a.php', 'file:///w/b.php']);
   assert.equal(peek.has('file:///w/a.php'), false);
 });
 

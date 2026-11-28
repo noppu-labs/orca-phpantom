@@ -19,7 +19,8 @@ type AttachStatus =
       approximate?: true;
       reveal?: LspRange;
     }
-  | { state: 'pending' } // More chunks expected
+  // More chunks are expected.
+  | { state: 'pending' }
   | { state: 'single-file'; reason: 'no-file' | 'ambiguous' }
   | { state: 'remote'; host: string }
   | { state: 'error'; message: string };
@@ -50,7 +51,7 @@ declare module 'orca' {
       output: { ok: true } | { detached: true } | { resync: true };
     };
     'phpantom.request': {
-      input: { docId: string; session: string; method: string; params: Record<string, unknown> };
+      input: { docId: string; session: string; method: string; params: object };
       output: { result: unknown; truncated?: number } | { detached: true } | { error: string };
     };
     'phpantom.close': { input: { docId: string }; output: { ok: true } };

@@ -1,6 +1,7 @@
 // Orca refuses frame calls past 120 in 10 s, counted per plugin across all its tabs and windows, with `rate_limited` ("too many panel requests"; Orca 1.4.278 sends no retryAfterMs with it).
 // This keeps one editor's share of that budget and holds its calls back after a refusal.
 // No Monaco here.
+import { isRecord } from '../../src/utils/json.ts';
 
 interface PacerOptions {
   windowMs?: number;
@@ -13,6 +14,11 @@ interface PacerOptions {
 }
 
 const MIN_HOLD_MS = 250;
+// Orca's window, and this editor's share of it and its backoff, unless told otherwise.
+const DEFAULT_WINDOW_MS = 10_000;
+const DEFAULT_PASSIVE_CAP = 50;
+const DEFAULT_FIRST_BACKOFF_MS = 1000;
+const DEFAULT_MAX_BACKOFF_MS = 10_000;
 
 const isRateLimited = (error: unknown): boolean =>
   typeof error === 'object' &&
@@ -31,10 +37,10 @@ class Pacer {
   private backoff = 0;
 
   public constructor(options: PacerOptions = {}) {
-    this.windowMs = options.windowMs ?? 10_000;
-    this.passiveCap = options.passiveCap ?? 50;
-    this.firstBackoffMs = options.firstBackoffMs ?? 1000;
-    this.maxBackoffMs = options.maxBackoffMs ?? 10_000;
+    this.windowMs = options.windowMs ?? DEFAULT_WINDOW_MS;
+    this.passiveCap = options.passiveCap ?? DEFAULT_PASSIVE_CAP;
+    this.firstBackoffMs = options.firstBackoffMs ?? DEFAULT_FIRST_BACKOFF_MS;
+    this.maxBackoffMs = options.maxBackoffMs ?? DEFAULT_MAX_BACKOFF_MS;
     this.now = options.now ?? Date.now;
   }
 
@@ -56,7 +62,7 @@ class Pacer {
     const now = this.now();
     // Why not escalate during a hold: calls already in flight when it began come back refused too.
     if (now < this.blockedUntil) return this.blockedUntil - now;
-    const given = (error as { retryAfterMs?: unknown } | null)?.retryAfterMs;
+    const given = isRecord(error) ? error.retryAfterMs : undefined;
     let hold: number;
     if (typeof given === 'number' && Number.isFinite(given) && given >= 0) {
       // Why clamp: 0 would retry in a tight loop, and a huge value would stall the editor for good.

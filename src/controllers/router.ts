@@ -7,6 +7,8 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import type { PluginRequests } from 'orca';
 
+import { ORCA_NUMBER_BYTES, ORCA_SLOT_BYTES } from '../constants/orca-measure.ts';
+import { BYTES_PER_KIB } from '../constants/units.ts';
 import type { AttachStatus } from '../protocol.ts';
 import { resolveBinary, type Resolution } from '../services/binary/resolve.ts';
 import { locateFile } from '../services/locate/locate.ts';
@@ -27,8 +29,9 @@ import {
   type ServerState,
   type StatusBarUpdate,
 } from '../services/status.ts';
+import { isRecord } from '../utils/json.ts';
 import { fitsIn, leadingThatFit, orcaSize } from '../utils/size.ts';
-import { sameUri, uriKey } from '../utils/uri.ts';
+import { isFileUri, sameUri, uriKey } from '../utils/uri.ts';
 
 interface RouterHost {
   /** May answer from a short cache; `fresh` asks Orca again. */
@@ -54,8 +57,8 @@ interface RouterOptions {
   now?: () => number;
 }
 
-type Input<K extends keyof PluginRequests> = PluginRequests[K]['input'];
-type Output<K extends keyof PluginRequests> = PluginRequests[K]['output'];
+type Input<Name extends keyof PluginRequests> = PluginRequests[Name]['input'];
+type Output<Name extends keyof PluginRequests> = PluginRequests[Name]['output'];
 
 interface Entry {
   root: string;
@@ -103,8 +106,12 @@ interface Doc {
   lastSeen: number;
 }
 
+const MS_PER_SECOND = 1000;
+const MS_PER_MINUTE = 60_000;
+
 // Orca takes an answer of at most 1 MiB and 10,000 objects by its own measure (see size.ts); this leaves room for what the measure may miss.
-const ANSWER_LIMIT = { bytes: 900 * 1024, objects: 9000 };
+const ANSWER_LIMIT_KIB = 900;
+const ANSWER_LIMIT = { bytes: ANSWER_LIMIT_KIB * BYTES_PER_KIB, objects: 9000 };
 // Lists whose leading items are still a useful answer. Never edits: half a formatting is a broken file.
 const CUTTABLE_LISTS = new Set([
   'textDocument/references',
@@ -120,16 +127,22 @@ const CUTTABLE_LISTS = new Set([
 const PEEK_MAX_FILES = 25;
 // Files attached before, tried again when a tab of theirs is shown: a new frame must locate its file anew, and the walk never reaches Composer's vendor folder, where go to definition often leads.
 const REMEMBERED_FILES = 50;
-const PEEK_MAX_BYTES = 600 * 1024;
-const IDLE_MS = 10 * 60_000;
+const PEEK_MAX_KIB = 600;
+const PEEK_MAX_BYTES = PEEK_MAX_KIB * BYTES_PER_KIB;
+const IDLE_MINUTES = 10;
+const IDLE_MS = IDLE_MINUTES * MS_PER_MINUTE;
 // Why a lease: an editor frame that remounts (Orca does on every tab show) or dies never sends its close.
 // The editor pings every 20 s; three minutes is nine missed pings, room for a busy or throttled frame.
-const LEASE_MS = 3 * 60_000;
+const LEASE_MINUTES = 3;
+const LEASE_MS = LEASE_MINUTES * MS_PER_MINUTE;
 const SWEEP_MS = 15_000;
 // A failed lookup or download is kept this long, so tabs retrying (on show, after typing) do not download in a loop.
-const FAILED_BINARY_MS = 2 * 60_000;
+const FAILED_BINARY_MS = 2 * MS_PER_MINUTE;
 const STATUS_INTERVAL_MS = 1000;
-const RESTART_WINDOW_MS = 5 * 60_000;
+const RESTART_WINDOW_MINUTES = 5;
+const RESTART_WINDOW_MS = RESTART_WINDOW_MINUTES * MS_PER_MINUTE;
+// A full semantic tokens answer gives five numbers per token.
+const NUMBERS_PER_TOKEN = 5;
 const MAX_RESTARTS = 3;
 
 const SOURCE_WORDS: Record<string, string> = {
@@ -146,6 +159,21 @@ const messageOf = (error: unknown): string =>
 function inside(root: string, path: string): boolean {
   const rel = relative(root, path);
   return rel === '' || (!rel.startsWith('..') && !isAbsolute(rel));
+}
+
+/** The branch and name an editor sent, which find its workspace when the id is not in the list; both or nothing. */
+function focusContext(
+  input: Input<'phpantom.open'>
+): { branch: string; displayName: string } | undefined {
+  return input.branch !== null && input.displayName !== null
+    ? { branch: input.branch, displayName: input.displayName }
+    : undefined;
+}
+
+/** The focused workspace first, then every other local one; an empty tier is left out. */
+function searchTiers(rows: WorkspaceRow[], focused: WorkspaceRow | null): string[][] {
+  const others = rows.filter((row) => row !== focused && isLocal(row)).map((row) => row.path);
+  return [focused ? [focused.path] : [], others].filter((tier) => tier.length > 0);
 }
 
 class Router {
@@ -197,7 +225,9 @@ class Router {
     });
     this.sweepMs = options.sweepMs ?? SWEEP_MS;
     this.lastSweepAt = this.now();
-    this.sweepTimer = setInterval(() => void this.sweep(), this.sweepMs);
+    this.sweepTimer = setInterval(() => {
+      void this.sweep();
+    }, this.sweepMs);
     this.sweepTimer.unref?.();
   }
 
@@ -227,6 +257,7 @@ class Router {
     return this.inLane(input.docId, async () => this.attach(input, text, caller.panel));
   }
 
+  // oxlint-disable-next-line typescript/require-await -- a phpantom.* handler like the rest: async keeps its answer a promise and a throw from the mirror a rejection, which main.ts and the tests await
   public async change(input: Input<'phpantom.change'>): Promise<Output<'phpantom.change'>> {
     const doc = this.attached(input.docId, input.session);
     if (!doc) {
@@ -286,6 +317,7 @@ class Router {
 
   public async close(input: Input<'phpantom.close'>): Promise<Output<'phpantom.close'>> {
     this.chunks.delete(input.docId);
+    // oxlint-disable-next-line typescript/require-await -- inLane chains the task with then(); a promise-returning task keeps the lane settling as late as it does now
     return this.inLane(input.docId, async () => {
       const doc = this.docs.get(input.docId);
       if (doc) {
@@ -300,7 +332,7 @@ class Router {
     if (!doc) {
       return { opened: false, reason: 'failed' };
     }
-    if (!/^file:/i.test(input.uri)) {
+    if (!isFileUri(input.uri)) {
       return { opened: false, reason: 'not-a-file' };
     }
     let path: string;
@@ -323,7 +355,7 @@ class Router {
     }
     // Why check here: editor.open opens a missing file without complaint.
     const info = await stat(path).catch(() => null);
-    if (!info?.isFile()) {
+    if (info?.isFile() !== true) {
       return { opened: false, reason: 'failed' };
     }
     this.reveals.add(path, input.range);
@@ -344,6 +376,7 @@ class Router {
     return { opened: true };
   }
 
+  // oxlint-disable-next-line typescript/require-await -- a phpantom.* handler like the rest: async keeps its answer a promise, which main.ts and the tests await
   public async ping(input: Input<'phpantom.ping'>): Promise<Output<'phpantom.ping'>> {
     return this.attached(input.docId, input.session) ? { ok: true } : { detached: true };
   }
@@ -358,7 +391,7 @@ class Router {
       if (files.length >= PEEK_MAX_FILES) {
         break;
       }
-      if (!/^file:/i.test(uri)) {
+      if (!isFileUri(uri)) {
         continue;
       }
       let text: string;
@@ -381,6 +414,7 @@ class Router {
   /** Stops every server; open editors are told `restarting` and re-attach, which starts them again. */
   public async restartAll(): Promise<string> {
     const entries = [...this.pool.values()];
+    // oxlint-disable-next-line unicorn/no-useless-spread -- iterates a copy, as before, so the loop never depends on how a Map iterator behaves while forget() deletes from it
     for (const doc of [...this.docs.values()]) {
       this.forget(doc.docId);
       this.outbox.send(doc.panel, `status:${doc.docId}`, 'phpantom.status', {
@@ -407,7 +441,7 @@ class Router {
     this.failedAt = null;
     this.resolved = null;
     // Why clear the error: it described the old settings; the next open finds out about the new ones.
-    if (this.resolveError) {
+    if (this.resolveError !== null && this.resolveError !== '') {
       this.resolveError = null;
       this.updateStatus();
     }
@@ -416,17 +450,17 @@ class Router {
   public describe(): string {
     const lines: string[] = [];
     const { resolved } = this;
-    if (resolved?.ok) {
+    if (resolved?.ok === true) {
       lines.push(
         `PHPantom ${resolved.version} (${SOURCE_WORDS[resolved.source]}): ${resolved.path}`
       );
     }
-    if (this.resolveError) {
+    if (this.resolveError !== null && this.resolveError !== '') {
       lines.push(`PHPantom error: ${this.resolveError}`);
     }
     for (const entry of this.pool.values()) {
       const { phase, percent, message } = entry.state;
-      const detail = `${phase}${percent === undefined ? '' : ` ${percent}%`}${message ? ` (${message})` : ''}`;
+      const detail = `${phase}${percent === undefined ? '' : ` ${percent}%`}${message === undefined || message === '' ? '' : ` (${message})`}`;
       lines.push(`${entry.root}: ${detail}, ${entry.docs.size} open document(s)`);
       for (const docId of entry.docs) {
         const doc = this.docs.get(docId);
@@ -459,7 +493,7 @@ class Router {
     panel: string
   ): Promise<AttachStatus> {
     const known = this.docs.get(input.docId);
-    if (input.resync && known?.server.alive) {
+    if (input.resync === true && known?.server.alive === true) {
       known.mirror = new DocumentMirror(text);
       known.version = 1;
       known.needsResync = false;
@@ -483,16 +517,12 @@ class Router {
       // Why ask again: a worktree made in the last few seconds is missing from the cached list, and without its row the file would attach to a sibling's copy (or a remote one to a local look-alike).
       rows = await this.host.listWorkspaces({ fresh: true });
     }
-    const context =
-      input.branch !== null && input.displayName !== null
-        ? { branch: input.branch, displayName: input.displayName }
-        : undefined;
+    const context = focusContext(input);
     const focused = resolveFocused(rows, input.workspaceId, context);
     if (focused && !isLocal(focused)) {
       return { host: focused.hostId ?? 'unknown', state: 'remote' };
     }
-    const others = rows.filter((row) => row !== focused && isLocal(row)).map((row) => row.path);
-    const tiers = [focused ? [focused.path] : [], others].filter((tier) => tier.length > 0);
+    const tiers = searchTiers(rows, focused);
     const remembered = new Set([
       ...this.remembered,
       ...[...this.docs.values()].map((doc) => doc.path),
@@ -526,18 +556,7 @@ class Router {
     }
     const { entry, server } = started;
     const uri = pathToFileURL(path).href;
-    const key = uriKey(uri);
-    let file = entry.files.get(key);
-    if (file) {
-      // Another document already holds this file: PHPantom gets this one's text, not a second didOpen.
-      this.sendFull(server, file, text);
-    } else {
-      file = { diagnostics: null, holders: new Set(), text, uri, version: 1 };
-      entry.files.set(key, file);
-      server.notify('textDocument/didOpen', {
-        textDocument: { languageId: input.language, text, uri, version: 1 },
-      });
-    }
+    const file = this.holdFile(entry, server, uri, text, input.language);
     file.holders.add(input.docId);
     this.docs.set(input.docId, {
       diagnostics: file.diagnostics?.length ?? 0,
@@ -573,6 +592,29 @@ class Router {
       ...(located.approximate ? { approximate: true as const } : {}),
       ...(reveal ? { reveal } : {}),
     };
+  }
+
+  /** The pool's copy of a file, opened in PHPantom unless another document holds it already. */
+  private holdFile(
+    entry: Entry,
+    server: PhpantomServer,
+    uri: string,
+    text: string,
+    language: Input<'phpantom.open'>['language']
+  ): SharedFile {
+    const key = uriKey(uri);
+    let file = entry.files.get(key);
+    if (file) {
+      // Another document already holds this file: PHPantom gets this one's text, not a second didOpen.
+      this.sendFull(server, file, text);
+    } else {
+      file = { diagnostics: null, holders: new Set(), text, uri, version: 1 };
+      entry.files.set(key, file);
+      server.notify('textDocument/didOpen', {
+        textDocument: { languageId: language, text, uri, version: 1 },
+      });
+    }
+    return file;
   }
 
   private remember(path: string): void {
@@ -615,7 +657,7 @@ class Router {
       // The computer slept or the worker was held up: editors could not ping meanwhile either, so silence says nothing yet.
       // The next tick, on time, judges after they have had the chance.
       this.host.log(
-        `Lease check ran ${Math.round((gap - this.sweepMs) / 1000)} s late; releasing nothing this time`
+        `Lease check ran ${Math.round((gap - this.sweepMs) / MS_PER_SECOND)} s late; releasing nothing this time`
       );
       return;
     }
@@ -629,13 +671,14 @@ class Router {
       const { docId } = doc;
       // Why in its lane and checked again there: an open in flight for this docId finishes first, and a document it attached anew has just been seen.
       releases.push(
+        // oxlint-disable-next-line typescript/require-await -- inLane chains the task with then(); a promise-returning task keeps the lane settling as late as it does now
         this.inLane(docId, async () => {
           const current = this.docs.get(docId);
           if (this.disposed || current !== doc || !expired(current)) {
             return;
           }
           this.host.log(
-            `Released ${current.path}: its editor was not heard from for ${Math.round(this.leaseMs / 1000)} s (${this.docs.size - 1} document(s) still open)`
+            `Released ${current.path}: its editor was not heard from for ${Math.round(this.leaseMs / MS_PER_SECOND)} s (${this.docs.size - 1} document(s) still open)`
           );
           this.chunks.delete(docId);
           this.detach(current);
@@ -657,10 +700,10 @@ class Router {
       // Why resend: PHPantom holds whatever the leaving document sent last.
       // The one heard from most recently is the tab on screen; the others are frames Orca replaced that hold on until their lease ends.
       // One waiting for its resync has a copy that is not its editor's text, and sends the whole text soon anyway.
-      const current = remaining
-        .filter((other) => !other.needsResync)
-        .sort((a, b) => b.lastSeen - a.lastSeen)[0];
-      if (current) {
+      const fresh = remaining.filter((other) => !other.needsResync);
+      fresh.sort((left, right) => right.lastSeen - left.lastSeen);
+      const [current] = fresh;
+      if (current !== undefined) {
         this.sendFull(doc.server, file, current.mirror.text);
       }
     } else {
@@ -704,7 +747,7 @@ class Router {
   }
 
   // oxlint-disable-next-line typescript/promise-function-async -- returns the lane promise itself, as LspBridge.inLane does, so lane timing stays as it was
-  private inLane<T>(docId: string, task: () => Promise<T>): Promise<T> {
+  private inLane<Result>(docId: string, task: () => Promise<Result>): Promise<Result> {
     const previous = this.lanes.get(docId) ?? Promise.resolve();
     const run = previous.then(task);
     const settled = run.then(
@@ -724,12 +767,15 @@ class Router {
     root: string
   ): Promise<{ entry: Entry; server: PhpantomServer } | { error: string }> {
     let entry = this.pool.get(root);
-    if (entry?.server?.alive) {
+    if (entry?.server?.alive === true) {
       return { entry, server: entry.server };
     }
+    let starting: Promise<PhpantomServer>;
     // Why everything up to `starting` is synchronous: two opens of one root must share one child.
-    if (!entry?.starting) {
-      if (entry?.crashed) {
+    if (entry !== undefined && entry.starting !== null) {
+      ({ starting } = entry);
+    } else {
+      if (entry?.crashed === true) {
         const now = Date.now();
         entry.restarts = entry.restarts.filter((at) => at > now - RESTART_WINDOW_MS);
         if (entry.restarts.length >= MAX_RESTARTS) {
@@ -754,14 +800,15 @@ class Router {
         };
         this.pool.set(root, entry);
       }
-      const starting = entry;
-      starting.crashed = false;
-      starting.starting = this.start(starting).finally(() => {
-        starting.starting = null;
+      const target = entry;
+      target.crashed = false;
+      starting = this.start(target).finally(() => {
+        target.starting = null;
       });
+      target.starting = starting;
     }
     try {
-      return { entry, server: await entry.starting! };
+      return { entry, server: await starting };
     } catch (error) {
       return { error: messageOf(error) };
     }
@@ -817,8 +864,8 @@ class Router {
   private eventsFor(entry: Entry, current: () => PhpantomServer | null): ServerEvents {
     // Why a guard: these run inside the server's stdout handler, where a throw would end the worker.
     const guard =
-      <A extends unknown[]>(name: string, handler: (...args: A) => void) =>
-      (...args: A): void => {
+      <Args extends unknown[]>(name: string, handler: (...args: Args) => void) =>
+      (...args: Args): void => {
         try {
           if (name === 'log' || (current() !== null && current() === entry.server)) {
             handler(...args);
@@ -884,9 +931,10 @@ class Router {
         }
         for (const panel of panels) {
           const key = `refresh:${panel}`;
-          const queued = this.outbox.queued(key) as { kinds: RefreshKind[] } | undefined;
-          const kinds = new Set(queued?.kinds ?? []);
-          kinds.add(kind);
+          const queued = this.outbox.queued(key);
+          const kinds = new Set<RefreshKind>(
+            isRecord(queued) && Array.isArray(queued.kinds) ? queued.kinds : []
+          ).add(kind);
           this.outbox.send(panel, key, 'phpantom.refresh', { kinds: [...kinds] });
         }
       }),
@@ -899,7 +947,7 @@ class Router {
     }
     entry.idle = setTimeout(() => {
       entry.idle = null;
-      if (entry.docs.size > 0 || this.pool.get(entry.root) !== entry || entry.starting) {
+      if (entry.docs.size > 0 || this.pool.get(entry.root) !== entry || entry.starting !== null) {
         return;
       }
       this.pool.delete(entry.root);
@@ -994,9 +1042,11 @@ class Router {
       return { result };
     }
     if (method === 'textDocument/completion') {
-      const items = Array.isArray(result) ? result : (result as { items?: unknown } | null)?.items;
+      let items: unknown;
+      if (Array.isArray(result)) items = result;
+      else if (isRecord(result)) ({ items } = result);
       if (Array.isArray(items)) {
-        const shell = Array.isArray(result) ? {} : (result as Record<string, unknown>);
+        const shell = isRecord(result) ? result : {};
         const kept = leadingThatFit(
           items,
           orcaSize({ result: { ...shell, isIncomplete: true, items: [] } }),
@@ -1015,18 +1065,18 @@ class Router {
       return { result: kept, truncated: result.length - kept.length };
     }
     const tokens =
-      method === 'textDocument/semanticTokens/full'
-        ? (result as { data?: unknown } | null)?.data
-        : undefined;
-    if (Array.isArray(tokens)) {
+      method === 'textDocument/semanticTokens/full' && isRecord(result) ? result.data : undefined;
+    if (isRecord(result) && Array.isArray(tokens)) {
       // Why whole tokens: `data` is five numbers per token, each relative to the one before, so a leading run of whole tokens is still correct colouring; a number is 8 bytes plus 4 for its slot in the array.
-      const shell = orcaSize({ result: { ...(result as object), data: [] } });
-      const room = Math.floor((ANSWER_LIMIT.bytes - shell.bytes) / 12);
+      const shell = orcaSize({ result: { ...result, data: [] } });
+      const room = Math.floor(
+        (ANSWER_LIMIT.bytes - shell.bytes) / (ORCA_NUMBER_BYTES + ORCA_SLOT_BYTES)
+      );
       const count = Math.max(
         0,
-        Math.min(tokens.length, room) - (Math.min(tokens.length, room) % 5)
+        Math.min(tokens.length, room) - (Math.min(tokens.length, room) % NUMBERS_PER_TOKEN)
       );
-      return { result: { ...(result as object), data: tokens.slice(0, count) } };
+      return { result: { ...result, data: tokens.slice(0, count) } };
     }
     return { error: 'too_large' };
   }
@@ -1056,11 +1106,11 @@ class Router {
     if (this.downloading) {
       states.push({ phase: 'downloading' });
     }
-    if (this.resolveError) {
+    if (this.resolveError !== null && this.resolveError !== '') {
       states.push({ message: this.resolveError, phase: 'error' });
     }
     const state = aggregate(states);
-    if (state.phase === 'ready' && this.resolved?.ok) {
+    if (state.phase === 'ready' && this.resolved?.ok === true) {
       state.version = this.resolved.version;
       state.source = this.resolved.source;
     }

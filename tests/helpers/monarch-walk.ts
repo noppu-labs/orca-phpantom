@@ -16,13 +16,13 @@ interface Token {
 
 function compile(grammar: Grammar, regex: RegExp): RegExp {
   const source = regex.source.replaceAll('@@', '\u0001');
-  const attribute = /@(\w+)/.exec(source);
+  const attribute = /@(?<name>\w+)/u.exec(source);
   if (attribute) {
     throw new Error(
-      `regex refers to @${attribute[1]}, which this walker does not expand: /${regex.source}/`
+      `regex refers to @${attribute.groups?.name}, which this walker does not expand: /${regex.source}/`
     );
   }
-  const flags = grammar.language.ignoreCase ? 'i' : '';
+  const flags = grammar.language.ignoreCase === true ? 'i' : '';
   return new RegExp(`^(?:${source.replaceAll('\u0001', '@')})`, flags);
 }
 
@@ -41,9 +41,9 @@ function rulesOf(grammar: Grammar, state: string, seen: string[] = []): unknown[
   }
   const rules: unknown[] = [];
   for (const rule of tokenizer[name]) {
-    if (rule && typeof rule === 'object' && !Array.isArray(rule) && 'include' in rule) {
+    if (rule !== null && typeof rule === 'object' && !Array.isArray(rule) && 'include' in rule) {
       rules.push(
-        ...rulesOf(grammar, String((rule as { include: string }).include).replace(/^@/, ''), [
+        ...rulesOf(grammar, (rule as { include: string }).include.replace(/^@/u, ''), [
           ...seen,
           name,
         ])
@@ -83,11 +83,11 @@ function tokenizeLine(grammar: Grammar, line: string, stack: string[] = ['root']
     }
   };
   const move = (next: string | undefined, switchTo: string | undefined): void => {
-    if (switchTo) {
-      rulesOf(grammar, switchTo.replace(/^@/, ''));
-      stack[stack.length - 1] = switchTo.replace(/^@/, '');
+    if (switchTo !== undefined && switchTo !== '') {
+      rulesOf(grammar, switchTo.replace(/^@/u, ''));
+      stack[stack.length - 1] = switchTo.replace(/^@/u, '');
     }
-    if (!next) {
+    if (next === undefined || next === '') {
       return;
     }
     if (next === '@pop') {
@@ -96,15 +96,17 @@ function tokenizeLine(grammar: Grammar, line: string, stack: string[] = ['root']
       }
       stack.pop();
     } else if (next === '@push') {
-      stack.push(stack.at(-1)!);
+      // Destructured, not asserted: an empty stack pushes undefined.
+      const [top] = stack.slice(-1);
+      stack.push(top);
     } else if (next === '@popall') {
       stack.splice(1);
     } else {
       if (next.includes('$')) {
         throw new Error(`this walker does not substitute ${next}`);
       }
-      rulesOf(grammar, next.replace(/^@/, ''));
-      stack.push(next.replace(/^@/, ''));
+      rulesOf(grammar, next.replace(/^@/u, ''));
+      stack.push(next.replace(/^@/u, ''));
     }
   };
   const apply = (action: Action, text: string): void => {
@@ -121,7 +123,7 @@ function tokenizeLine(grammar: Grammar, line: string, stack: string[] = ['root']
 
   let pos = 0;
   while (pos < line.length) {
-    const state = stack.at(-1)!;
+    const [state] = stack.slice(-1);
     const rest = line.slice(pos);
     let matched: { rule: ReturnType<typeof asRule>; match: RegExpMatchArray } | null = null;
     for (const raw of rulesOf(grammar, state)) {
@@ -149,7 +151,7 @@ function tokenizeLine(grammar: Grammar, line: string, stack: string[] = ['root']
       if (match.slice(1).join('') !== match[0]) {
         throw new Error(`groups must cover the whole match: /${rule.regex.source}/`);
       }
-      rule.action.forEach((action, index) => apply(action, match[index + 1] ?? ''));
+      for (const [index, action] of rule.action.entries()) apply(action, match[index + 1] ?? '');
     } else {
       apply(rule.action, match[0]);
     }
@@ -171,5 +173,5 @@ function tokenTypes(grammar: Grammar, ...lines: string[]): string[] {
     .filter((type) => type !== '' && type !== 'delimiter');
 }
 
-export { firstRuleRegex, tokenizeLine, tokenTypes };
+export { firstRuleRegex, tokenTypes };
 export type { Token };

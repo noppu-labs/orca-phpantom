@@ -22,7 +22,11 @@ function cacheDir(env: NodeJS.ProcessEnv, platform: string, home: string): strin
   if (platform === 'darwin') {
     return posix.join(home, 'Library', 'Caches', 'noppu-labs.phpantom');
   }
-  return posix.join(env.XDG_CACHE_HOME || posix.join(home, '.cache'), 'noppu-labs.phpantom');
+  const { XDG_CACHE_HOME: xdg } = env;
+  return posix.join(
+    xdg === undefined || xdg === '' ? posix.join(home, '.cache') : xdg,
+    'noppu-labs.phpantom'
+  );
 }
 
 interface ResolveOptions {
@@ -41,6 +45,13 @@ interface ResolveOptions {
 }
 
 const inFlight = new Map<string, Promise<Resolution>>();
+// Read and run for everyone, write for the owner.
+const EXECUTABLE_MODE = 0o755;
+
+/** A binary that ran and printed a version; null means it did not run, and an empty version is no version. */
+function reportsVersion(version: string | null): version is string {
+  return version !== null && version !== '';
+}
 
 async function resolveBinary(options: ResolveOptions): Promise<Resolution> {
   const read = options.readVersionImpl ?? readVersion;
@@ -48,7 +59,7 @@ async function resolveBinary(options: ResolveOptions): Promise<Resolution> {
 
   if (options.settingPath) {
     const version = existsSync(options.settingPath) ? await read(options.settingPath) : null;
-    return version
+    return reportsVersion(version)
       ? { ok: true, path: options.settingPath, source: 'setting', version }
       : {
           message: `phpantomPath is set to ${options.settingPath}, which is not a working phpantom_lsp.`,
@@ -67,11 +78,11 @@ async function resolveBinary(options: ResolveOptions): Promise<Resolution> {
     ),
   ];
   for (const candidate of new Set(candidates)) {
-    if (!candidate) {
+    if (candidate === null || candidate === '') {
       continue;
     }
     const version = await read(candidate);
-    if (version && atLeast(version, PHPANTOM_VERSION)) {
+    if (reportsVersion(version) && atLeast(version, PHPANTOM_VERSION)) {
       return { ok: true, path: candidate, source: 'path', version };
     }
   }
@@ -89,7 +100,7 @@ async function resolveBinary(options: ResolveOptions): Promise<Resolution> {
   const marker = flavour.join(directory, 'verified');
   if (existsSync(target) && existsSync(marker)) {
     const version = await read(target);
-    if (version) {
+    if (reportsVersion(version)) {
       return { ok: true, path: target, source: 'cache', version };
     }
   }
@@ -102,10 +113,10 @@ async function resolveBinary(options: ResolveOptions): Promise<Resolution> {
     };
   }
   let pending = inFlight.get(target);
-  if (!pending) {
-    pending = download(options, asset, directory, target, marker, read).finally(() =>
-      inFlight.delete(target)
-    );
+  if (pending === undefined) {
+    pending = download(options, asset, directory, target, marker, read).finally(() => {
+      inFlight.delete(target);
+    });
     inFlight.set(target, pending);
   }
   return pending;
@@ -126,11 +137,11 @@ async function download(
     mkdirSync(directory, { recursive: true });
     const temporary = `${target}.tmp`;
     writeFileSync(temporary, binary);
-    chmodSync(temporary, 0o755);
+    chmodSync(temporary, EXECUTABLE_MODE);
     renameSync(temporary, target);
     writeFileSync(marker, PHPANTOM_VERSION);
     const version = await read(target);
-    if (!version) {
+    if (version === null || version === '') {
       return { message: `The downloaded ${asset.member} did not run.`, ok: false };
     }
     // Why only here: a PHPantom the user installed may serve other editors, so its config stays theirs.

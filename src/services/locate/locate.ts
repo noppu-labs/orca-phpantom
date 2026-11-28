@@ -81,7 +81,7 @@ function nameMatches(name: string, language: Language): boolean {
 /** The lines that say something: trimmed, without the empty ones. */
 function meaningfulLines(text: string): string[] {
   return text
-    .split(/\r?\n/)
+    .split(/\r?\n/u)
     .map((line) => line.trim())
     .filter(Boolean);
 }
@@ -90,9 +90,9 @@ function meaningfulLines(text: string): string[] {
  * How much two texts share, by whole lines: 1 for the same lines, 0 for none in common. A line that
  * appears twice counts twice, so a file of repeated braces does not look like every other file.
  */
-function sharedLines(a: string, b: string): number {
-  const linesA = meaningfulLines(a);
-  const linesB = meaningfulLines(b);
+function sharedLines(textA: string, textB: string): number {
+  const linesA = meaningfulLines(textA);
+  const linesB = meaningfulLines(textB);
   if (linesA.length < ALIKE_MIN_LINES || linesB.length < ALIKE_MIN_LINES) {
     return 0;
   }
@@ -128,16 +128,15 @@ async function locateAlike(
     return { status: 'none' };
   }
   const deadline = Date.now() + budgetMs;
-  const near = candidates
-    .filter(
-      (file) =>
-        file.size <= ALIKE_MAX_BYTES &&
-        file.size * ALIKE_SIZE_RATIO >= size &&
-        file.size <= size * ALIKE_SIZE_RATIO
-    )
-    // Why nearest in size first: a few edits barely change the size, so the right file is read early.
-    .sort((a, b) => Math.abs(a.size - size) - Math.abs(b.size - size))
-    .slice(0, ALIKE_MAX_FILES);
+  const alike = candidates.filter(
+    (file) =>
+      file.size <= ALIKE_MAX_BYTES &&
+      file.size * ALIKE_SIZE_RATIO >= size &&
+      file.size <= size * ALIKE_SIZE_RATIO
+  );
+  // Why nearest in size first: a few edits barely change the size, so the right file is read early.
+  alike.sort((left, right) => Math.abs(left.size - size) - Math.abs(right.size - size));
+  const near = alike.slice(0, ALIKE_MAX_FILES);
   let best: { file: Candidate; score: number } | null = null;
   let second = 0;
   for (const file of near) {
@@ -197,10 +196,11 @@ async function locateCandidates(input: LocateInput, options: Options): Promise<L
       continue;
     }
     const info = await stat(path).catch(() => null);
-    if (!info?.isFile()) {
+    if (info?.isFile() !== true) {
       continue;
     }
-    const text = (await readFile(path, 'utf8').catch(() => null))?.replace(/^﻿/, '');
+    const raw = await readFile(path, 'utf8').catch(() => null);
+    const text = raw?.replace(/^﻿/u, '');
     if (text === input.content) {
       matches.push(path);
     } else {
@@ -239,7 +239,7 @@ function knownRelatives(known: readonly string[], tiers: readonly (readonly stri
   for (const path of known) {
     const root = rootOf(path, tiers);
     if (root) {
-      relatives.add(path.slice(root.length).replace(/^[\\/]+/, ''));
+      relatives.add(path.slice(root.length).replace(/^[\\/]+/u, ''));
     }
   }
   return [...relatives];
@@ -272,16 +272,55 @@ async function locateKnown(
         continue;
       }
       const info = await stat(path).catch(() => null);
-      if (!info?.isFile() || (info.size !== size && info.size !== size + BOM_BYTES)) {
+      if (info?.isFile() !== true || (info.size !== size && info.size !== size + BOM_BYTES)) {
         continue;
       }
-      const text = (await readFile(path, 'utf8').catch(() => null))?.replace(/^\uFEFF/, '');
+      const raw = await readFile(path, 'utf8').catch(() => null);
+      const text = raw?.replace(/^\uFEFF/u, '');
       if (text === content) {
         matches.push({ path, root });
       }
     }
   }
   return matches;
+}
+
+/** Whether the walk goes into a folder: never a hidden or skipped one, nor vendor or storage beside composer.json. */
+function walksInto(name: string, hasComposer: boolean): boolean {
+  return (
+    !SKIPPED_DIRECTORIES.has(name) &&
+    !name.startsWith('.') &&
+    !(hasComposer && COMPOSER_SIBLING_SKIPPED.has(name))
+  );
+}
+
+/** Puts a file whose name matches with the exact matches or with the likeness candidates; a file it cannot stat goes nowhere. */
+async function sortFile(
+  path: string,
+  root: string,
+  content: string,
+  size: number,
+  matches: { path: string; root: string }[],
+  others: Candidate[]
+): Promise<void> {
+  // Why stat first: reading every file of a large repository would take far too long.
+  const info = await stat(path).catch(() => null);
+  if (!info) {
+    return;
+  }
+  let same = false;
+  if (info.size === size || info.size === size + BOM_BYTES) {
+    const raw = await readFile(path, 'utf8').catch(() => null);
+    const text = raw?.replace(/^﻿/u, '');
+    same = text === content;
+  }
+  if (same) {
+    if (!matches.some((match) => match.path === path)) {
+      matches.push({ path, root });
+    }
+  } else {
+    others.push({ path, root, size: info.size });
+  }
 }
 
 async function locateInRoots(
@@ -300,12 +339,12 @@ async function locateInRoots(
 
   // Why breadth-first: the file being edited is nearly always close to the workspace root, so a huge tree (a home folder used as a workspace) must not use up the time before the shallow files are seen.
   const queue = roots.map((root) => ({ directory: root, root }));
-  for (let next = 0; next < queue.length; next += 1) {
+  // Directories pushed while the loop runs are visited too: an array iterator reads the length at each step.
+  for (const { root, directory } of queue) {
     // Why here: a deadline or cap checked only inside the entry loop would still read every queued directory.
     if (Date.now() > deadline || visited >= (options.maxFiles ?? MAX_FILES_VISITED)) {
       break;
     }
-    const { root, directory } = queue[next];
     let entries;
     try {
       entries = await readdir(directory, { withFileTypes: true });
@@ -321,32 +360,12 @@ async function locateInRoots(
       }
       const path = join(directory, entry.name);
       if (entry.isDirectory()) {
-        if (
-          !SKIPPED_DIRECTORIES.has(entry.name) &&
-          !entry.name.startsWith('.') &&
-          !(hasComposer && COMPOSER_SIBLING_SKIPPED.has(entry.name))
-        ) {
+        if (walksInto(entry.name, hasComposer)) {
           queue.push({ directory: path, root });
         }
       } else if (entry.isFile() && nameMatches(entry.name, language)) {
         visited += 1;
-        // Why stat first: reading every file of a large repository would take far too long.
-        const info = await stat(path).catch(() => null);
-        if (!info) {
-          continue;
-        }
-        let same = false;
-        if (info.size === size || info.size === size + BOM_BYTES) {
-          const text = (await readFile(path, 'utf8').catch(() => null))?.replace(/^﻿/, '');
-          same = text === content;
-        }
-        if (same) {
-          if (!matches.some((match) => match.path === path)) {
-            matches.push({ path, root });
-          }
-        } else {
-          others.push({ path, root, size: info.size });
-        }
+        await sortFile(path, root, content, size, matches, others);
       }
     }
   }

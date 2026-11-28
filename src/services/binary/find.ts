@@ -39,38 +39,44 @@ function findExecutable(
 /** Folders a Dock-launched app may lack on PATH but where PHPantom is commonly installed. */
 function wellKnownDirs(env: NodeJS.ProcessEnv, platform: string): string[] {
   if (platform === 'win32') {
-    return env.USERPROFILE ? [win32.join(env.USERPROFILE, '.cargo', 'bin')] : [];
+    const { USERPROFILE: profile } = env;
+    return profile === undefined || profile === '' ? [] : [win32.join(profile, '.cargo', 'bin')];
   }
+  const { HOME: home } = env;
   return [
     '/opt/homebrew/bin',
     '/usr/local/bin',
-    ...(env.HOME ? [posix.join(env.HOME, '.cargo', 'bin')] : []),
+    ...(home === undefined || home === '' ? [] : [posix.join(home, '.cargo', 'bin')]),
   ];
 }
 
 /** `1.1.0` from `phpantom_lsp 1.1.0`. */
 function parseVersion(output: string): string | null {
-  return /^phpantom_lsp (\d+\.\d+\.\d+)\b/m.exec(output.trim())?.[1] ?? null;
+  return /^phpantom_lsp (?<version>\d+\.\d+\.\d+)\b/mu.exec(output.trim())?.groups?.version ?? null;
 }
 
+// Major, minor and patch.
+const VERSION_PARTS = 3;
+const VERSION_TIMEOUT_MS = 5000;
+
 function atLeast(version: string, minimum: string): boolean {
-  const a = version.split('.').map(Number);
-  const b = minimum.split('.').map(Number);
-  for (let i = 0; i < 3; i++) {
-    const x = a[i] ?? 0;
-    const y = b[i] ?? 0;
-    if (x !== y) {
-      return x > y;
+  const versionParts = version.split('.').map(Number);
+  const minimumParts = minimum.split('.').map(Number);
+  for (let index = 0; index < VERSION_PARTS; index++) {
+    const part = versionParts[index] ?? 0;
+    const minimumPart = minimumParts[index] ?? 0;
+    if (part !== minimumPart) {
+      return part > minimumPart;
     }
   }
   return true;
 }
 
 /** Runs `<path> --version`; null when it fails, times out or prints something else. */
-async function readVersion(path: string, timeoutMs = 5000): Promise<string | null> {
+async function readVersion(path: string, timeoutMs = VERSION_TIMEOUT_MS): Promise<string | null> {
   return new Promise((resolve) => {
     execFile(path, ['--version'], { timeout: timeoutMs, windowsHide: true }, (error, stdout) => {
-      resolve(error ? null : parseVersion(String(stdout)));
+      resolve(error ? null : parseVersion(stdout));
     });
   });
 }

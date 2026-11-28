@@ -38,7 +38,9 @@ interface Started {
 
 const cleanups: (() => Promise<void> | void)[] = [];
 afterEach(async () => {
-  for (const cleanup of cleanups.splice(0).reverse()) {
+  const pending = cleanups.splice(0);
+  pending.reverse();
+  for (const cleanup of pending) {
     await cleanup();
   }
 });
@@ -78,11 +80,18 @@ async function setup(
   const logs: string[] = [];
   const host: RouterHost = {
     listWorkspaces: async (listOptions) => (options.list ? options.list(dir, listOptions) : rows),
-    openEditor: async (workspaceId, path) => void opened.push({ workspaceId, path }),
-    post: (event, payload, postOptions) =>
-      void posts.push({ event, payload, panel: postOptions.panel }),
-    status: (update) => void statuses.push(update),
-    log: (message) => void logs.push(message),
+    openEditor: async (workspaceId, path) => {
+      opened.push({ workspaceId, path });
+    },
+    post: (event, payload, postOptions) => {
+      posts.push({ event, payload, panel: postOptions.panel });
+    },
+    status: (update) => {
+      statuses.push(update);
+    },
+    log: (message) => {
+      logs.push(message);
+    },
     settings: async () => ({ phpantomPath: '', allowDownload: false }),
   };
   const started: Started[] = [];
@@ -421,10 +430,9 @@ test('two documents on one file share it: one didOpen, no didClose while one rem
   assert.deepEqual(await change('d2', 2, [insert(5, 'X')], 13), { ok: true });
   assert.equal(await text(), '<?phpX // ok\n');
   const versions = sent().map((n) => n.params.textDocument.version);
-  assert.deepEqual(
-    versions,
-    [...versions].sort((a, b) => a - b)
-  );
+  const ascending = [...versions];
+  ascending.sort((a, b) => a - b);
+  assert.deepEqual(versions, ascending);
 
   assert.deepEqual(await worker.request('phpantom.close', { docId: 'd1' }), { ok: true });
   assert.ok(!server.notified.some((n) => n.method === 'textDocument/didClose'));
@@ -510,7 +518,7 @@ test('a focused workspace missing from the cached list is looked up again', asyn
       fresh.push(options?.fresh === true);
       const a = { id: 'ws-a', name: 'a', branch: 'main', path: join(dir, 'a'), hostId: 'local' };
       const b = { id: 'ws-new', name: 'b', branch: 'feat', path: join(dir, 'b'), hostId: 'local' };
-      return options?.fresh ? [a, b] : [a];
+      return options?.fresh === true ? [a, b] : [a];
     },
   });
   const status = await openWhole(worker, {
@@ -966,7 +974,7 @@ test('reports the status bar at most once a second, ending on the latest state',
   await sleep(1200);
   assert.ok(statuses.length > 0 && statuses.length <= 3, `saw ${statuses.length} updates`);
   assert.equal(statuses.at(-1)?.icon, 'check');
-  assert.match(statuses.at(-1)!.tooltip, /1\.1\.0/);
+  assert.match(statuses.at(-1)!.tooltip, /1\.1\.0/u);
 });
 
 test('a resolver failure answers error and shows it in the status bar', async () => {
@@ -985,7 +993,7 @@ test('a resolver failure answers error and shows it in the status bar', async ()
   );
   assert.equal(started.length, 0);
   await until(() => statuses.at(-1)?.icon === 'error', 2500);
-  assert.match(statuses.at(-1)!.tooltip, /no phpantom_lsp here/);
+  assert.match(statuses.at(-1)!.tooltip, /no phpantom_lsp here/u);
 });
 
 test('documents of one composer root share one server, and Blade opens as blade', async () => {
@@ -1011,14 +1019,21 @@ test('documents of one composer root share one server, and Blade opens as blade'
   const opens = started[0].server.notified
     .filter((n) => n.method === 'textDocument/didOpen')
     .map((n) => [n.params.textDocument.uri, n.params.textDocument.languageId]);
-  assert.deepEqual(
-    opens.sort(),
-    [
-      [one.uri, 'php'],
-      [two.uri, 'php'],
-      [three.uri, 'blade'],
-    ].sort()
-  );
+  const expected = [
+    [one.uri, 'php'],
+    [two.uri, 'php'],
+    [three.uri, 'blade'],
+  ];
+  // The default sort's order: each pair compared as its string, by UTF-16 code units.
+  const byText = (left: string[], right: string[]): number => {
+    const leftText = String(left);
+    const rightText = String(right);
+    if (leftText === rightText) return 0;
+    return leftText < rightText ? -1 : 1;
+  };
+  opens.sort(byText);
+  expected.sort(byText);
+  assert.deepEqual(opens, expected);
 });
 
 test('restartAll tells open documents and detaches them', async () => {
@@ -1029,7 +1044,7 @@ test('restartAll tells open documents and detaches them', async () => {
     workspaceId: 'ws-a',
     text: '<?php // ok\n',
   });
-  assert.match(await router.restartAll(), /stopped 1 server/);
+  assert.match(await router.restartAll(), /stopped 1 server/u);
   assert.equal(started[0].server.alive, false);
   await until(() =>
     posts.some((p) => p.event === 'phpantom.status' && p.payload.state === 'restarting')
@@ -1175,7 +1190,7 @@ test('two holders on one file: the one that expires leaves the file open for the
     panel: 'panel-2',
   });
   assert.equal(one.uri, two.uri);
-  assert.match(router.describe(), /2 open document\(s\)/);
+  assert.match(router.describe(), /2 open document\(s\)/u);
   // `d2` edits, so PHPantom holds d2's text when d1 leaves.
   assert.deepEqual(
     await worker.request('phpantom.change', {
@@ -1315,7 +1330,7 @@ test("three holders: the first expiring hands PHPantom the most recently seen te
   // `f1` last seen 61 s ago, f2 51 s, f3 31 s: only f1 is past its lease.
   clock += 31_000;
   await router.sweep();
-  assert.match(router.describe(), /2 open document\(s\)/);
+  assert.match(router.describe(), /2 open document\(s\)/u);
   assert.equal(await serverText(started), `YX${saved}`);
 });
 
@@ -1374,7 +1389,7 @@ test('a departing holder skips a holder waiting for its resync', async () => {
   );
   clock += 31_000;
   await router.sweep();
-  assert.match(router.describe(), /2 open document\(s\)/);
+  assert.match(router.describe(), /2 open document\(s\)/u);
   assert.equal(await serverText(started), `X${saved}`);
 });
 
@@ -1480,7 +1495,7 @@ test('a sweep that fires late (the computer slept) releases nothing; the next on
   // An hour asleep: no editor could ping meanwhile, so the lease says nothing about them.
   clock += 3_600_000;
   await router.sweep();
-  assert.match(router.describe(), /2 open document\(s\)/);
+  assert.match(router.describe(), /2 open document\(s\)/u);
   // Awake again: da's editor pings, db's never does.
   clock += 10_000;
   assert.deepEqual(await worker.request('phpantom.ping', { docId: 'da', session: a.session }), {
@@ -1488,11 +1503,150 @@ test('a sweep that fires late (the computer slept) releases nothing; the next on
   });
   clock += 50_000;
   await router.sweep();
-  assert.match(router.describe(), /1 open document\(s\)/);
+  assert.match(router.describe(), /1 open document\(s\)/u);
   assert.deepEqual(await worker.request('phpantom.ping', { docId: 'da', session: a.session }), {
     ok: true,
   });
   assert.deepEqual(await worker.request('phpantom.ping', { docId: 'db', session: a.session }), {
     detached: true,
   });
+});
+
+// Truthiness the condition rewrite keeps.
+test('the status command names a resolver failure, and an empty failure message is no error', async () => {
+  const failing = await setup({
+    files: { 'a/A.php': '<?php // ok\n' },
+    resolve: async () => ({ ok: false, message: 'no phpantom_lsp here' }),
+  });
+  await openWhole(failing.worker, {
+    docId: 'd1',
+    language: 'php',
+    workspaceId: 'ws-a',
+    text: '<?php // ok\n',
+  });
+  assert.equal(failing.router.describe(), 'PHPantom error: no phpantom_lsp here');
+
+  const silent = await setup({
+    files: { 'a/A.php': '<?php // ok\n' },
+    resolve: async () => ({ ok: false, message: '' }),
+  });
+  assert.deepEqual(
+    await openWhole(silent.worker, {
+      docId: 'd1',
+      language: 'php',
+      workspaceId: 'ws-a',
+      text: '<?php // ok\n',
+    }),
+    { state: 'error', message: '' }
+  );
+  assert.equal(silent.router.describe(), 'PHPantom: no PHP files open.');
+  await sleep(1100);
+  assert.notEqual(silent.statuses.at(-1)?.icon, 'error');
+  silent.router.forgetBinary();
+  assert.equal(silent.router.describe(), 'PHPantom: no PHP files open.');
+});
+
+test('the status command shows a progress message only when there is one', async () => {
+  const { worker, router, started } = await setup({ files: { 'a/A.php': '<?php // ok\n' } });
+  await openWhole(worker, {
+    docId: 'd1',
+    language: 'php',
+    workspaceId: 'ws-a',
+    text: '<?php // ok\n',
+  });
+  started[0].events.progress({ phase: 'indexing', percent: 40, message: '' });
+  assert.match(router.describe(), /: indexing 40%, 1 open document\(s\)/u);
+  started[0].events.progress({ phase: 'indexing', percent: 40 });
+  assert.match(router.describe(), /: indexing 40%, 1 open document\(s\)/u);
+  started[0].events.progress({ phase: 'indexing', percent: 40, message: 'files' });
+  assert.match(router.describe(), /: indexing 40% \(files\), 1 open document\(s\)/u);
+});
+
+test('navigate to a missing file or to a folder fails', async () => {
+  const { worker, dir } = await setup({ files: { 'a/A.php': '<?php // ok\n', 'a/sub/x.txt': '' } });
+  const status = await openWhole(worker, {
+    docId: 'd1',
+    language: 'php',
+    workspaceId: 'ws-a',
+    text: '<?php // ok\n',
+  });
+  const range: LspRange = { start: at(0, 0), end: at(0, 0) };
+  for (const target of [join(dir, 'a', 'Missing.php'), join(dir, 'a', 'sub')]) {
+    assert.deepEqual(
+      await worker.request('phpantom.navigate', {
+        docId: 'd1',
+        session: status.session,
+        uri: pathToFileURL(target).href,
+        range,
+      }),
+      { opened: false, reason: 'failed' }
+    );
+  }
+});
+
+test('a resync open of a document the router does not know attaches it in full', async () => {
+  const { worker } = await setup({ files: { 'a/A.php': '<?php // ok\n' } });
+  const status = await openWhole(worker, {
+    docId: 'unknown',
+    language: 'php',
+    workspaceId: 'ws-a',
+    text: '<?php // ok\n',
+    resync: true,
+  });
+  assert.equal(status.state, 'ready');
+});
+
+test('a departing holder sends nothing when every other holder waits for its resync', async () => {
+  const text = '<?php // ok\n';
+  const { worker, started } = await setup({ files: { 'a/A.php': text } });
+  const first = await openWhole(worker, {
+    docId: 'f1',
+    language: 'php',
+    workspaceId: 'ws-a',
+    text,
+  });
+  await openWhole(worker, {
+    docId: 'f2',
+    language: 'php',
+    workspaceId: 'ws-a',
+    text,
+    panel: 'panel-2',
+  });
+  assert.deepEqual(
+    await worker.request('phpantom.change', {
+      docId: 'f2',
+      session: first.session,
+      version: 2,
+      changes: [insert(0, 'Y')],
+      length: 99,
+    }),
+    { resync: true }
+  );
+  const changes = () =>
+    started[0].server.notified.filter((n) => n.method === 'textDocument/didChange').length;
+  const before = changes();
+  assert.deepEqual(await worker.request('phpantom.close', { docId: 'f1' }), { ok: true });
+  assert.equal(changes(), before);
+});
+
+test('with no workspace id, the branch and name together pick the focused copy', async () => {
+  const text = '<?php // same in both\n';
+  const { worker, docs } = await setup({ files: { 'a/A.php': text, 'b/A.php': text } });
+  const open = (docId: string, branch: string | null, displayName: string | null) =>
+    worker.request('phpantom.open', {
+      docId,
+      language: 'php',
+      workspaceId: null,
+      branch,
+      displayName,
+      index: 0,
+      chunk: text,
+      last: true,
+    });
+  const status = await open('d1', 'feat', 'b');
+  assert.equal(status.state, 'ready');
+  assert.equal(status.uri, pathToFileURL(docs['b/A.php']).href);
+  // A branch without a name is no context: both copies sit in one tier.
+  assert.deepEqual(await open('d2', 'feat', null), { reason: 'ambiguous', state: 'single-file' });
+  assert.deepEqual(await open('d3', null, null), { reason: 'ambiguous', state: 'single-file' });
 });

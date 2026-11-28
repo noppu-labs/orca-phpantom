@@ -4,13 +4,21 @@ import { test } from 'node:test';
 
 import {
   completionDetails,
+  completionItems,
   completionKindName,
   diagnosticsTouching,
   fromLspRange,
   inlayHintsWanted,
+  isCodeAction,
+  isDiagnosticList,
+  isHover,
+  isSemanticTokensLegend,
+  isSignatureHelp,
+  isWorkspaceEdit,
   markdownValue,
   markerSeverity,
   normalizeLocations,
+  renameRange,
   splitWorkspaceEdit,
   toDocumentSymbols,
   toLspPosition,
@@ -37,7 +45,10 @@ test('positions and ranges convert between 0-based LSP and 1-based Monaco, and b
 });
 
 test('severity maps to Monaco markers and defaults to error', () => {
-  assert.deepEqual([1, 2, 3, 4, undefined].map(markerSeverity), [8, 4, 2, 1, 8]);
+  assert.deepEqual(
+    [1, 2, 3, 4, undefined].map((severity) => markerSeverity(severity)),
+    [8, 4, 2, 1, 8]
+  );
 });
 
 test('toMarker keeps the message, code, source and tags', () => {
@@ -313,4 +324,260 @@ test('an action computed against a version carries it on every edit, so Monaco r
     12
   );
   assert.equal(action?.edit?.edits[0].versionId, 12);
+});
+
+// Odd answers: the guards branch as reading the fields directly would.
+test('completionItems reads a list or a CompletionList, and throws on items that are not a list', () => {
+  const item = { label: 'a' };
+  assert.deepEqual(completionItems([item]), [item]);
+  assert.deepEqual(completionItems({ isIncomplete: true, items: [item] }), [item]);
+  for (const nothing of [null, undefined, true, 'abc', 3, {}, { items: null }]) {
+    assert.deepEqual(completionItems(nothing), []);
+  }
+  for (const broken of [{ items: 'abc' }, { items: {} }, { items: 0 }]) {
+    assert.throws(() => completionItems(broken), TypeError);
+  }
+  // The same objects, not copies: resolving sends the server back exactly what it sent.
+  const list = [item];
+  assert.equal(completionItems(list), list);
+});
+
+test('completionDetails of anything but an object is nothing', () => {
+  for (const odd of [true, 'abc', 3, [], [{ detail: 'x' }]]) {
+    assert.deepEqual(completionDetails(odd), {});
+  }
+});
+
+test('renameRange takes the range, or the answer itself when it is a bare range', () => {
+  const range = { start: { line: 1, character: 2 }, end: { line: 1, character: 5 } };
+  assert.equal(renameRange(range), range);
+  assert.equal(renameRange({ range, placeholder: 'Foo' }), range);
+  // A null range falls back to the answer itself, as `result.range ?? result` did.
+  const bare = { range: null, ...range };
+  assert.equal(renameRange(bare), bare);
+  for (const broken of [true, 'abc', 3, [], {}, { start: null, end: range.end }, { range: 5 }]) {
+    assert.throws(() => renameRange(broken), TypeError);
+  }
+});
+
+test('normalizeLocations throws on a location that is not an object, as reading it did', () => {
+  assert.throws(() => normalizeLocations([null]), TypeError);
+  assert.throws(() => normalizeLocations('file:///a'), TypeError);
+  assert.throws(() => normalizeLocations([[]]), TypeError);
+  assert.deepEqual(normalizeLocations(undefined), []);
+  assert.deepEqual(normalizeLocations(0), []);
+});
+
+test('semantic tokens need an object with a data list', () => {
+  for (const odd of [true, 'abc', [], { data: 'abc' }, { data: null }]) {
+    assert.equal(toSemanticTokens(odd), null);
+  }
+  // Each entry is converted as Uint32Array.from converts it, numbers or not.
+  assert.deepEqual([...toSemanticTokens({ data: ['3', 'x'] })!.data], [3, 0]);
+});
+
+test('a semantic tokens legend needs to be an object', () => {
+  assert.equal(isSemanticTokensLegend({ tokenModifiers: [], tokenTypes: [] }), true);
+  assert.equal(isSemanticTokensLegend({ tokenTypes: [] }), true);
+  for (const odd of [true, 'abc', [], null]) {
+    assert.equal(isSemanticTokensLegend(odd), false);
+  }
+});
+
+test('a diagnostics list is shown only when every entry is an object', () => {
+  assert.equal(isDiagnosticList([]), true);
+  assert.equal(isDiagnosticList([{ message: 'm' }]), true);
+  assert.equal(isDiagnosticList([{ message: 'm' }, null]), false);
+  assert.equal(isDiagnosticList([[]]), false);
+});
+
+test('object guards reject null, arrays and other values, as reading a field from them gave nothing', () => {
+  for (const guard of [isCodeAction, isHover, isSignatureHelp, isWorkspaceEdit]) {
+    for (const odd of [null, undefined, true, 'abc', 3, []]) {
+      assert.equal(guard(odd), false);
+    }
+    assert.equal(guard({}), true);
+  }
+});
+
+// Truthiness the condition rewrite keeps: each falsy value a field's type allows takes the branch an empty one took.
+const origin = { start: { line: 0, character: 0 }, end: { line: 0, character: 0 } };
+
+test('completionKindName falls back to Text for 0 and undefined', () => {
+  assert.equal(completionKindName(0), 'Text');
+  assert.equal(completionKindName(undefined), 'Text');
+});
+
+test('severity: undefined, 0, NaN and 1 are errors', () => {
+  for (const severity of [undefined, 0, Number.NaN, 1]) {
+    assert.equal(markerSeverity(severity), 8, String(severity));
+  }
+});
+
+test('toMarker leaves out an empty or missing source and an empty or missing tag list', () => {
+  for (const extra of [{}, { source: '' }, { tags: [] }, { source: '', tags: [] }]) {
+    const marker = toMarker({ range: origin, message: 'm', ...extra });
+    assert.equal('source' in marker, false, JSON.stringify(extra));
+    assert.equal('tags' in marker, false, JSON.stringify(extra));
+  }
+  assert.deepEqual(toMarker({ range: origin, message: 'm', source: 's', tags: [2] }).tags, [2]);
+});
+
+test('normalizeLocations takes any falsy answer as no locations, and throws on a truthy non-object', () => {
+  for (const answer of [null, undefined, false, 0, '', Number.NaN]) {
+    assert.deepEqual(normalizeLocations(answer), [], String(answer));
+  }
+  assert.throws(() => normalizeLocations(1), /not an object/u);
+  assert.throws(() => normalizeLocations('x'), /not an object/u);
+});
+
+test('splitWorkspaceEdit keeps nothing for the document when its key is empty', () => {
+  const edit = { range: origin, newText: 'x' };
+  assert.deepEqual(splitWorkspaceEdit({ changes: { '': [edit] } }, ''), {
+    otherFiles: 0,
+    own: [],
+  });
+  assert.deepEqual(splitWorkspaceEdit({ changes: { 'file:///a.php': [] } }, 'file:///a.php'), {
+    otherFiles: 0,
+    own: [],
+  });
+});
+
+test('toCodeAction leaves out an empty kind, a false or missing isPreferred and an empty or missing reason', () => {
+  for (const extra of [
+    {},
+    { kind: '' },
+    { isPreferred: false },
+    { disabled: { reason: '' } },
+    { kind: '', isPreferred: false, disabled: { reason: '' } },
+  ]) {
+    const action = toCodeAction({ title: 't', data: 1, ...extra }, 'file:///a.php', 'm');
+    assert.deepEqual(
+      action,
+      { title: 't', needsResolve: true, otherFiles: 0 },
+      JSON.stringify(extra)
+    );
+  }
+  assert.deepEqual(
+    toCodeAction(
+      { title: 't', data: 1, kind: 'quickfix', isPreferred: true, disabled: { reason: 'r' } },
+      'file:///a.php',
+      'm'
+    ),
+    {
+      title: 't',
+      kind: 'quickfix',
+      isPreferred: true,
+      disabled: 'r',
+      needsResolve: true,
+      otherFiles: 0,
+    }
+  );
+});
+
+test('completionDetails leaves out an empty detail and an empty or missing list of extra edits', () => {
+  assert.deepEqual(completionDetails({ detail: '' }), {});
+  assert.deepEqual(completionDetails({ additionalTextEdits: [] }), {});
+  assert.deepEqual(completionDetails({ detail: '', additionalTextEdits: [] }), {});
+});
+
+test('a completion label with empty or missing details is the bare label', () => {
+  assert.equal(toCompletionLabel({ label: 'a' }), 'a');
+  assert.equal(toCompletionLabel({ label: 'a', labelDetails: {} }), 'a');
+  assert.equal(
+    toCompletionLabel({ label: 'a', labelDetails: { detail: '', description: '' } }),
+    'a'
+  );
+  assert.deepEqual(
+    toCompletionLabel({ label: 'a', labelDetails: { detail: '', description: 'C' } }),
+    {
+      label: 'a',
+      description: 'C',
+    }
+  );
+  assert.deepEqual(
+    toCompletionLabel({ label: 'a', labelDetails: { detail: '()', description: '' } }),
+    {
+      label: 'a',
+      detail: '()',
+    }
+  );
+});
+
+test('an inlay hint leaves out padding that is false or missing', () => {
+  const position = { line: 0, character: 0 };
+  for (const extra of [{}, { paddingLeft: false, paddingRight: false }]) {
+    const hint = toInlayHint({ position, label: 'x', ...extra });
+    assert.equal('paddingLeft' in hint, false);
+    assert.equal('paddingRight' in hint, false);
+  }
+  assert.deepEqual(toInlayHint({ position, label: 'x', paddingLeft: true, paddingRight: true }), {
+    label: 'x',
+    position: { column: 1, lineNumber: 1 },
+    paddingLeft: true,
+    paddingRight: true,
+  });
+});
+
+test('semantic tokens leave out an empty or missing result id', () => {
+  assert.equal('resultId' in (toSemanticTokens({ data: [], resultId: '' }) ?? {}), false);
+  assert.equal('resultId' in (toSemanticTokens({ data: [] }) ?? {}), false);
+  assert.equal(toSemanticTokens({ data: [], resultId: 'r' })?.resultId, 'r');
+});
+
+// A server may send null (or a truthy non-boolean) where LSP types a field as optional: each takes the branch its truthiness gave.
+test('null fields a server sends are left out, as a missing one is', () => {
+  const marker = toMarker({ range: origin, message: 'm', source: null, tags: null } as never);
+  assert.equal('source' in marker, false);
+  assert.equal('tags' in marker, false);
+  assert.deepEqual(
+    toCodeAction(
+      { title: 't', data: 1, kind: null, isPreferred: null, disabled: { reason: null } } as never,
+      'file:///a.php',
+      'm'
+    ),
+    { title: 't', needsResolve: true, otherFiles: 0 }
+  );
+  assert.deepEqual(
+    toCodeAction({ title: 't', data: 1, disabled: null } as never, 'file:///a.php', 'm'),
+    { title: 't', needsResolve: true, otherFiles: 0 }
+  );
+  assert.deepEqual(completionDetails({ detail: null, additionalTextEdits: null }), {});
+  assert.equal(
+    toCompletionLabel({ label: 'a', labelDetails: { detail: null, description: null } } as never),
+    'a'
+  );
+  assert.deepEqual(
+    toCompletionLabel({ label: 'a', labelDetails: { detail: null, description: 'C' } } as never),
+    { label: 'a', description: 'C' }
+  );
+  assert.deepEqual(
+    toCompletionLabel({ label: 'a', labelDetails: { detail: '()', description: null } } as never),
+    { label: 'a', detail: '()' }
+  );
+  const hint = toInlayHint({
+    position: { line: 0, character: 0 },
+    label: 'x',
+    paddingLeft: null,
+    paddingRight: null,
+  } as never);
+  assert.equal('paddingLeft' in hint, false);
+  assert.equal('paddingRight' in hint, false);
+  assert.equal('resultId' in (toSemanticTokens({ data: [], resultId: null }) ?? {}), false);
+});
+
+test('truthy non-boolean flags a server sends count as set', () => {
+  assert.equal(
+    toCodeAction({ title: 't', data: 1, isPreferred: 1 } as never, 'file:///a.php', 'm')
+      ?.isPreferred,
+    true
+  );
+  const hint = toInlayHint({
+    position: { line: 0, character: 0 },
+    label: 'x',
+    paddingLeft: 1,
+    paddingRight: 'yes',
+  } as never);
+  assert.equal(hint.paddingLeft, true);
+  assert.equal(hint.paddingRight, true);
 });

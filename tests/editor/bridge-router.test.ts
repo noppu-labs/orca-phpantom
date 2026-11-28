@@ -43,7 +43,9 @@ async function until(
 
 const cleanups: (() => Promise<void> | void)[] = [];
 afterEach(async () => {
-  for (const cleanup of cleanups.splice(0).reverse()) await cleanup();
+  const pending = cleanups.splice(0);
+  pending.reverse();
+  for (const cleanup of pending) await cleanup();
 });
 
 /** A worker (a Router) behind frames' hosts. `restart` puts a new Router, with a new session, in its place. */
@@ -64,6 +66,7 @@ function harness(options: { leaseMs?: number; sweepMs?: number } = {}) {
     openEditor: async () => undefined,
     // Every frame of the editor hears every post.
     post: (event, payload) => {
+      // oxlint-disable-next-line unicorn/no-useless-spread -- a snapshot, so a listener that unsubscribes or subscribes while it runs does not change who hears this event
       for (const listener of [...(listeners.get(event) ?? [])]) listener(payload);
     },
     status: () => undefined,
@@ -140,7 +143,11 @@ function harness(options: { leaseMs?: number; sweepMs?: number } = {}) {
         const set = listeners.get(event) ?? new Set();
         listeners.set(event, set);
         set.add(handler);
-        return { dispose: () => void set.delete(handler) };
+        return {
+          dispose: () => {
+            set.delete(handler);
+          },
+        };
       },
       readContext: async () => ({ workspaceId: 'ws-a', branch: 'main', displayName: 'a' }),
       onWorkspaceChanged: () => none,
@@ -149,7 +156,12 @@ function harness(options: { leaseMs?: number; sweepMs?: number } = {}) {
       onSaved: () => none,
       onSettingsChanged: () => none,
     };
-    return { host, die: () => void (dead = true) };
+    return {
+      host,
+      die: () => {
+        dead = true;
+      },
+    };
   };
 
   return {
@@ -247,7 +259,7 @@ test('integration: three frames of one tab, two of them dead, keep PHPantom on t
   assert.equal((await b3.attach()).state, 'ready');
   d3.edit(0, 0, 'Y');
   await until(async () => (await world.holds()) === d3.text, "the third frame's edit");
-  assert.match(world.router.describe(), /3 open document\(s\)/);
+  assert.match(world.router.describe(), /3 open document\(s\)/u);
 
   // The first dead frame's lease ends while the second still holds the file.
   await until(

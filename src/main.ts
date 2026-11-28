@@ -1,6 +1,7 @@
 import type { OrcaWorkerApi } from 'orca/worker';
 
 import { Router, type RouterHost } from './controllers/router.ts';
+// oxlint-disable-next-line import/no-unassigned-import -- brings in the declare module 'orca' block that types the phpantom.* requests; the file has no runtime value
 import './protocol.ts';
 import type { WorkspaceRow } from './services/locate/workspaces.ts';
 import { aggregate, renderStatus, type StatusBarUpdate } from './services/status.ts';
@@ -10,13 +11,24 @@ const WORKSPACE_LIST_TTL_MS = 10_000;
 
 let router: Router | null = null;
 
+/** The settings as the router takes them: a blank path is no path, and downloads are on unless turned off. */
+function readSettings(values: Record<string, unknown>): {
+  phpantomPath: string;
+  allowDownload: boolean;
+} {
+  return {
+    allowDownload: values.allowDownload !== false,
+    phpantomPath: typeof values.phpantomPath === 'string' ? values.phpantomPath.trim() : '',
+  };
+}
+
 async function deactivate(): Promise<void> {
   const active = router;
   router = null;
   await active?.dispose();
 }
 
-export { deactivate };
+export { deactivate, readSettings };
 
 export default async function activate(orca: OrcaWorkerApi): Promise<void> {
   let workspaces: { rows: Promise<WorkspaceRow[]>; at: number } | null = null;
@@ -27,7 +39,11 @@ export default async function activate(orca: OrcaWorkerApi): Promise<void> {
   };
   const host: RouterHost = {
     async listWorkspaces(options) {
-      if (options?.fresh || !workspaces || Date.now() - workspaces.at > WORKSPACE_LIST_TTL_MS) {
+      if (
+        options?.fresh === true ||
+        !workspaces ||
+        Date.now() - workspaces.at > WORKSPACE_LIST_TTL_MS
+      ) {
         const rows = orca.host.call('workspace.list').then(({ workspaces: list }) =>
           list.map((row): WorkspaceRow => ({
             branch: row.branch,
@@ -54,15 +70,11 @@ export default async function activate(orca: OrcaWorkerApi): Promise<void> {
       await orca.host.call('editor.open', { path, workspaceId });
     },
     post(event, payload, options) {
-      // Why the cast: the router posts the declared phpantom.* events, typed where they are built.
+      // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- the router posts the declared phpantom.* events, typed where they are built, and the Outbox carries each payload as unknown
       orca.panels.post(event as 'phpantom.status', payload as never, options);
     },
     async settings() {
-      const values = await orca.settings.get();
-      return {
-        allowDownload: values.allowDownload !== false,
-        phpantomPath: typeof values.phpantomPath === 'string' ? values.phpantomPath.trim() : '',
-      };
+      return readSettings(await orca.settings.get());
     },
     status,
   };

@@ -1,10 +1,12 @@
 // Adapted from actus7/orca-autocomplete src/lsp/jsonrpc.ts @ da5a680 (MIT). See THIRD_PARTY_NOTICES.md.
 // A minimal JSON-RPC 2.0 connection over the framing every language server uses on stdio:
 // `Content-Length: n`, a blank line, then n bytes of JSON.
+import { isRecord } from '../../utils/json.ts';
+import { RpcError } from './rpc-error.ts';
 
 interface RpcHandlers {
-  /** A request the server makes of us (configuration, registering capabilities ...); its result is the answer. */
-  onRequest: (method: string, params: unknown) => Promise<unknown> | unknown;
+  /** A request the server makes of us (configuration, registering capabilities ...); its result, or what its promise settles to, is the answer. */
+  onRequest: (method: string, params: unknown) => unknown;
   onNotification: (method: string, params: unknown) => void;
   /** A handler threw on a message; the connection carries on with the next one. */
   onError?: (message: string) => void;
@@ -15,18 +17,18 @@ interface Pending {
   reject: (error: Error) => void;
 }
 
-const HEADER_END = Buffer.from('\r\n\r\n');
-const LENGTH_HEADER = /content-length:\s*(\d+)/i;
-
-class RpcError extends Error {
-  public readonly code: number;
-
-  public constructor(code: number, message: string) {
-    super(message);
-    this.name = 'RpcError';
-    this.code = code;
-  }
+interface RpcMessage {
+  id?: number | string;
+  method?: string;
+  params?: unknown;
+  result?: unknown;
+  error?: { code: number; message: string };
 }
+
+const isRpcMessage = (value: unknown): value is RpcMessage => isRecord(value);
+
+const HEADER_END = Buffer.from('\r\n\r\n');
+const LENGTH_HEADER = /content-length:\s*(?<bytes>\d+)/iu;
 
 class RpcConnection {
   private buffer: Buffer = Buffer.alloc(0);
@@ -49,8 +51,9 @@ class RpcConnection {
       if (headerEnd === -1) {
         return;
       }
-      const length = LENGTH_HEADER.exec(this.buffer.subarray(0, headerEnd).toString('ascii'))?.[1];
-      if (!length) {
+      const length = LENGTH_HEADER.exec(this.buffer.subarray(0, headerEnd).toString('ascii'))
+        ?.groups?.bytes;
+      if (length === undefined || length === '') {
         // Why: a frame without a length cannot be skipped; drop the junk and wait for the next header.
         this.buffer = this.buffer.subarray(headerEnd + HEADER_END.length);
         continue;
@@ -74,7 +77,7 @@ class RpcConnection {
     if (this.closed) {
       throw new Error('the language server is not running');
     }
-    if (signal?.aborted) {
+    if (signal?.aborted === true) {
       throw new Error('cancelled');
     }
     const id = this.nextId++;
@@ -122,18 +125,16 @@ class RpcConnection {
   }
 
   private dispatch(body: string): void {
-    let message: {
-      id?: number | string;
-      method?: string;
-      params?: unknown;
-      result?: unknown;
-      error?: { code: number; message: string };
-    };
+    let message: unknown;
     try {
       message = JSON.parse(body);
     } catch {
       return;
     }
+    // Why throw: a null body has always thrown here, and skipping it instead is a separate fix.
+    if (message === null) throw new TypeError('the message body is null');
+    // Why: a body that is not an object (a batch, a bare value) carries nothing this connection answers.
+    if (!isRpcMessage(message)) return;
     if (message.method !== undefined && message.id !== undefined) {
       void this.answer(message.id, message.method, message.params);
     } else if (message.method !== undefined) {

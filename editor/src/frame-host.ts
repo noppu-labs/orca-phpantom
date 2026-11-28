@@ -17,18 +17,18 @@ function context(
 
 function frameHost(): BridgeHost {
   return {
-    on: (event, handler) => orca.plugin.on(event as 'phpantom.diagnostics', handler),
+    on: (event, handler) => orca.plugin.on(event, handler),
     onFirstInput(listener) {
-      // Capture on window: Monaco stops some events, and editor.focus() at start is not input.
+      // Capture on the window (globalThis in the frame): Monaco stops some events, and editor.focus() at start is not input.
       const handler = (): void => {
         listener();
       };
-      window.addEventListener('pointerdown', handler, true);
-      window.addEventListener('keydown', handler, true);
+      globalThis.addEventListener('pointerdown', handler, true);
+      globalThis.addEventListener('keydown', handler, true);
       return {
         dispose() {
-          window.removeEventListener('pointerdown', handler, true);
-          window.removeEventListener('keydown', handler, true);
+          globalThis.removeEventListener('pointerdown', handler, true);
+          globalThis.removeEventListener('keydown', handler, true);
         },
       };
     },
@@ -60,7 +60,7 @@ function frameHost(): BridgeHost {
       }),
     readContext: async () => context(await orca.host.call('workspace.readContext', {})),
     request: async (name, input, options) =>
-      // Why the cast: the declared overload takes its arguments as a tuple.
+      // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- the declared overload takes its arguments as a tuple, which TypeScript cannot build for a generic name
       orca.plugin.request(name, ...([input, options] as unknown as PluginRequestArgs<typeof name>)),
   };
 }

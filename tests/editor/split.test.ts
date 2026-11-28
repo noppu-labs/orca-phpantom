@@ -89,7 +89,7 @@ test('groups keep order and respect the budget', () => {
 
 test('never splits a surrogate pair', () => {
   for (const piece of chunkText('😀'.repeat(40_000), 1024)) {
-    assert.ok(!/^[\uDC00-\uDFFF]|[\uD800-\uDBFF]$/.test(piece));
+    assert.ok(!/^[\uDC00-\uDFFF]|[\uD800-\uDBFF]$/u.test(piece));
   }
 });
 
@@ -112,7 +112,7 @@ test('an insertion after a lone CR whose text starts with LF rebuilds exactly', 
   assert.equal(actual.text, expected.text);
 });
 
-const loneSurrogate = /^[\uDC00-\uDFFF]|[\uD800-\uDBFF]$/;
+const loneSurrogate = /^[\uDC00-\uDFFF]|[\uD800-\uDBFF]$/u;
 
 test('a cut back from an LF never lands inside a surrogate pair', () => {
   for (const [text, budget] of [
@@ -130,7 +130,11 @@ test('a cut back from an LF never lands inside a surrogate pair', () => {
 
 test('random mixed texts split within budget, without lone surrogates, and rejoin', () => {
   let seed = 12_345;
-  const rnd = (n: number) => ((seed = (seed * 1_103_515_245 + 12_345) & 0x7f_ff_ff_ff), seed % n);
+  const rnd = (n: number) => {
+    // oxlint-disable-next-line eslint/no-bitwise -- a small seeded generator keeps its state to 31 bits
+    seed = (seed * 1_103_515_245 + 12_345) & 0x7f_ff_ff_ff;
+    return seed % n;
+  };
   const atoms = ['\r\n', '\n', '\r', '😀', 'é', '"', '\\', 'a', '€', '\t'];
   for (let n = 0; n < 300; n++) {
     let text = '';

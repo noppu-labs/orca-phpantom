@@ -2,9 +2,21 @@
 // 10 s, 256 KiB each, measured by Orca's own function: see size.ts) even when PHPantom publishes diagnostics for hundreds of files at once.
 // Posts are keyed: a newer payload for a key replaces the queued one, so the latest state always arrives and stale ones are never sent.
 
+import { ORCA_SLOT_BYTES } from '../constants/orca-measure.ts';
+import { BYTES_PER_KIB } from '../constants/units.ts';
+import { isRecord } from '../utils/json.ts';
 import { fitsIn, orcaSize, type Size } from '../utils/size.ts';
 
 // Orca drops a post over 256 KiB or 10,000 objects by its own measure; this leaves room for what it may miss.
+const DEFAULT_MAX_KIB = 250;
+const DEFAULT_MAX_OBJECTS = 9000;
+// Orca's 200 posts per 10 s, with room to spare, and how long a send waits before the queue goes out, so sends close together go out together.
+const DEFAULT_WINDOW_MS = 10_000;
+const DEFAULT_MAX_POSTS = 180;
+const DEFAULT_DELAY_MS = 150;
+// The most UTF-8 bytes one character takes.
+const MAX_BYTES_PER_CHARACTER = 4;
+
 interface OutboxOptions {
   windowMs?: number;
   maxPosts?: number;
@@ -25,8 +37,11 @@ interface DiagnosticsPayload {
   truncated?: number;
 }
 
+const isDiagnosticsPayload = (payload: unknown): payload is DiagnosticsPayload =>
+  isRecord(payload) && Array.isArray(payload.diagnostics);
+
 function severityOf(diagnostic: unknown): number {
-  const severity = (diagnostic as { severity?: unknown } | null)?.severity;
+  const severity = isRecord(diagnostic) ? diagnostic.severity : undefined;
   // Why 1: clients show a diagnostic without a severity as an error.
   return typeof severity === 'number' ? severity : 1;
 }
@@ -45,10 +60,13 @@ class Outbox {
 
   public constructor(post: PostFn, options: OutboxOptions = {}) {
     this.post = post;
-    this.windowMs = options.windowMs ?? 10_000;
-    this.maxPosts = options.maxPosts ?? 180;
-    this.limit = { bytes: options.maxBytes ?? 250 * 1024, objects: options.maxObjects ?? 9000 };
-    this.delayMs = options.delayMs ?? 150;
+    this.windowMs = options.windowMs ?? DEFAULT_WINDOW_MS;
+    this.maxPosts = options.maxPosts ?? DEFAULT_MAX_POSTS;
+    this.limit = {
+      bytes: options.maxBytes ?? DEFAULT_MAX_KIB * BYTES_PER_KIB,
+      objects: options.maxObjects ?? DEFAULT_MAX_OBJECTS,
+    };
+    this.delayMs = options.delayMs ?? DEFAULT_DELAY_MS;
     this.now = options.now ?? Date.now;
   }
 
@@ -121,15 +139,20 @@ class Outbox {
       return payload;
     }
     if (event === 'phpantom.diagnostics') {
-      return this.fitDiagnostics(payload as DiagnosticsPayload);
+      // Why throw: the router queues diagnostics only as a list, and flush skips a post whose fit throws.
+      if (!isDiagnosticsPayload(payload)) throw new TypeError('diagnostics payload without a list');
+      return this.fitDiagnostics(payload);
     }
-    const message = (payload as { message?: unknown } | null)?.message;
-    if (typeof message === 'string') {
-      const shell = orcaSize({ ...(payload as object), message: '' });
+    const message = isRecord(payload) ? payload.message : undefined;
+    if (isRecord(payload) && typeof message === 'string') {
+      const shell = orcaSize({ ...payload, message: '' });
       const room = this.limit.bytes - shell.bytes;
       if (room > 0 && shell.objects <= this.limit.objects) {
         // Why chars before bytes: a character is at most 4 bytes, so this many always fit.
-        return { ...(payload as object), message: message.slice(0, Math.floor(room / 4)) };
+        return {
+          ...payload,
+          message: message.slice(0, Math.floor(room / MAX_BYTES_PER_CHARACTER)),
+        };
       }
     }
     return payload;
@@ -137,9 +160,12 @@ class Outbox {
 
   private fitDiagnostics(original: DiagnosticsPayload): DiagnosticsPayload {
     const earlier = original.truncated ?? 0;
-    const ranked = original.diagnostics
-      .map((diagnostic, index) => ({ diagnostic, index, severity: severityOf(diagnostic) }))
-      .sort((a, b) => a.severity - b.severity || a.index - b.index);
+    const ranked = original.diagnostics.map((diagnostic, index) => ({
+      diagnostic,
+      index,
+      severity: severityOf(diagnostic),
+    }));
+    ranked.sort((left, right) => left.severity - right.severity || left.index - right.index);
     // Why the largest count: a number is 8 bytes to Orca whatever its value.
     const shell = orcaSize({
       ...original,
@@ -152,16 +178,16 @@ class Outbox {
     for (const entry of ranked) {
       const size = orcaSize(entry.diagnostic);
       if (
-        bytes + 4 + size.bytes > this.limit.bytes ||
+        bytes + ORCA_SLOT_BYTES + size.bytes > this.limit.bytes ||
         objects + size.objects > this.limit.objects
       ) {
         break;
       }
-      bytes += 4 + size.bytes;
+      bytes += ORCA_SLOT_BYTES + size.bytes;
       objects += size.objects;
       kept.push(entry);
     }
-    kept.sort((a, b) => a.index - b.index);
+    kept.sort((left, right) => left.index - right.index);
     return {
       ...original,
       diagnostics: kept.map((entry) => entry.diagnostic),

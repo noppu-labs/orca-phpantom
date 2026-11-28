@@ -4,16 +4,19 @@
 
 /** A spelling-independent key for a `file:` URI. Paths on a Windows drive ignore case, as the drive does. */
 function uriKey(uri: string): string {
-  let path = uri.replace(/^file:\/\//i, '');
+  let path = uri.replace(/^file:\/\//iu, '');
   try {
     path = decodeURIComponent(path);
   } catch {
     // Why keep going: a malformed escape still compares equal to the same malformed text.
   }
   path = path.split('\\').join('/');
-  return /^\/[a-z]:/i.test(path) ? path.toLowerCase() : path;
+  return /^\/[A-Za-z]:/u.test(path) ? path.toLowerCase() : path;
 }
 
-const sameUri = (a: string, b: string): boolean => uriKey(a) === uriKey(b);
+const sameUri = (left: string, right: string): boolean => uriKey(left) === uriKey(right);
 
-export { uriKey, sameUri };
+/** Whether `uri` names a file on disk, by its `file:` scheme in any case. */
+const isFileUri = (uri: string): boolean => /^file:/iu.test(uri);
+
+export { isFileUri, uriKey, sameUri };

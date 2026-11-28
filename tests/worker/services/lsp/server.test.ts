@@ -1,4 +1,5 @@
 import { spawn, type ChildProcess } from 'node:child_process';
+import { basename } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { assert, test } from 'orca/testing';
@@ -24,11 +25,21 @@ interface Recorded {
 function fakeServer(env: Record<string, string> = {}) {
   const events: Recorded = { diagnostics: [], progress: [], refresh: [], logs: [], exits: [] };
   const hooks: ServerEvents = {
-    diagnostics: (uri, diagnostics) => void events.diagnostics.push({ uri, diagnostics }),
-    progress: (state) => void events.progress.push(state),
-    refresh: (kind) => void events.refresh.push(kind),
-    log: (message) => void events.logs.push(message),
-    exit: (reason) => void events.exits.push(reason),
+    diagnostics: (uri, diagnostics) => {
+      events.diagnostics.push({ uri, diagnostics });
+    },
+    progress: (state) => {
+      events.progress.push(state);
+    },
+    refresh: (kind) => {
+      events.refresh.push(kind);
+    },
+    log: (message) => {
+      events.logs.push(message);
+    },
+    exit: (reason) => {
+      events.exits.push(reason);
+    },
   };
   const children: ChildProcess[] = [];
   const spawnImpl = ((_executable: string, _args: string[], options: object) => {
@@ -73,6 +84,16 @@ test('starts, initializes and reports capabilities', async () => {
   assert.notEqual(children[0].exitCode ?? children[0].signalCode, null);
 });
 
+test('names the workspace folder after the last segment of its root', async () => {
+  const { server } = fakeServer();
+  await server.start();
+  const params = (await server.request('fake/initialize', {})) as {
+    workspaceFolders: { name: string }[];
+  };
+  assert.equal(params.workspaceFolders[0].name, basename(process.cwd()));
+  await server.stop();
+});
+
 test('forwards diagnostics, progress and refresh', async () => {
   const { server, events } = fakeServer();
   await server.start();
@@ -109,7 +130,7 @@ test('a request can be cancelled', async () => {
   const controller = new AbortController();
   const pending = server.request('textDocument/hover', {}, controller.signal);
   controller.abort();
-  await assert.rejects(pending, /cancelled/);
+  await assert.rejects(pending, /cancelled/u);
   await server.stop();
 });
 
@@ -127,12 +148,23 @@ test('a notification with null params is logged, and the connection keeps workin
   server.notify('textDocument/didOpen', open('<?php abc'));
   const hover = (await server.request('textDocument/hover', {})) as { contents: { value: string } };
   assert.equal(hover.contents.value, 'len=9');
-  assert.ok(
-    events.logs.some((line) => line.includes('textDocument/publishDiagnostics')),
-    events.logs.join('\n')
-  );
+  for (const method of ['textDocument/publishDiagnostics', '$/progress', 'window/logMessage']) {
+    assert.ok(
+      events.logs.some((line) => line.includes(method)),
+      `${method} not logged:\n${events.logs.join('\n')}`
+    );
+  }
   assert.equal(server.alive, true);
   await server.stop();
+});
+
+test('capabilities that are not an object are taken as none', async () => {
+  for (const capabilities of ['true', '[1]', '"x"']) {
+    const { server } = fakeServer({ FAKE_CAPABILITIES: capabilities });
+    await server.start();
+    assert.deepEqual(server.capabilities, {});
+    await server.stop();
+  }
 });
 
 test('reports an exit with the stderr tail', async () => {
@@ -141,9 +173,9 @@ test('reports an exit with the stderr tail', async () => {
   server.notify('textDocument/didOpen', open('<?php CRASH'));
   await until(() => events.exits.length > 0);
   assert.equal(events.exits.length, 1);
-  assert.match(events.exits[0], /code 3.*fake server crashed on purpose/);
+  assert.match(events.exits[0], /code 3.*fake server crashed on purpose/u);
   assert.equal(server.alive, false);
-  await assert.rejects(server.request('textDocument/hover', {}), /not running/);
+  await assert.rejects(server.request('textDocument/hover', {}), /not running/u);
   await server.stop();
   assert.equal(events.exits.length, 1);
 });
@@ -158,7 +190,7 @@ test('a deliberate stop does not report an exit', async () => {
 test('a start that times out kills the child and reports no exit', async () => {
   const { server, events, children } = fakeServer({ FAKE_MODE: 'silent' });
   (server as any).options.initializeTimeoutMs = 200;
-  await assert.rejects(server.start(), /in time/);
+  await assert.rejects(server.start(), /in time/u);
   assert.notEqual(children[0].exitCode ?? children[0].signalCode, null);
   assert.equal(server.alive, false);
   assert.deepEqual(events.exits, []);
@@ -174,11 +206,11 @@ test('stop escalates to SIGKILL when the child ignores shutdown and SIGTERM', as
 
 test('a missing executable rejects start', async () => {
   const events: ServerEvents = {
-    diagnostics() {},
-    progress() {},
-    refresh() {},
-    log() {},
-    exit() {},
+    diagnostics: () => {},
+    progress: () => {},
+    refresh: () => {},
+    log: () => {},
+    exit: () => {},
   };
   const server = new PhpantomServer({
     executable: '/nonexistent/phpantom_lsp',
@@ -188,6 +220,40 @@ test('a missing executable rejects start', async () => {
   });
   await assert.rejects(server.start());
   assert.equal(server.alive, false);
+});
+
+test('a child without its pipes is killed and start rejects', async () => {
+  const events: ServerEvents = {
+    diagnostics: () => {},
+    progress: () => {},
+    refresh: () => {},
+    log: () => {},
+    exit: () => {},
+  };
+  for (const missing of [null, undefined]) {
+    for (const pipe of ['stdin', 'stdout', 'stderr']) {
+      let killed = 0;
+      const child = {
+        stdin: {},
+        stdout: {},
+        stderr: {},
+        [pipe]: missing,
+        kill: () => {
+          killed += 1;
+          return true;
+        },
+      };
+      const server = new PhpantomServer({
+        executable: 'phpantom_lsp',
+        root: process.cwd(),
+        events,
+        spawnImpl: (() => child) as unknown as typeof spawn,
+        initializeTimeoutMs: 2000,
+      });
+      await assert.rejects(server.start(), /could not open the language server pipes/u);
+      assert.equal(killed, 1, `${pipe} ${String(missing)}`);
+    }
+  }
 });
 
 test('client capabilities never ask for pull diagnostics', () => {

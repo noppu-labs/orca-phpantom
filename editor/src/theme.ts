@@ -33,6 +33,7 @@ const SEMANTIC_MODIFIERS: readonly string[] = [
 ];
 
 const THEME_NAME = { dark: 'phpantom-dark', light: 'phpantom-light' } as const;
+const HEX = 16;
 
 type Base = 'variable' | 'type' | 'keyword' | 'comment' | 'annotation';
 
@@ -91,7 +92,9 @@ function themeRules(dark: boolean): ThemeRule[] {
     const nearest = NEAREST[type];
     const colour = nearest ? { foreground: colours[nearest] } : {};
     rules.push({ token: type, ...colour });
+    // oxlint-disable-next-line eslint/no-bitwise -- each bit of mask stands for one semantic modifier, so the loop visits every combination
     for (let mask = 1; mask < 1 << SEMANTIC_MODIFIERS.length; mask++) {
+      // oxlint-disable-next-line eslint/no-bitwise -- keeps the modifiers whose bit is set in mask
       const modifiers = SEMANTIC_MODIFIERS.filter((_, index) => mask & (1 << index));
       const styles = [
         modifiers.includes('static') && 'italic',
@@ -160,6 +163,9 @@ function typographyOptions(t: EditorTypography): {
   };
 }
 
+/** Whether `value` is a CSS colour the frame can paint. */
+const isColour = (value: string): boolean => value !== '' && CSS.supports('color', value);
+
 /**
  * Reads Orca's frame variables as `#rrggbb`, whatever CSS colour syntax they use, by painting each on
  * a 1×1 canvas. A translucent colour is painted over the background first, as the page shows it.
@@ -179,16 +185,15 @@ function readOrcaVars(): Record<string, string> {
       context.fillStyle = colour;
       context.fillRect(0, 0, 1, 1);
     }
-    const [r, g, b] = context.getImageData(0, 0, 1, 1).data;
-    return `#${[r, g, b].map((n) => n.toString(16).padStart(2, '0')).join('')}`;
+    const [red, green, blue] = context.getImageData(0, 0, 1, 1).data;
+    return `#${[red, green, blue].map((channel) => channel.toString(HEX).padStart(2, '0')).join('')}`;
   };
-  const valid = (value: string): boolean => value !== '' && CSS.supports('color', value);
   const background = style.getPropertyValue('--orca-background').trim();
-  const under = valid(background) ? [background] : [];
+  const under = isColour(background) ? [background] : [];
   const vars: Record<string, string> = {};
   for (const [variable] of FRAME_COLOURS) {
     const value = style.getPropertyValue(variable).trim();
-    if (valid(value)) {
+    if (isColour(value)) {
       vars[variable] = paint([...under, value]);
     }
   }
@@ -234,7 +239,6 @@ export {
   themeRules,
   themeColors,
   typographyOptions,
-  readOrcaVars,
   defineThemes,
 };
 export type { EditorTypography, ThemeRule };

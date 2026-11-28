@@ -87,8 +87,8 @@ test('maps all six platforms and nothing else', () => {
 test('extracts the one file from each archive kind', () => {
   assert.equal(extractSingleFile(oneTarGz(), 'tar.gz', 'phpantom_lsp').toString(), 'fake-binary');
   assert.equal(extractSingleFile(oneZip(), 'zip', 'phpantom_lsp.exe').toString(), 'fake-exe');
-  assert.throws(() => extractSingleFile(oneZip(), 'zip', 'other'), /archive has no other/);
-  assert.throws(() => extractSingleFile(oneTarGz(), 'tar.gz', 'other'), /archive has no other/);
+  assert.throws(() => extractSingleFile(oneZip(), 'zip', 'other'), /archive has no other/u);
+  assert.throws(() => extractSingleFile(oneTarGz(), 'tar.gz', 'other'), /archive has no other/u);
 });
 test('a pax header named like the member is skipped for the file entry', () => {
   const archive = tarGz([
@@ -98,7 +98,7 @@ test('a pax header named like the member is skipped for the file entry', () => {
   assert.equal(extractSingleFile(archive, 'tar.gz', 'phpantom_lsp').toString(), 'real-bytes');
 });
 test('the generated tar refuses a name over 100 bytes', () => {
-  assert.throws(() => tar({ ['n'.repeat(101)]: 'x' }), /over 100 bytes/);
+  assert.throws(() => tar({ ['n'.repeat(101)]: 'x' }), /over 100 bytes/u);
 });
 test('generated archives carry real gzip and zip framing', () => {
   const gz = oneTarGz();
@@ -160,6 +160,15 @@ test('finds executables and well-known folders', () => {
     String.raw`C:\u\.cargo\bin`,
   ]);
 });
+test('an empty or missing HOME or USERPROFILE adds no cargo folder', () => {
+  assert.deepEqual(wellKnownDirs({}, 'win32'), []);
+  assert.deepEqual(wellKnownDirs({ USERPROFILE: '' }, 'win32'), []);
+  assert.deepEqual(wellKnownDirs({}, 'linux'), ['/opt/homebrew/bin', '/usr/local/bin']);
+  assert.deepEqual(wellKnownDirs({ HOME: '' }, 'linux'), ['/opt/homebrew/bin', '/usr/local/bin']);
+});
+test('an empty XDG_CACHE_HOME places the cache as a missing one does', () => {
+  assert.equal(cacheDir({ XDG_CACHE_HOME: '' }, 'linux', '/h'), '/h/.cache/noppu-labs.phpantom');
+});
 test('places the cache per platform', () => {
   assert.equal(cacheDir({}, 'darwin', '/h'), '/h/Library/Caches/noppu-labs.phpantom');
   assert.equal(cacheDir({}, 'linux', '/h'), '/h/.cache/noppu-labs.phpantom');
@@ -185,7 +194,7 @@ test('readVersion runs the binary and returns null for a missing one', async () 
 });
 test('rejects a download whose hash differs', async () => {
   await withServer(Buffer.from('tampered'), async (url) => {
-    await assert.rejects(downloadVerified(url, '0'.repeat(64)), /checksum mismatch/);
+    await assert.rejects(downloadVerified(url, '0'.repeat(64)), /checksum mismatch/u);
   });
 });
 test('accepts a download whose hash matches', async () => {
@@ -199,7 +208,7 @@ test('reports an HTTP error', async () => {
   const fetchImpl = (async () => new Response('no', { status: 404 })) as unknown as typeof fetch;
   await assert.rejects(
     downloadVerified('http://x/y', '0'.repeat(64), fetchImpl),
-    /download failed: HTTP 404/
+    /download failed: HTTP 404/u
   );
 });
 test('an explicit setting that does not work is an error, not a fallback', async () => {
@@ -380,6 +389,7 @@ if (process.env.PHPANTOM_INTEGRATION === '1') {
       if (r.ok) {
         assert.equal(r.source, 'download');
         assert.equal(await readVersion(r.path), '1.1.0');
+        // oxlint-disable-next-line eslint/no-console -- the opt-in integration test prints which release it downloaded and ran
         console.log(`integration: source=${r.source} version=${r.version} path=${r.path}`);
       }
     } finally {
@@ -387,3 +397,66 @@ if (process.env.PHPANTOM_INTEGRATION === '1') {
     }
   });
 }
+
+// An empty version is no version: the condition rewrite keeps each of these a failure.
+test('a setting whose binary reports an empty version is not a working binary', async () => {
+  const home = temp();
+  try {
+    const setting = join(home, 'phpantom_lsp');
+    writeFileSync(setting, 'x');
+    const r = await resolveBinary({
+      ...base(home),
+      settingPath: setting,
+      readVersionImpl: async () => '',
+    });
+    assert.deepEqual(r, {
+      ok: false,
+      message: `phpantomPath is set to ${setting}, which is not a working phpantom_lsp.`,
+    });
+  } finally {
+    rmSync(home, { recursive: true, force: true });
+  }
+});
+test('a PATH binary or a cached copy that reports an empty version is skipped', async () => {
+  const home = temp();
+  const bin = temp();
+  try {
+    writeFileSync(join(bin, 'phpantom_lsp'), 'installed');
+    chmodSync(join(bin, 'phpantom_lsp'), 0o755);
+    const dir = join(cacheDir({}, 'linux', home), '1.1.0', 'linux-x64');
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, 'phpantom_lsp'), 'cached');
+    writeFileSync(join(dir, 'verified'), '1.1.0');
+    const asked: string[] = [];
+    const r = await resolveBinary({
+      ...base(home),
+      env: { PATH: bin },
+      readVersionImpl: async (path) => {
+        asked.push(path);
+        return path.startsWith(bin) || path.startsWith(home) ? '' : null;
+      },
+    });
+    assert.equal(r.ok, false);
+    assert.ok(asked.includes(join(bin, 'phpantom_lsp')));
+    assert.ok(asked.includes(join(dir, 'phpantom_lsp')));
+  } finally {
+    rmSync(home, { recursive: true, force: true });
+    rmSync(bin, { recursive: true, force: true });
+  }
+});
+test('a download whose binary reports an empty version did not run', async () => {
+  const home = temp();
+  try {
+    const { asset, body } = tarball();
+    const r = await resolveBinary({
+      ...base(home),
+      allowDownload: true,
+      readVersionImpl: async () => '',
+      assets: () => asset,
+      fetchImpl: async () => new Response(new Uint8Array(body)),
+    });
+    assert.deepEqual(r, { ok: false, message: 'The downloaded phpantom_lsp did not run.' });
+  } finally {
+    rmSync(home, { recursive: true, force: true });
+  }
+});
