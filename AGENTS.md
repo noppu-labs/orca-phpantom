@@ -18,7 +18,7 @@ npm run fmt:check       # oxfmt --check, what CI runs
 orca plugin validate . && orca plugin check .
 ```
 
-Node 22.18 or newer runs `scripts/build-editor.ts` directly. Lint is type-aware through `oxlint-tsgolint`; type checking stays with `tsc`. Fix a finding rather than silence it. When a rule can't apply to one line, use `// oxlint-disable-next-line <plugin>/<rule> -- <reason>`. Turning a rule off is a change to `.oxlintrc.json`.
+Node 24.3 or newer runs `scripts/build-editor.ts` directly. `@types/node` stays on 24.x, the Node that Orca runs plugins on, and Dependabot ignores its major bumps. Lint is type-aware through `oxlint-tsgolint`; type checking stays with `tsc`. Fix a finding rather than silence it. When a rule can't apply to one line, use `// oxlint-disable-next-line <plugin>/<rule> -- <reason>`. Turning a rule off is a change to `.oxlintrc.json`.
 
 ## Layout
 
