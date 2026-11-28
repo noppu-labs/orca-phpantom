@@ -4,14 +4,14 @@
 
 /** A spelling-independent key for a `file:` URI. Paths on a Windows drive ignore case, as the drive does. */
 export function uriKey(uri: string): string {
-  let path = uri.replace(/^file:\/\//i, '')
+  let path = uri.replace(/^file:\/\//i, '');
   try {
-    path = decodeURIComponent(path)
+    path = decodeURIComponent(path);
   } catch {
     // Why keep going: a malformed escape still compares equal to the same malformed text.
   }
-  path = path.split('\\').join('/')
-  return /^\/[a-z]:/i.test(path) ? path.toLowerCase() : path
+  path = path.split('\\').join('/');
+  return /^\/[a-z]:/i.test(path) ? path.toLowerCase() : path;
 }
 
-export const sameUri = (a: string, b: string): boolean => uriKey(a) === uriKey(b)
+export const sameUri = (a: string, b: string): boolean => uriKey(a) === uriKey(b);
