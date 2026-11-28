@@ -1,4 +1,4 @@
-import { sameUri } from '../../src/lsp/uri.ts';
+import { sameUri } from '../../src/utils/uri.ts';
 // Going to code in other files. Monaco shows only models it has, so the files a result points at get
 // read-only models for its previews (peek, Cmd-hover), and opening one goes to the worker, which opens
 // the file in an Orca tab. The pure parts here take no Monaco, so Node can test them.
@@ -40,7 +40,7 @@ export function afterPeek(
   return { shown, left: locations.length - shown.length };
 }
 
-// The worker reads at most this many files per peek (PEEK_MAX_FILES in src/router.ts); asking for more
+// The worker reads at most this many files per peek (PEEK_MAX_FILES in src/controllers/router.ts); asking for more
 // only makes the request bigger, and a long list of URIs could pass Orca's 64 KiB request limit.
 const PEEK_MAX_FILES = 25;
 
