@@ -33,6 +33,19 @@ const SEMANTIC_MODIFIERS: readonly string[] = [
 ];
 
 const THEME_NAME = { dark: 'phpantom-dark', light: 'phpantom-light' } as const;
+
+/** The class Monaco sets its `--vscode-*` colour variables on, besides `.monaco-editor`. */
+const COLOUR_SCOPE_CLASS = 'monaco-component';
+
+/**
+ * With `fixedOverflowWidgets` Monaco puts the context menu's shadow host in the editor's container,
+ * outside `.monaco-editor`, so the container has to carry what the menu reads: the colour variables,
+ * and the border width Monaco 0.58's menu uses but standalone Monaco never defines.
+ */
+function styleContainer(root: Pick<HTMLElement, 'classList' | 'style'>): void {
+  root.classList.add(COLOUR_SCOPE_CLASS);
+  root.style.setProperty('--vscode-strokeThickness', '1px');
+}
 const HEX = 16;
 
 type Base = 'variable' | 'type' | 'keyword' | 'comment' | 'annotation';
@@ -116,15 +129,35 @@ const FRAME_COLOURS: [string, string[]][] = [
   ['--orca-foreground', ['editor.foreground']],
   [
     '--orca-popover',
-    ['editorWidget.background', 'editorHoverWidget.background', 'editorSuggestWidget.background'],
+    [
+      'editorWidget.background',
+      'editorHoverWidget.background',
+      'editorSuggestWidget.background',
+      'menu.background',
+    ],
   ],
   [
     '--orca-popover-foreground',
-    ['editorWidget.foreground', 'editorHoverWidget.foreground', 'editorSuggestWidget.foreground'],
+    [
+      'editorWidget.foreground',
+      'editorHoverWidget.foreground',
+      'editorSuggestWidget.foreground',
+      'menu.foreground',
+    ],
   ],
+  // The context menu's hovered item takes the list hover colours, as Orca's menus take its accent.
+  ['--orca-accent', ['list.hoverBackground']],
+  ['--orca-accent-foreground', ['list.hoverForeground']],
   [
     '--orca-border',
-    ['editorWidget.border', 'editorHoverWidget.border', 'editorSuggestWidget.border'],
+    [
+      'editorWidget.border',
+      'editorHoverWidget.border',
+      'editorSuggestWidget.border',
+      // Monaco's menu falls back to the colour id `editorWidget.border`, not its value, so it needs its own.
+      'menu.border',
+      'menu.separatorBackground',
+    ],
   ],
   ['--orca-ring', ['focusBorder']],
   ['--orca-muted-foreground', ['editorLineNumber.foreground']],
@@ -233,6 +266,7 @@ function defineThemes(monaco: ThemeHost): void {
 }
 
 export {
+  COLOUR_SCOPE_CLASS,
   SEMANTIC_TYPES,
   SEMANTIC_MODIFIERS,
   THEME_NAME,
@@ -240,5 +274,6 @@ export {
   themeColors,
   typographyOptions,
   defineThemes,
+  styleContainer,
 };
 export type { EditorTypography, ThemeRule };

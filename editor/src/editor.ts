@@ -5,7 +5,7 @@ import { modelView } from './model-view.ts';
 import { monaco } from './monaco.ts';
 import { showNote } from './notes.ts';
 import { bindDocument, flushWhenHidden } from './sync.ts';
-import { defineThemes, THEME_NAME, typographyOptions } from './theme.ts';
+import { defineThemes, styleContainer, THEME_NAME, typographyOptions } from './theme.ts';
 
 interface EditorContext {
   monaco: typeof monaco;
@@ -89,6 +89,7 @@ async function startEditor(): Promise<EditorContext> {
   flushWhenHidden(doc.flush, globalThis, document);
 
   defineThemes(monaco);
+  styleContainer(root);
   const typography = await orca.host.call('editor.readTypography', {}).catch((error: unknown) => {
     // oxlint-disable-next-line eslint/no-console -- the editor carries on with Monaco's default typography: Orca copies a frame's console warnings into orca plugin logs
     console.warn('editor.readTypography failed; using Monaco defaults', error);

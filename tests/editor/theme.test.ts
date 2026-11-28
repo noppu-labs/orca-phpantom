@@ -1,9 +1,13 @@
+import { readdirSync, readFileSync } from 'node:fs';
+
 import { assert, test } from 'orca/testing';
 
 import {
+  COLOUR_SCOPE_CLASS,
   SEMANTIC_MODIFIERS,
   SEMANTIC_TYPES,
   THEME_NAME,
+  styleContainer,
   themeColors,
   themeRules,
   typographyOptions,
@@ -34,6 +38,41 @@ test('maps Orca frame variables to editor colours and skips missing ones', () =>
       'editor.foreground': '#eeeeee',
     }
   );
+});
+test("colours the context menu like Orca's own menus", () => {
+  const colors = themeColors({
+    '--orca-popover': '#202020',
+    '--orca-popover-foreground': '#f0f0f0',
+    '--orca-accent': '#303030',
+    '--orca-accent-foreground': '#ffffff',
+    '--orca-border': '#404040',
+  });
+  assert.equal(colors['menu.background'], '#202020');
+  assert.equal(colors['menu.foreground'], '#f0f0f0');
+  assert.equal(colors['list.hoverBackground'], '#303030');
+  assert.equal(colors['list.hoverForeground'], '#ffffff');
+  assert.equal(colors['menu.border'], '#404040');
+  assert.equal(colors['menu.separatorBackground'], '#404040');
+});
+test('styles the container the context menu sits in', () => {
+  const classes: string[] = [];
+  const properties = new Map<string, string>();
+  styleContainer({
+    classList: { add: (name: string) => classes.push(name) },
+    style: { setProperty: (name: string, value: string) => properties.set(name, value) },
+  } as unknown as HTMLElement);
+  assert.deepEqual(classes, [COLOUR_SCOPE_CLASS]);
+  assert.equal(properties.get('--vscode-strokeThickness'), '1px');
+});
+test("the bundled Monaco still sets its colour variables on the editor container's class", () => {
+  // The context menu's shadow host sits in #root, outside .monaco-editor, so it only sees the
+  // --vscode-* variables through this rule. A Monaco that renames the selector brings the bug back.
+  const dist = new URL('../../editor/dist/', import.meta.url);
+  const bundle = readdirSync(dist, { encoding: 'utf8', recursive: true })
+    .filter((file) => file.endsWith('.js'))
+    .map((file) => readFileSync(new URL(file, dist), 'utf8'))
+    .join('\n');
+  assert.ok(bundle.includes(`.${COLOUR_SCOPE_CLASS} { \${`));
 });
 test('maps Orca typography to Monaco options', () => {
   assert.deepEqual(
