@@ -12,7 +12,7 @@ Contributions are licensed under the repository's [MIT license](../LICENSE). By 
 
 ## Prerequisites
 
-- Node 24 or newer, which runs the `.ts` build script directly. CI uses Node 24, the major Orca runs plugins on.
+- Node 24.3 or newer, which runs the `.ts` build script directly. CI uses Node 24, the major Orca runs plugins on.
 - Orca 1.4.259 or newer with the `orca` CLI on your `PATH`. CI installs `orca-ide` 1.4.277 from its pinned release (`.github/actions/setup-orca`).
 
 ```sh
